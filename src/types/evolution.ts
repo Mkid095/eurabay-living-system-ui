@@ -11,6 +11,8 @@ export interface ControllerDecisionHistory {
   timestamp: string;
   decision: 'STABLE' | 'EVOLVE_CONSERVATIVE' | 'EVOLVE_MODERATE' | 'EVOLVE_AGGRESSIVE';
   performance: number;
+  generation: number;
+  fitness: number;
   reason?: string;
 }
 

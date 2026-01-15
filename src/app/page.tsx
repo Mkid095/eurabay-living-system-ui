@@ -229,7 +229,7 @@ export default function Home() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <ControllerDecisionTimeline data={controllerHistory} />
+                <ControllerDecisionTimeline />
               </div>
 
               <GenerationHistoryChart
@@ -283,7 +283,7 @@ export default function Home() {
 
               {/* Controller Timeline & Evolution Logs */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <ControllerDecisionTimeline data={controllerHistory} />
+                <ControllerDecisionTimeline />
                 <EvolutionLogViewer logs={evolutionLogs} />
               </div>
 

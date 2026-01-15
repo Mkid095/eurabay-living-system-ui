@@ -39,6 +39,7 @@ interface EvolutionDataState {
 interface EvolutionDataLoading {
   metrics: boolean;
   history: boolean;
+  controllerHistory: boolean;
   features: boolean;
   mutations: boolean;
   mutationTracking: boolean;
@@ -48,6 +49,7 @@ interface EvolutionDataLoading {
 interface EvolutionDataError {
   metrics: string | null;
   history: string | null;
+  controllerHistory: string | null;
   features: string | null;
   mutations: string | null;
   mutationTracking: string | null;
@@ -79,6 +81,7 @@ export const useEvolutionData = (options: UseEvolutionDataOptions = {}) => {
   const [loading, setLoading] = useState<EvolutionDataLoading>({
     metrics: false,
     history: false,
+    controllerHistory: false,
     features: false,
     mutations: false,
     mutationTracking: false,
@@ -89,6 +92,7 @@ export const useEvolutionData = (options: UseEvolutionDataOptions = {}) => {
   const [error, setError] = useState<EvolutionDataError>({
     metrics: null,
     history: null,
+    controllerHistory: null,
     features: null,
     mutations: null,
     mutationTracking: null,
@@ -123,6 +127,34 @@ export const useEvolutionData = (options: UseEvolutionDataOptions = {}) => {
     } finally {
       if (isMountedRef.current) {
         setLoading((prev) => ({ ...prev, metrics: false }));
+      }
+    }
+  }, []);
+
+  /**
+   * Fetch controller history (with separate loading state)
+   */
+  const fetchControllerHistoryWithLoading = useCallback(async (days?: number) => {
+    if (!isMountedRef.current) return;
+
+    setLoading((prev) => ({ ...prev, controllerHistory: true }));
+    setError((prev) => ({ ...prev, controllerHistory: null }));
+
+    try {
+      const history = await evolutionApi.fetchControllerHistory(days);
+      if (isMountedRef.current) {
+        setData((prev) => ({ ...prev, controllerHistory: history }));
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        const errorMessage = isApiRequestError(err)
+          ? err.message
+          : 'Failed to fetch controller history';
+        setError((prev) => ({ ...prev, controllerHistory: errorMessage }));
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLoading((prev) => ({ ...prev, controllerHistory: false }));
       }
     }
   }, []);
@@ -350,6 +382,7 @@ export const useEvolutionData = (options: UseEvolutionDataOptions = {}) => {
     // Refetch functions
     refetchMetrics: fetchMetrics,
     refetchHistory: fetchHistory,
+    refetchControllerHistory: fetchControllerHistoryWithLoading,
     refetchFeatures: fetchFeatures,
     refetchMutations: fetchMutations,
     refetchMutationTracking: fetchMutationTracking,
