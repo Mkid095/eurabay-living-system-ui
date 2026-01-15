@@ -1,3 +1,5 @@
+import { WSEvent } from './events';
+
 /**
  * WebSocket Connection States
  */
@@ -33,6 +35,11 @@ export interface WSClientConfig {
 }
 
 /**
+ * WebSocket Event Handler Type
+ */
+export type WSEventHandler<T = unknown> = (data: T, event: WSEvent<T>) => void;
+
+/**
  * WebSocket Client for managing real-time connections
  */
 export class WSClient {
@@ -50,6 +57,7 @@ export class WSClient {
   private authFailureCallbacks: Set<() => void> = new Set();
   private currentToken: string | null = null;
   private tokenRefreshInProgress: boolean = false;
+  private eventHandlers: Map<string, Set<WSEventHandler>> = new Map();
 
   constructor(config: WSClientConfig) {
     this.config = {
@@ -103,6 +111,73 @@ export class WSClient {
   onAuthFailure(callback: () => void): () => void {
     this.authFailureCallbacks.add(callback);
     return () => this.authFailureCallbacks.delete(callback);
+  }
+
+  /**
+   * Register an event handler for a specific event type
+   * @param event - The event type to listen for
+   * @param handler - The callback function to execute when the event is received
+   * @returns Unsubscribe function to remove the handler
+   */
+  on<T = unknown>(event: string, handler: WSEventHandler<T>): () => void {
+    if (!this.eventHandlers.has(event)) {
+      this.eventHandlers.set(event, new Set());
+    }
+    this.eventHandlers.get(event)!.add(handler as WSEventHandler);
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[WS] Registered handler for event: ${event}`);
+    }
+
+    return () => this.off(event, handler as WSEventHandler);
+  }
+
+  /**
+   * Unregister an event handler for a specific event type
+   * @param event - The event type
+   * @param handler - The callback function to remove
+   */
+  off<T = unknown>(event: string, handler: WSEventHandler<T>): void {
+    const handlers = this.eventHandlers.get(event);
+    if (handlers) {
+      handlers.delete(handler as WSEventHandler);
+
+      if (handlers.size === 0) {
+        this.eventHandlers.delete(event);
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[WS] Unregistered handler for event: ${event}`);
+      }
+    }
+  }
+
+  /**
+   * Emit an event to the server
+   * @param event - The event type to send
+   * @param data - The data payload to send
+   */
+  emit<T = unknown>(event: string, data: T): void {
+    const message: WSEvent<T> = {
+      event: event as any,
+      data,
+      timestamp: Date.now(),
+    };
+
+    const jsonString = JSON.stringify(message);
+
+    try {
+      this.send(jsonString);
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[WS] Emitting event: ${event}`, data);
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error(`[WS] Failed to emit event: ${event}`, error);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -376,9 +451,66 @@ export class WSClient {
         return;
       }
 
-      // Other event handling will be added in US-006
+      // Dispatch to event handlers for all other messages
+      this.dispatchMessage(message);
     } catch (error) {
-      // Ignore non-JSON messages
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[WS] Failed to parse message:', error);
+      }
+    }
+  }
+
+  /**
+   * Dispatch incoming message to appropriate event handlers
+   */
+  private dispatchMessage(message: unknown): void {
+    // Validate message has event property
+    if (!message || typeof message !== 'object') {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[WS] Received invalid message format (not an object):', message);
+      }
+      return;
+    }
+
+    const msg = message as Record<string, unknown>;
+    const eventType = msg.event;
+
+    if (!eventType || typeof eventType !== 'string') {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[WS] Received message without valid event type:', message);
+      }
+      return;
+    }
+
+    // Construct WSEvent object
+    const wsEvent: WSEvent = {
+      event: eventType as any,
+      data: msg.data,
+      timestamp: typeof msg.timestamp === 'number' ? msg.timestamp : Date.now(),
+      correlationId: typeof msg.correlationId === 'string' ? msg.correlationId : undefined,
+    };
+
+    // Get handlers for this event type
+    const handlers = this.eventHandlers.get(eventType);
+
+    if (handlers && handlers.size > 0) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[WS] Dispatching event '${eventType}' to ${handlers.size} handler(s)`);
+      }
+
+      handlers.forEach(handler => {
+        try {
+          handler(wsEvent.data, wsEvent);
+        } catch (error) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error(`[WS] Error in handler for event '${eventType}':`, error);
+          }
+        }
+      });
+    } else {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[WS] No handlers registered for event: ${eventType}`);
+      }
     }
   }
 
@@ -503,6 +635,7 @@ export class WSClient {
     this.clearPingInterval();
     this.clearPongTimeout();
     this.stateChangeCallbacks.clear();
+    this.eventHandlers.clear();
   }
 
   /**
