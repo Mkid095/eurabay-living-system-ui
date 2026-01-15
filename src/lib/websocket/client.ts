@@ -14,6 +14,10 @@ export interface WSClientConfig {
   url: string;
   connectionTimeout?: number;
   reconnectOnClose?: boolean;
+  enableAutoReconnect?: boolean;
+  maxReconnectAttempts?: number;
+  initialReconnectDelay?: number;
+  maxReconnectDelay?: number;
 }
 
 /**
@@ -23,15 +27,22 @@ export class WSClient {
   private ws: WebSocket | null = null;
   private state: ConnectionState = 'disconnected';
   private connectionAttemptCount: number = 0;
+  private reconnectAttemptCount: number = 0;
   private connectionTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private config: Required<WSClientConfig>;
   private stateChangeCallbacks: Set<(state: ConnectionState) => void> = new Set();
+  private manuallyDisconnected: boolean = false;
 
   constructor(config: WSClientConfig) {
     this.config = {
       url: config.url,
       connectionTimeout: config.connectionTimeout ?? 10000,
       reconnectOnClose: config.reconnectOnClose ?? false,
+      enableAutoReconnect: config.enableAutoReconnect ?? true,
+      maxReconnectAttempts: config.maxReconnectAttempts ?? Number.POSITIVE_INFINITY,
+      initialReconnectDelay: config.initialReconnectDelay ?? 1000,
+      maxReconnectDelay: config.maxReconnectDelay ?? 30000,
     };
   }
 
@@ -50,6 +61,13 @@ export class WSClient {
   }
 
   /**
+   * Get reconnect attempt count
+   */
+  getReconnectAttemptCount(): number {
+    return this.reconnectAttemptCount;
+  }
+
+  /**
    * Subscribe to connection state changes
    */
   onStateChange(callback: (state: ConnectionState) => void): () => void {
@@ -64,6 +82,10 @@ export class WSClient {
     if (this.state === 'connected' || this.state === 'connecting') {
       return;
     }
+
+    // Clear any pending reconnect timer when manually connecting
+    this.clearReconnectTimer();
+    this.manuallyDisconnected = false;
 
     this.setState('connecting');
     this.connectionAttemptCount++;
@@ -82,6 +104,8 @@ export class WSClient {
       // Connection opened
       this.ws.onopen = () => {
         this.clearConnectionTimeout();
+        this.clearReconnectTimer();
+        this.reconnectAttemptCount = 0; // Reset reconnect count on successful connection
         this.setState('connected');
       };
 
@@ -89,14 +113,16 @@ export class WSClient {
       this.ws.onclose = (event: CloseEvent) => {
         this.clearConnectionTimeout();
 
-        if (this.state !== 'disconnected') {
-          // Only reconnect if it wasn't a manual disconnect
-          if (this.config.reconnectOnClose && !event.wasClean) {
-            // Auto-reconnect will be handled by separate logic in US-002
+        if (this.state !== 'disconnected' && !this.manuallyDisconnected) {
+          // Trigger auto-reconnect if enabled and connection was lost
+          if (this.config.enableAutoReconnect) {
             this.setState('error');
+            this.scheduleReconnect();
           } else {
             this.setState('disconnected');
           }
+        } else {
+          this.setState('disconnected');
         }
       };
 
@@ -127,6 +153,8 @@ export class WSClient {
    */
   disconnect(): void {
     this.clearConnectionTimeout();
+    this.clearReconnectTimer();
+    this.manuallyDisconnected = true;
 
     if (this.ws) {
       // Remove onclose handler to prevent state change
@@ -198,6 +226,61 @@ export class WSClient {
     this.disconnect();
     this.stateChangeCallbacks.clear();
   }
+
+  /**
+   * Calculate exponential backoff delay
+   */
+  private calculateReconnectDelay(): number {
+    // Calculate exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s...
+    const exponentialDelay = this.config.initialReconnectDelay * Math.pow(2, this.reconnectAttemptCount);
+
+    // Cap at max reconnect delay (default 30s)
+    return Math.min(exponentialDelay, this.config.maxReconnectDelay);
+  }
+
+  /**
+   * Schedule reconnect with exponential backoff
+   */
+  private scheduleReconnect(): void {
+    // Check if we've exceeded max reconnect attempts
+    if (this.reconnectAttemptCount >= this.config.maxReconnectAttempts) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error(
+          `[WS] Max reconnect attempts (${this.config.maxReconnectAttempts}) reached. Stopping auto-reconnect.`
+        );
+      }
+      this.setState('disconnected');
+      return;
+    }
+
+    // Calculate delay using exponential backoff
+    const delay = this.calculateReconnectDelay();
+    this.reconnectAttemptCount++;
+
+    const timestamp = new Date().toISOString();
+    if (process.env.NODE_ENV === 'development') {
+      console.log(
+        `[WS] Scheduling reconnect attempt ${this.reconnectAttemptCount}/${this.config.maxReconnectAttempts} in ${delay}ms (${timestamp})`
+      );
+    }
+
+    this.reconnectTimeoutId = setTimeout(() => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[WS] Executing reconnect attempt ${this.reconnectAttemptCount}`);
+      }
+      this.connect();
+    }, delay);
+  }
+
+  /**
+   * Clear reconnect timer
+   */
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimeoutId !== null) {
+      clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = null;
+    }
+  }
 }
 
 /**
@@ -211,7 +294,11 @@ const createDefaultClient = (): WSClient => {
   return new WSClient({
     url: wsUrl,
     connectionTimeout: 10000,
-    reconnectOnClose: false, // Will be enabled in US-002 with auto-reconnect
+    reconnectOnClose: false,
+    enableAutoReconnect: true,
+    maxReconnectAttempts: Number.POSITIVE_INFINITY, // Infinite reconnect attempts
+    initialReconnectDelay: 1000, // Start with 1 second
+    maxReconnectDelay: 30000, // Max 30 seconds
   });
 };
 
