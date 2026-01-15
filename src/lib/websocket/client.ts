@@ -18,6 +18,8 @@ export interface WSClientConfig {
   maxReconnectAttempts?: number;
   initialReconnectDelay?: number;
   maxReconnectDelay?: number;
+  pingInterval?: number;
+  pongTimeout?: number;
 }
 
 /**
@@ -30,6 +32,8 @@ export class WSClient {
   private reconnectAttemptCount: number = 0;
   private connectionTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private pingIntervalId: ReturnType<typeof setInterval> | null = null;
+  private pongTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private config: Required<WSClientConfig>;
   private stateChangeCallbacks: Set<(state: ConnectionState) => void> = new Set();
   private manuallyDisconnected: boolean = false;
@@ -43,6 +47,8 @@ export class WSClient {
       maxReconnectAttempts: config.maxReconnectAttempts ?? Number.POSITIVE_INFINITY,
       initialReconnectDelay: config.initialReconnectDelay ?? 1000,
       maxReconnectDelay: config.maxReconnectDelay ?? 30000,
+      pingInterval: config.pingInterval ?? 30000, // Send ping every 30 seconds
+      pongTimeout: config.pongTimeout ?? 60000, // Expect pong within 60 seconds
     };
   }
 
@@ -106,6 +112,7 @@ export class WSClient {
         this.clearConnectionTimeout();
         this.clearReconnectTimer();
         this.reconnectAttemptCount = 0; // Reset reconnect count on successful connection
+        this.startPingInterval();
         this.setState('connected');
       };
 
@@ -134,10 +141,7 @@ export class WSClient {
 
       // Message received
       this.ws.onmessage = (event: MessageEvent) => {
-        // Message handling will be added in US-006
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[WS] Raw message received:', event.data);
-        }
+        this.handleMessage(event.data);
       };
     } catch (error) {
       this.clearConnectionTimeout();
@@ -154,6 +158,8 @@ export class WSClient {
   disconnect(): void {
     this.clearConnectionTimeout();
     this.clearReconnectTimer();
+    this.clearPingInterval();
+    this.clearPongTimeout();
     this.manuallyDisconnected = true;
 
     if (this.ws) {
@@ -210,6 +216,113 @@ export class WSClient {
   }
 
   /**
+   * Handle incoming WebSocket message
+   */
+  private handleMessage(data: string): void {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[WS] Raw message received:', data);
+    }
+
+    try {
+      const message = JSON.parse(data);
+
+      // Handle pong response
+      if (message.type === 'pong') {
+        this.handlePong();
+        return;
+      }
+
+      // Other event handling will be added in US-006
+    } catch (error) {
+      // Ignore non-JSON messages
+    }
+  }
+
+  /**
+   * Start ping interval
+   */
+  private startPingInterval(): void {
+    this.clearPingInterval();
+
+    this.pingIntervalId = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.sendPing();
+      }
+    }, this.config.pingInterval);
+  }
+
+  /**
+   * Clear ping interval
+   */
+  private clearPingInterval(): void {
+    if (this.pingIntervalId !== null) {
+      clearInterval(this.pingIntervalId);
+      this.pingIntervalId = null;
+    }
+  }
+
+  /**
+   * Send ping message to server
+   */
+  private sendPing(): void {
+    const pingMessage = JSON.stringify({ type: 'ping', timestamp: Date.now() });
+
+    try {
+      this.ws?.send(pingMessage);
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[WS] Ping sent');
+      }
+
+      // Start waiting for pong response
+      this.startPongTimeout();
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[WS] Failed to send ping:', error);
+      }
+    }
+  }
+
+  /**
+   * Start pong timeout
+   */
+  private startPongTimeout(): void {
+    this.clearPongTimeout();
+
+    this.pongTimeoutId = setTimeout(() => {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[WS] Pong timeout - closing connection and reconnecting');
+      }
+
+      // Close connection to trigger reconnect
+      if (this.ws) {
+        this.ws.close(1000, 'Pong timeout');
+      }
+    }, this.config.pongTimeout);
+  }
+
+  /**
+   * Clear pong timeout
+   */
+  private clearPongTimeout(): void {
+    if (this.pongTimeoutId !== null) {
+      clearTimeout(this.pongTimeoutId);
+      this.pongTimeoutId = null;
+    }
+  }
+
+  /**
+   * Handle pong response from server
+   */
+  private handlePong(): void {
+    this.clearPongTimeout();
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[WS] Pong received');
+    }
+  }
+
+  /**
    * Clear connection timeout
    */
   private clearConnectionTimeout(): void {
@@ -224,6 +337,8 @@ export class WSClient {
    */
   destroy(): void {
     this.disconnect();
+    this.clearPingInterval();
+    this.clearPongTimeout();
     this.stateChangeCallbacks.clear();
   }
 
@@ -299,6 +414,8 @@ const createDefaultClient = (): WSClient => {
     maxReconnectAttempts: Number.POSITIVE_INFINITY, // Infinite reconnect attempts
     initialReconnectDelay: 1000, // Start with 1 second
     maxReconnectDelay: 30000, // Max 30 seconds
+    pingInterval: 30000, // Send ping every 30 seconds
+    pongTimeout: 60000, // Expect pong within 60 seconds
   });
 };
 
