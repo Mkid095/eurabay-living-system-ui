@@ -3,17 +3,7 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp, Activity } from "lucide-react";
-
-interface MarketData {
-  symbol: string;
-  displayName: string;
-  price: number;
-  change24h: number;
-  volume: number;
-  spread: number;
-  volatility: number;
-  trend: 'BULLISH' | 'BEARISH' | 'SIDEWAYS';
-}
+import { VolatilityParticles, MarketData } from "@/components/effects/VolatilityParticles";
 
 interface DerivMarketOverviewProps {
   markets?: MarketData[];
@@ -101,37 +91,49 @@ export const DerivMarketOverview = ({ markets }: DerivMarketOverviewProps) => {
 
       <div className="space-y-4">
         {displayMarkets.map((market) => (
-          <div key={market.symbol} className="p-4 rounded-lg bg-card border border-border hover:bg-accent/5 transition-colors">
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h4 className="font-semibold">{market.symbol}</h4>
-                  <Badge className={getTrendBadge(market.trend)}>
-                    {market.trend}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">{market.displayName}</p>
-              </div>
-              <div className="text-right">
-                <p className="font-mono font-semibold">{market.price.toFixed(2)}</p>
-                <p className={`text-xs font-medium ${market.change24h >= 0 ? 'text-profit' : 'text-loss'}`}>
-                  {market.change24h >= 0 ? '+' : ''}{market.change24h.toFixed(2)}%
-                </p>
-              </div>
+          <div key={market.symbol} className="relative p-4 rounded-lg bg-card border border-border hover:bg-accent/5 transition-colors overflow-hidden">
+            {/* Volatility particles overlay */}
+            <div className="absolute inset-0 pointer-events-none">
+              <VolatilityParticles
+                market={market}
+                enabled={true}
+                width={400}
+                height={180}
+              />
             </div>
 
-            <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-border">
-              <div>
-                <p className="text-xs text-muted-foreground">Spread</p>
-                <p className="text-sm font-medium">{market.spread.toFixed(1)}</p>
+            <div className="relative z-10">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h4 className="font-semibold">{market.symbol}</h4>
+                    <Badge className={getTrendBadge(market.trend)}>
+                      {market.trend}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{market.displayName}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-mono font-semibold">{market.price.toFixed(2)}</p>
+                  <p className={`text-xs font-medium ${market.change24h >= 0 ? 'text-profit' : 'text-loss'}`}>
+                    {market.change24h >= 0 ? '+' : ''}{market.change24h.toFixed(2)}%
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Volume</p>
-                <p className="text-sm font-medium">{(market.volume / 1000).toFixed(1)}K</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Vol Index</p>
-                <p className="text-sm font-medium">{market.volatility}</p>
+
+              <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-border">
+                <div>
+                  <p className="text-xs text-muted-foreground">Spread</p>
+                  <p className="text-sm font-medium">{market.spread.toFixed(1)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Volume</p>
+                  <p className="text-sm font-medium">{(market.volume / 1000).toFixed(1)}K</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Vol Index</p>
+                  <p className="text-sm font-medium">{market.volatility}</p>
+                </div>
               </div>
             </div>
           </div>
