@@ -8,6 +8,15 @@ export type ConnectionState =
   | 'error';
 
 /**
+ * WebSocket Authentication Configuration
+ */
+export interface WSAuthConfig {
+  getToken: () => string | null;
+  onTokenRefresh?: () => Promise<string | null>;
+  onAuthFailure?: () => void;
+}
+
+/**
  * WebSocket Client Configuration
  */
 export interface WSClientConfig {
@@ -20,6 +29,7 @@ export interface WSClientConfig {
   maxReconnectDelay?: number;
   pingInterval?: number;
   pongTimeout?: number;
+  auth?: WSAuthConfig;
 }
 
 /**
@@ -37,6 +47,9 @@ export class WSClient {
   private config: Required<WSClientConfig>;
   private stateChangeCallbacks: Set<(state: ConnectionState) => void> = new Set();
   private manuallyDisconnected: boolean = false;
+  private authFailureCallbacks: Set<() => void> = new Set();
+  private currentToken: string | null = null;
+  private tokenRefreshInProgress: boolean = false;
 
   constructor(config: WSClientConfig) {
     this.config = {
@@ -49,6 +62,9 @@ export class WSClient {
       maxReconnectDelay: config.maxReconnectDelay ?? 30000,
       pingInterval: config.pingInterval ?? 30000, // Send ping every 30 seconds
       pongTimeout: config.pongTimeout ?? 60000, // Expect pong within 60 seconds
+      auth: config.auth ?? {
+        getToken: () => localStorage.getItem('auth_token'),
+      },
     };
   }
 
@@ -82,6 +98,113 @@ export class WSClient {
   }
 
   /**
+   * Subscribe to authentication failure events
+   */
+  onAuthFailure(callback: () => void): () => void {
+    this.authFailureCallbacks.add(callback);
+    return () => this.authFailureCallbacks.delete(callback);
+  }
+
+  /**
+   * Clear auth token (called on logout)
+   */
+  clearAuthToken(): void {
+    this.currentToken = null;
+    localStorage.removeItem('auth_token');
+    this.disconnect();
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[WS] Auth token cleared');
+    }
+  }
+
+  /**
+   * Get WebSocket URL with auth token
+   */
+  private getAuthUrl(): string {
+    const token = this.config.auth.getToken();
+    this.currentToken = token;
+
+    if (!token) {
+      return this.config.url;
+    }
+
+    // Add token as query parameter
+    const url = new URL(this.config.url);
+    url.searchParams.set('token', token);
+    return url.toString();
+  }
+
+  /**
+   * Handle authentication failure
+   */
+  private handleAuthFailure(reason: string): void {
+    if (process.env.NODE_ENV === 'development') {
+      console.error(`[WS] Authentication failed: ${reason}`);
+    }
+
+    // Notify all auth failure callbacks
+    this.authFailureCallbacks.forEach(callback => {
+      try {
+        callback();
+      } catch (error) {
+        console.error('[WS] Error in auth failure callback:', error);
+      }
+    });
+
+    // Call configured auth failure handler
+    if (this.config.auth.onAuthFailure) {
+      try {
+        this.config.auth.onAuthFailure();
+      } catch (error) {
+        console.error('[WS] Error in configured auth failure handler:', error);
+      }
+    }
+
+    // Disconnect and don't auto-reconnect on auth failure
+    this.manuallyDisconnected = true;
+    this.disconnect();
+  }
+
+  /**
+   * Attempt to refresh auth token and reconnect
+   */
+  private async attemptTokenRefresh(): Promise<boolean> {
+    if (!this.config.auth.onTokenRefresh || this.tokenRefreshInProgress) {
+      return false;
+    }
+
+    this.tokenRefreshInProgress = true;
+
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[WS] Attempting token refresh');
+      }
+
+      const newToken = await this.config.auth.onTokenRefresh();
+
+      if (newToken) {
+        this.currentToken = newToken;
+
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[WS] Token refreshed successfully');
+        }
+
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[WS] Token refresh failed:', error);
+      }
+      return false;
+    } finally {
+      this.tokenRefreshInProgress = false;
+    }
+  }
+
+  /**
    * Establish WebSocket connection
    */
   connect(): void {
@@ -97,7 +220,8 @@ export class WSClient {
     this.connectionAttemptCount++;
 
     try {
-      this.ws = new WebSocket(this.config.url);
+      const wsUrl = this.getAuthUrl();
+      this.ws = new WebSocket(wsUrl);
 
       // Set up connection timeout
       this.connectionTimeoutId = setTimeout(() => {
@@ -119,6 +243,14 @@ export class WSClient {
       // Connection closed
       this.ws.onclose = (event: CloseEvent) => {
         this.clearConnectionTimeout();
+
+        // Check for authentication-related close codes
+        // 4008: Authentication timeout
+        // 4003: Invalid token or authentication failed
+        if (event.code === 4003 || event.code === 4008) {
+          this.handleAuthFailure(`Authentication failed with close code: ${event.code} (${event.reason})`);
+          return;
+        }
 
         if (this.state !== 'disconnected' && !this.manuallyDisconnected) {
           // Trigger auto-reconnect if enabled and connection was lost
@@ -226,6 +358,18 @@ export class WSClient {
     try {
       const message = JSON.parse(data);
 
+      // Handle authentication failure
+      if (message.type === 'auth_error' || message.type === 'authentication_failed') {
+        this.handleAuthFailure(message.reason || 'Server rejected authentication');
+        return;
+      }
+
+      // Handle token expiry
+      if (message.type === 'token_expired') {
+        this.handleTokenExpired();
+        return;
+      }
+
       // Handle pong response
       if (message.type === 'pong') {
         this.handlePong();
@@ -235,6 +379,25 @@ export class WSClient {
       // Other event handling will be added in US-006
     } catch (error) {
       // Ignore non-JSON messages
+    }
+  }
+
+  /**
+   * Handle token expiry message from server
+   */
+  private async handleTokenExpired(): Promise<void> {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[WS] Token expired, attempting refresh');
+    }
+
+    const refreshed = await this.attemptTokenRefresh();
+
+    if (refreshed) {
+      // Reconnect with new token
+      this.reconnect();
+    } else {
+      // Token refresh failed, handle auth failure
+      this.handleAuthFailure('Token expired and refresh failed');
     }
   }
 
