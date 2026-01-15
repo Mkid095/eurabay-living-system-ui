@@ -41,6 +41,7 @@ interface EvolutionDataLoading {
   history: boolean;
   features: boolean;
   mutations: boolean;
+  mutationTracking: boolean;
   logs: boolean;
 }
 
@@ -49,6 +50,7 @@ interface EvolutionDataError {
   history: string | null;
   features: string | null;
   mutations: string | null;
+  mutationTracking: string | null;
   logs: string | null;
 }
 
@@ -79,6 +81,7 @@ export const useEvolutionData = (options: UseEvolutionDataOptions = {}) => {
     history: false,
     features: false,
     mutations: false,
+    mutationTracking: false,
     logs: false,
   });
 
@@ -88,6 +91,7 @@ export const useEvolutionData = (options: UseEvolutionDataOptions = {}) => {
     history: null,
     features: null,
     mutations: null,
+    mutationTracking: null,
     logs: null,
   });
 
@@ -208,6 +212,34 @@ export const useEvolutionData = (options: UseEvolutionDataOptions = {}) => {
   }, []);
 
   /**
+   * Fetch mutation tracking data with separate loading state for MutationSuccessTracking component
+   */
+  const fetchMutationTracking = useCallback(async (minAttempts?: number) => {
+    if (!isMountedRef.current) return;
+
+    setLoading((prev) => ({ ...prev, mutationTracking: true }));
+    setError((prev) => ({ ...prev, mutationTracking: null }));
+
+    try {
+      const mutations = await evolutionApi.fetchMutationSuccess(minAttempts);
+      if (isMountedRef.current) {
+        setData((prev) => ({ ...prev, mutationSuccess: mutations }));
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        const errorMessage = isApiRequestError(err)
+          ? err.message
+          : 'Failed to fetch mutation tracking data';
+        setError((prev) => ({ ...prev, mutationTracking: errorMessage }));
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLoading((prev) => ({ ...prev, mutationTracking: false }));
+      }
+    }
+  }, []);
+
+  /**
    * Fetch generation history
    */
   const fetchGenerationHistory = useCallback(async (days?: number) => {
@@ -320,6 +352,7 @@ export const useEvolutionData = (options: UseEvolutionDataOptions = {}) => {
     refetchHistory: fetchHistory,
     refetchFeatures: fetchFeatures,
     refetchMutations: fetchMutations,
+    refetchMutationTracking: fetchMutationTracking,
     refetchGenerationHistory: fetchGenerationHistory,
     refetchLogs: fetchLogs,
     refetchAll,

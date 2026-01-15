@@ -26,6 +26,7 @@ import { GenerationHistoryChart } from "@/components/dashboard/GenerationHistory
 import { FeatureSuccessChart } from "@/components/dashboard/FeatureSuccessChart";
 import { FeatureSuccessAnalysis } from "@/components/dashboard/FeatureSuccessAnalysis";
 import { MutationSuccessChart } from "@/components/dashboard/MutationSuccessChart";
+import { MutationSuccessTracking } from "@/components/dashboard/MutationSuccessTracking";
 import { ControllerDecisionTimeline } from "@/components/dashboard/ControllerDecisionTimeline";
 import { EvolutionLogViewer } from "@/components/dashboard/EvolutionLogViewer";
 import { EnhancedActiveTradesTable } from "@/components/dashboard/EnhancedActiveTradesTable";
@@ -58,6 +59,7 @@ export default function Home() {
     error,
     refetchGenerationHistory,
     refetchFeatures,
+    refetchMutationTracking,
   } = useEvolutionData();
 
   const formatCurrency = (value: number) => {
@@ -270,9 +272,14 @@ export default function Home() {
                 onRefresh={refetchFeatures}
               />
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <MutationSuccessChart data={mutationSuccess} />
-              </div>
+              <MutationSuccessTracking
+                data={mutationSuccess}
+                loading={loading.mutationTracking}
+                error={error.mutationTracking}
+                onRefresh={refetchMutationTracking}
+                onMinAttemptsChange={refetchMutationTracking}
+                autoRefreshInterval={30000}
+              />
 
               {/* Controller Timeline & Evolution Logs */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
