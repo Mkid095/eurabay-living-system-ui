@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { 
-  TrendingUp, 
-  Activity, 
-  Shield, 
-  DollarSign 
+import { useState, useCallback } from "react";
+import {
+  TrendingUp,
+  Activity,
+  Shield,
+  DollarSign
 } from "lucide-react";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Header } from "@/components/dashboard/Header";
@@ -53,6 +53,9 @@ export default function Home() {
     generationHistory,
     evolutionLogs,
     evolvedTrades,
+    loading,
+    error,
+    refetchGenerationHistory,
   } = useEvolutionData();
 
   const formatCurrency = (value: number) => {
@@ -63,6 +66,14 @@ export default function Home() {
       maximumFractionDigits: 0,
     }).format(value);
   };
+
+  const handleDateRangeChange = useCallback((days: 7 | 30 | 90 | 'all') => {
+    if (days === 'all') {
+      refetchGenerationHistory();
+    } else {
+      refetchGenerationHistory(days);
+    }
+  }, [refetchGenerationHistory]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -110,7 +121,13 @@ export default function Home() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <EvolutionMetrics metrics={evolutionMetrics} />
                 <div className="lg:col-span-2">
-                  <GenerationHistoryChart data={generationHistory} />
+                  <GenerationHistoryChart
+                    data={generationHistory}
+                    loading={loading.history}
+                    error={error.history}
+                    onRefresh={refetchGenerationHistory}
+                    onDateRangeChange={handleDateRangeChange}
+                  />
                 </div>
               </div>
 
@@ -205,7 +222,13 @@ export default function Home() {
                 <ControllerDecisionTimeline data={controllerHistory} />
               </div>
 
-              <GenerationHistoryChart data={generationHistory} />
+              <GenerationHistoryChart
+                data={generationHistory}
+                loading={loading.history}
+                error={error.history}
+                onRefresh={refetchGenerationHistory}
+                onDateRangeChange={handleDateRangeChange}
+              />
             </div>
           )}
 
@@ -221,7 +244,13 @@ export default function Home() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <EvolutionMetrics metrics={evolutionMetrics} />
                 <div className="lg:col-span-2">
-                  <GenerationHistoryChart data={generationHistory} />
+                  <GenerationHistoryChart
+                    data={generationHistory}
+                    loading={loading.history}
+                    error={error.history}
+                    onRefresh={refetchGenerationHistory}
+                    onDateRangeChange={handleDateRangeChange}
+                  />
                 </div>
               </div>
 

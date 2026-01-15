@@ -2,28 +2,150 @@
 
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Activity, Dna, Zap, Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Activity, Dna, Zap, Clock, RefreshCw, AlertCircle } from "lucide-react";
 import type { EvolutionMetrics as EvolutionMetricsType } from "@/types/evolution";
+import { useEvolutionData } from "@/hooks/useEvolutionData";
 
-interface EvolutionMetricsProps {
-  metrics: EvolutionMetricsType;
+/**
+ * Format uptime duration from milliseconds to HH:MM:SS
+ */
+function formatUptime(birthTime: string): string {
+  const birth = new Date(birthTime).getTime();
+  const now = Date.now();
+  const diff = now - birth;
+
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-export const EvolutionMetrics = ({ metrics }: EvolutionMetricsProps) => {
-  const getDecisionColor = (decision: string) => {
-    switch (decision) {
-      case 'STABLE':
-        return 'bg-profit/20 text-profit border-profit/30';
-      case 'EVOLVE_CONSERVATIVE':
-        return 'bg-info/20 text-info border-info/30';
-      case 'EVOLVE_MODERATE':
-        return 'bg-warning/20 text-warning border-warning/30';
-      case 'EVOLVE_AGGRESSIVE':
-        return 'bg-loss/20 text-loss border-loss/30';
-      default:
-        return 'bg-muted text-muted-foreground';
-    }
-  };
+/**
+ * Get color class for controller decision
+ */
+function getDecisionColor(decision: string) {
+  switch (decision) {
+    case 'STABLE':
+      return 'bg-profit/20 text-profit border-profit/30';
+    case 'EVOLVE_CONSERVATIVE':
+      return 'bg-info/20 text-info border-info/30';
+    case 'EVOLVE_MODERATE':
+      return 'bg-warning/20 text-warning border-warning/30';
+    case 'EVOLVE_AGGRESSIVE':
+      return 'bg-loss/20 text-loss border-loss/30';
+    default:
+      return 'bg-muted text-muted-foreground';
+  }
+}
+
+/**
+ * Loading skeleton for EvolutionMetrics
+ */
+function EvolutionMetricsSkeleton() {
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <Skeleton className="h-6 w-40 mb-2" />
+          <Skeleton className="h-4 w-48" />
+        </div>
+        <Skeleton className="w-8 h-8 rounded-full" />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-8 w-32" />
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Error state for EvolutionMetrics
+ */
+interface EvolutionMetricsErrorProps {
+  message: string;
+  onRetry: () => void;
+}
+
+function EvolutionMetricsError({ message, onRetry }: EvolutionMetricsErrorProps) {
+  return (
+    <Card className="p-6">
+      <div className="flex flex-col items-center justify-center py-8 space-y-4">
+        <AlertCircle className="w-12 h-12 text-loss" />
+        <div className="text-center space-y-2">
+          <p className="text-lg font-semibold text-foreground">Failed to load evolution metrics</p>
+          <p className="text-sm text-muted-foreground">{message}</p>
+        </div>
+        <Button onClick={onRetry} variant="outline" size="sm">
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Retry
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * EvolutionMetrics component props
+ */
+interface EvolutionMetricsProps {
+  metrics?: EvolutionMetricsType | null;
+}
+
+/**
+ * EvolutionMetrics component
+ *
+ * Displays current evolution status and metrics including:
+ * - Current generation number
+ * - Controller decision with color-coded badge
+ * - Cycles completed
+ * - System version
+ * - Birth time
+ * - Uptime counter
+ *
+ * Features:
+ * - Auto-refresh every 5 seconds
+ * - Manual refresh button
+ * - Loading skeleton
+ * - Error state with retry
+ */
+export const EvolutionMetrics = ({ metrics: propMetrics }: EvolutionMetricsProps) => {
+  // Use hook if metrics are not provided as props
+  const { evolutionMetrics: hookMetrics, loading, error, refetchMetrics } = useEvolutionData({
+    refreshInterval: 5000,
+    enableAutoRefresh: !propMetrics,
+  });
+
+  const metrics = propMetrics || hookMetrics;
+
+  // Show loading skeleton
+  if (loading.metrics && !metrics) {
+    return <EvolutionMetricsSkeleton />;
+  }
+
+  // Show error state
+  if (error.metrics && !metrics) {
+    return <EvolutionMetricsError message={error.metrics} onRetry={refetchMetrics} />;
+  }
+
+  // Show empty state if no metrics
+  if (!metrics) {
+    return (
+      <Card className="p-6">
+        <div className="flex items-center justify-center py-8">
+          <p className="text-muted-foreground">No evolution metrics available</p>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card className="p-6">
@@ -32,7 +154,20 @@ export const EvolutionMetrics = ({ metrics }: EvolutionMetricsProps) => {
           <h3 className="text-lg font-semibold">Evolution Status</h3>
           <p className="text-sm text-muted-foreground">Living System Metrics</p>
         </div>
-        <Dna className="w-8 h-8 text-primary" />
+        <div className="flex items-center gap-2">
+          {!propMetrics && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={refetchMetrics}
+              disabled={loading.metrics}
+              className="h-8 w-8"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading.metrics ? 'animate-spin' : ''}`} />
+            </Button>
+          )}
+          <Dna className="w-8 h-8 text-primary" />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -66,7 +201,7 @@ export const EvolutionMetrics = ({ metrics }: EvolutionMetricsProps) => {
             <Clock className="w-4 h-4 text-muted-foreground" />
             <span className="text-sm text-muted-foreground">System Uptime</span>
           </div>
-          <p className="text-sm font-mono">{metrics.uptime}</p>
+          <p className="text-sm font-mono">{formatUptime(metrics.birthTime)}</p>
         </div>
 
         <div className="space-y-1 sm:col-span-2">
