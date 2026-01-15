@@ -1,0 +1,90 @@
+{
+  "project": "EURABAY Living System v5.0",
+  "branchName": "flow/system-control-features",
+  "description": "System Control Features - Start/stop controls, risk parameter adjustments, and manual override functionality for admin users",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create SystemControlPanel component",
+      "description": "As an admin, I need controls to start and stop the trading system.",
+      "acceptanceCriteria": [
+        "Create SystemControlPanel component",
+        "Add 'Start System' button calling POST /system/start",
+        "Add 'Stop System' button calling POST /system/stop",
+        "Display current system status (running/stopped/error)",
+        "Color-code status (green=running, red=stopped, yellow=error)",
+        "Add RoleGuard to restrict to admin role",
+        "Show confirmation dialog before stop",
+        "Show success/error toast notifications",
+        "Disable buttons during state transition",
+        "Display uptime counter when running",
+        "Display last start/stop time",
+        "Add loading state during API call",
+        "Use shadcn/ui Button, Badge components",
+        "Typecheck passes",
+        "Verify in browser that controls work"
+      ],
+      "mavenSteps": [3, 5, 6],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Create RiskParameterControls component",
+      "description": "As an admin, I need to adjust risk parameters.",
+      "acceptanceCriteria": [
+        "Create RiskParameterControls component",
+        "Add slider for max position size (0.01-1.0 lots)",
+        "Add slider for max daily loss limit ($100-$10000)",
+        "Add slider for max concurrent trades (1-10)",
+        "Add slider for risk per trade (1%-10%)",
+        "Add toggle for 'Allow Aggressive Evolution'",
+        "Add toggle for 'Auto-approve Signals'",
+        "Add 'Save Parameters' button calling PUT /config",
+        "Add 'Reset to Defaults' button",
+        "Display current values",
+        "Show validation warnings for extreme values",
+        "Show success toast on save",
+        "Add RoleGuard to restrict to admin role",
+        "Use shadcn/ui Slider, Switch, Button components",
+        "Typecheck passes",
+        "Verify in browser that controls work"
+      ],
+      "mavenSteps": [3, 5, 6],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Create ManualOverride component",
+      "description": "As an admin, I need to manually override system controls.",
+      "acceptanceCriteria": [
+        "Create ManualOverride component",
+        "Add 'Enable Manual Override' toggle",
+        "Display override status (enabled/disabled)",
+        "Add 'Pause Evolution' button when override enabled",
+        "Add 'Force Trade Approval' button when override enabled",
+        "Add 'Close All Positions' button (danger action)",
+        "Add 'Cancel All Pending Signals' button",
+        "Call POST /system/override to toggle override",
+        "Call POST /system/stop to pause evolution",
+        "Show confirmation dialogs for dangerous actions",
+        "Show success/error toast notifications",
+        "Add warning banner when override is enabled",
+        "Add RoleGuard to restrict to admin role",
+        "Use shadcn/ui Switch, Button, Alert components",
+        "Typecheck passes",
+        "Verify in browser that override works"
+      ],
+      "mavenSteps": [3, 5, 6],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

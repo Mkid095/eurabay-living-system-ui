@@ -1,0 +1,390 @@
+{
+  "project": "EURABAY Living System v5.0",
+  "branchName": "flow/websocket-integration",
+  "description": "WebSocket Integration - Real-time push-based updates for trading activity, evolution events, market data, and system status with auto-reconnect and subscription management",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create WebSocket client with connection state management",
+      "description": "As a developer, I need a WebSocket client to manage real-time connections.",
+      "acceptanceCriteria": [
+        "Create src/lib/websocket/client.ts with WSClient class",
+        "Implement connection state: connecting, connected, disconnected, error",
+        "Implement connect() method to establish WebSocket connection",
+        "Implement disconnect() method to close connection cleanly",
+        "Implement reconnect() method for manual reconnection",
+        "Implement getState() method to return current connection state",
+        "Add connection attempt counter",
+        "Add connection timeout (10 seconds)",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Implement auto-reconnect with exponential backoff",
+      "description": "As a user, I need the system to automatically reconnect after connection loss.",
+      "acceptanceCriteria": [
+        "Add auto-reconnect logic when connection closes unexpectedly",
+        "Implement exponential backoff: 1s, 2s, 4s, 8s, max 30s",
+        "Add maximum reconnect attempt limit (optional, can be infinite)",
+        "Clear reconnect timer on successful connection",
+        "Clear reconnect timer on manual disconnect",
+        "Log all reconnect attempts with timestamp",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Add ping/pong health checks for connection",
+      "description": "As a system, I need to verify WebSocket connection health with ping/pong messages.",
+      "acceptanceCriteria": [
+        "Send ping message every 30 seconds when connected",
+        "Expect pong response from server",
+        "Close connection and reconnect if no pong received (60s timeout)",
+        "Reset pong timer on each pong received",
+        "Clear ping timer on disconnect",
+        "Log ping/pong activity in development mode",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Add WebSocket authentication with token",
+      "description": "As a system, I need to authenticate WebSocket connections.",
+      "acceptanceCriteria": [
+        "Add auth token to WebSocket connection URL as query parameter",
+        "Read auth token from localStorage (auth_token key)",
+        "Handle authentication failure response from server",
+        "Disconnect and show error if auth fails",
+        "Support token refresh for long-lived connections",
+        "Clear auth token on logout and disconnect",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7, 8],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Create WebSocket event type definitions",
+      "description": "As a developer, I need TypeScript interfaces for all WebSocket event types.",
+      "acceptanceCriteria": [
+        "Create src/lib/websocket/events.ts",
+        "Define WSEventType enum: SYSTEM_STATUS, TRADE_UPDATE, NEW_SIGNAL, EVOLUTION_EVENT, GENERATION_CHANGED, CONTROLLER_DECISION, FEATURE_MUTATED, MARKET_UPDATE, PERFORMANCE_UPDATE, MT5_CONNECTED, MT5_DISCONNECTED, MT5_ORDER_OPENED, MT5_ORDER_CLOSED, MT5_POSITION_MODIFIED, MT5_ERROR",
+        "Define WSEvent<T> interface with event, data, timestamp, correlationId",
+        "Define TradeUpdateEvent interface",
+        "Define EvolutionEvent interface",
+        "Define MarketUpdateEvent interface",
+        "Define SystemStatusEvent interface",
+        "Define MT5Event interfaces for all MT5 events",
+        "Export all types",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Create event handler registration system",
+      "description": "As a developer, I need an event system to handle WebSocket messages.",
+      "acceptanceCriteria": [
+        "Add on(event, handler) method to register event handlers",
+        "Add off(event, handler) method to unregister event handlers",
+        "Add emit(event, data) method to send messages to server",
+        "Store handlers in Map<event, Set<handler>>",
+        "Dispatch incoming messages to appropriate handlers",
+        "Handle unknown event types gracefully",
+        "Log all events in development mode",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Add Zod validation for WebSocket events",
+      "description": "As a developer, I need runtime validation for WebSocket messages.",
+      "acceptanceCriteria": [
+        "Create Zod schemas for each event type in src/lib/websocket/schemas.ts",
+        "Validate incoming messages against schemas",
+        "Log validation errors with full message details",
+        "Discard invalid messages with warning",
+        "Add safe default parsing for unknown fields",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 5, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Create connection status indicator component",
+      "description": "As a user, I need to see the real-time connection status at all times.",
+      "acceptanceCriteria": [
+        "Create src/components/dashboard/ConnectionStatus.tsx",
+        "Show green dot for connected state",
+        "Show yellow dot for connecting state (animated)",
+        "Show red dot for disconnected/error state",
+        "Display connection status text",
+        "Show latency in milliseconds when available",
+        "Add tooltip with connection details",
+        "Add manual reconnect button when disconnected",
+        "Use shadcn/ui components",
+        "Typecheck passes",
+        "Verify in browser that indicator displays correctly"
+      ],
+      "mavenSteps": [3, 5, 6],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Create useConnectionState hook for connection status",
+      "description": "As a developer, I need a hook to access WebSocket connection state.",
+      "acceptanceCriteria": [
+        "Create src/hooks/useConnectionState.ts",
+        "Return connection state from WebSocket client",
+        "Return latency value when available",
+        "Return reconnect attempt count",
+        "Return reconnect() function for manual reconnection",
+        "Subscribe to connection state changes",
+        "Clean up subscription on unmount",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Create subscription manager for data streams",
+      "description": "As a system, I need to manage which data streams to subscribe to.",
+      "acceptanceCriteria": [
+        "Create src/lib/websocket/subscriptions.ts",
+        "Define SubscriptionType enum: TRADES, EVOLUTION, MARKETS, SYSTEM_STATUS, PERFORMANCE, MT5",
+        "Create SubscriptionManager class",
+        "Implement subscribe(type) method",
+        "Implement unsubscribe(type) method",
+        "Implement unsubscribeAll() method",
+        "Track active subscriptions in Set",
+        "Send subscribe message to server when subscribing",
+        "Send unsubscribe message to server when unsubscribing",
+        "Avoid duplicate subscriptions",
+        "Export singleton instance",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Create useRealTimeTrades hook for trade updates",
+      "description": "As a user, I need real-time updates to my active trades.",
+      "acceptanceCriteria": [
+        "Create src/hooks/useRealTimeTrades.ts",
+        "Subscribe to trade_update events",
+        "Update trades array when trade_update events received",
+        "Add flash animation for updated values",
+        "Move trades to recent when status changes to closed",
+        "Show toast notification for large P&L changes (>10%)",
+        "Unsubscribe from events on unmount",
+        "Typecheck passes",
+        "Verify in browser that trades update in real-time"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Create useRealTimeEvolution hook for evolution events",
+      "description": "As a user, I need real-time evolution event notifications.",
+      "acceptanceCriteria": [
+        "Create src/hooks/useRealTimeEvolution.ts",
+        "Subscribe to evolution_event events",
+        "Subscribe to generation_changed events",
+        "Subscribe to controller_decision events",
+        "Subscribe to feature_mutated events",
+        "Append new events to evolution log",
+        "Update metrics when generation changes",
+        "Show toast for important events (new generation, aggressive evolution)",
+        "Auto-scroll log to show newest events",
+        "Add event count badge for new events",
+        "Unsubscribe from events on unmount",
+        "Typecheck passes",
+        "Verify in browser that evolution events display in real-time"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Create useRealTimeMarkets hook for market updates",
+      "description": "As a user, I need real-time market price updates.",
+      "acceptanceCriteria": [
+        "Create src/hooks/useRealTimeMarkets.ts",
+        "Subscribe to market_update events",
+        "Update market prices when events received",
+        "Add green/red flash for price changes",
+        "Update price change percentages",
+        "Highlight markets with significant movements (>2%)",
+        "Update trend indicators when they change",
+        "Unsubscribe from events on unmount",
+        "Typecheck passes",
+        "Verify in browser that market prices update in real-time"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Create useRealTimeSystemStatus hook for system status",
+      "description": "As a user, I need real-time system status updates.",
+      "acceptanceCriteria": [
+        "Create src/hooks/useRealTimeSystemStatus.ts",
+        "Subscribe to system_status events",
+        "Update status indicator when status changes",
+        "Show alert banner when status becomes unhealthy",
+        "Update CPU/memory usage indicators",
+        "Update uptime counter",
+        "Unsubscribe from events on unmount",
+        "Typecheck passes",
+        "Verify in browser that system status updates correctly"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Create useRealTimeMT5 hook for MT5 events",
+      "description": "As a user, I need real-time updates for MT5 connection and order events.",
+      "acceptanceCriteria": [
+        "Create src/hooks/useRealTimeMT5.ts",
+        "Subscribe to mt5_connected and mt5_disconnected events",
+        "Subscribe to mt5_order_opened and mt5_order_closed events",
+        "Subscribe to mt5_position_modified events",
+        "Subscribe to mt5_error events",
+        "Update MT5 connection status when events received",
+        "Show toast for new orders opened/closed",
+        "Update positions when modified",
+        "Display error messages for MT5 errors",
+        "Unsubscribe from events on unmount",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Integrate WebSocket hooks into dashboard components",
+      "description": "As a user, I need all dashboard data to update in real-time.",
+      "acceptanceCriteria": [
+        "Update ActiveTradesTable to use useRealTimeTrades",
+        "Update EvolutionMetrics to use useRealTimeEvolution",
+        "Update MarketOverview to use useRealTimeMarkets",
+        "Update SystemStatus to use useRealTimeSystemStatus",
+        "Add ConnectionStatus to header",
+        "Subscribe to all data streams when on dashboard",
+        "Unsubscribe from non-visible tabs when switching tabs",
+        "Typecheck passes",
+        "Verify in browser that all data updates in real-time"
+      ],
+      "mavenSteps": [3, 6],
+      "mcpTools": {},
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Implement WebSocket error recovery and reconnection",
+      "description": "As a user, I need the system to recover from connection errors automatically.",
+      "acceptanceCriteria": [
+        "Create src/lib/websocket/recovery.ts",
+        "Detect WebSocket connection drops",
+        "Attempt reconnection with exponential backoff",
+        "Show 'Reconnecting...' message during reconnection attempts",
+        "Restore all subscriptions after successful reconnect",
+        "Request full data refresh after reconnect",
+        "Show error message after 3 failed reconnect attempts",
+        "Add 'Manual Reconnect' button in connection status",
+        "Log all reconnection attempts",
+        "Typecheck passes",
+        "Verify in browser that reconnection works correctly"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Add toast notifications for important WebSocket events",
+      "description": "As a user, I need visual notifications for important real-time events.",
+      "acceptanceCriteria": [
+        "Create toast notification hook or use existing toast system",
+        "Show toast on new signal (pending approval)",
+        "Show toast on trade closed with significant P&L",
+        "Show toast on evolution generation change",
+        "Show toast on MT5 connection status change",
+        "Show toast on system status change to unhealthy",
+        "Include actionable buttons in toasts (View, Approve, Reject)",
+        "Limit toast frequency to avoid spam",
+        "Typecheck passes",
+        "Verify in browser that toasts display appropriately"
+      ],
+      "mavenSteps": [3, 5, 6],
+      "mcpTools": {},
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

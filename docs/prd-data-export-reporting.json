@@ -1,0 +1,90 @@
+{
+  "project": "EURABAY Living System v5.0",
+  "branchName": "flow/data-export-reporting",
+  "description": "Data Export & Reporting Features - Export trade data to CSV/JSON, generate performance PDF reports, and export evolution history",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create trade data export functionality",
+      "description": "As a trader, I need to export my trade data for offline analysis.",
+      "acceptanceCriteria": [
+        "Create src/lib/export/trades.ts",
+        "Add exportTradesToCSV() function",
+        "Add exportTradesToJSON() function",
+        "Accept date range and symbol filter parameters",
+        "Fetch trades from GET /trades/recent with filters",
+        "Format CSV with headers: ticket, symbol, side, entryPrice, exitPrice, pnl, entryTime, exitTime",
+        "Format JSON with full trade objects",
+        "Add download trigger with filename format: trades_YYYY-MM-DD.csv",
+        "Add export button to RecentTrades component",
+        "Add format selector (CSV/JSON)",
+        "Show success toast on export",
+        "Show error toast on failure",
+        "Typecheck passes",
+        "Verify in browser that export works"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Create performance report PDF export",
+      "description": "As a trader, I need to generate a PDF performance report.",
+      "acceptanceCriteria": [
+        "Create src/lib/export/performance.ts",
+        "Add generatePerformanceReportPDF() function",
+        "Fetch performance metrics from GET /performance/metrics",
+        "Fetch equity history from GET /portfolio/equity-history",
+        "Fetch P&L history from GET /portfolio/pnl-history",
+        "Generate PDF with title, date range, metrics summary",
+        "Embed equity curve chart as image",
+        "Embed P&L chart as image",
+        "Add trade statistics table",
+        "Add top/bottom performing trades",
+        "Add download trigger with filename: performance_report_YYYY-MM-DD.pdf",
+        "Add export button to performance section",
+        "Show progress indicator during generation",
+        "Show success toast on download",
+        "Show error toast on failure",
+        "Use jsPDF or similar PDF library",
+        "Typecheck passes",
+        "Verify in browser that PDF generates correctly"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Create evolution history export",
+      "description": "As a trader, I need to export evolution history data.",
+      "acceptanceCriteria": [
+        "Create src/lib/export/evolution.ts",
+        "Add exportEvolutionHistoryToCSV() function",
+        "Add exportEvolutionHistoryToJSON() function",
+        "Fetch generation history from GET /evolution/generation-history",
+        "Fetch feature success from GET /evolution/feature-success",
+        "Fetch mutation success from GET /evolution/mutation-success",
+        "Format CSV with generation number, fitness, decision, timestamp",
+        "Format JSON with full evolution objects",
+        "Add download trigger with filename: evolution_YYYY-MM-DD.csv",
+        "Add export button to evolution section",
+        "Add format selector (CSV/JSON)",
+        "Show success toast on export",
+        "Show error toast on failure",
+        "Typecheck passes",
+        "Verify in browser that export works"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

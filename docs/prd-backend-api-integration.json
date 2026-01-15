@@ -1,0 +1,402 @@
+{
+  "project": "EURABAY Living System v5.0",
+  "branchName": "flow/backend-api-integration",
+  "description": "Backend API Integration - Replace all mock data with real API calls to Python backend, implementing type-safe API client with error handling, loading states, caching, and validation",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create base API client with fetch wrapper",
+      "description": "As a developer, I need a type-safe API client to make HTTP requests to the backend.",
+      "acceptanceCriteria": [
+        "Create src/lib/api/client.ts with APIClient class",
+        "Implement get() method with URL params support",
+        "Implement post() method with JSON body",
+        "Implement put() method with JSON body",
+        "Implement delete() method",
+        "Add base URL from NEXT_PUBLIC_API_URL env var",
+        "Add request timeout (default 30s from NEXT_PUBLIC_API_TIMEOUT)",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Add request/response interceptors to API client",
+      "description": "As a developer, I need interceptors for auth headers and error handling.",
+      "acceptanceCriteria": [
+        "Add request interceptor to inject auth token from localStorage",
+        "Add response interceptor to handle common HTTP errors",
+        "Implement 401 handler that clears auth token",
+        "Implement 403 handler that shows permission error",
+        "Implement 5xx handler with retry logic",
+        "Add timeout handling with AbortController",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Implement retry logic with exponential backoff",
+      "description": "As a developer, I need automatic retry for failed requests to handle transient errors.",
+      "acceptanceCriteria": [
+        "Add retry logic in API client for failed requests",
+        "Implement 3 retries with exponential backoff (1s, 2s, 4s)",
+        "Only retry on 5xx errors and network errors",
+        "Don't retry on 4xx client errors",
+        "Add X-Retry-Count header to track retries",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Create TypeScript types for API requests and responses",
+      "description": "As a developer, I need TypeScript interfaces for all API types.",
+      "acceptanceCriteria": [
+        "Create src/lib/api/types.ts with all API interfaces",
+        "Add SystemStatus, SystemHealth interfaces",
+        "Add EvolutionMetrics, GenerationHistory interfaces",
+        "Add Trade, Signal interfaces",
+        "Add PortfolioMetrics, PerformanceMetrics interfaces",
+        "Add Market, MarketData interfaces",
+        "Add configuration interfaces",
+        "Add error response interfaces",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Add environment variables configuration",
+      "description": "As a developer, I need environment variables to configure API connections.",
+      "acceptanceCriteria": [
+        "Create .env.local.example with required env vars",
+        "Add NEXT_PUBLIC_API_URL variable (default: http://localhost:8000/api)",
+        "Add NEXT_PUBLIC_WS_URL variable (default: ws://localhost:8000/ws)",
+        "Add NEXT_PUBLIC_API_TIMEOUT variable (default: 30000)",
+        "Add validation function to check required env vars on app startup",
+        "Update README.md with environment setup instructions",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Create system status API endpoints module",
+      "description": "As a developer, I need organized API endpoint functions for system status.",
+      "acceptanceCriteria": [
+        "Create src/lib/api/endpoints/system.ts",
+        "Add getStatus() function calling GET /system/status",
+        "Add getHealth() function calling GET /system/health",
+        "Add start() function calling POST /system/start",
+        "Add stop() function calling POST /system/stop",
+        "Add forceEvolution() function calling POST /system/force-evolution",
+        "Add toggleOverride() function calling POST /system/override",
+        "Each function has full TypeScript types and JSDoc comments",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 5, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Create evolution API endpoints module",
+      "description": "As a developer, I need API endpoint functions for evolution data.",
+      "acceptanceCriteria": [
+        "Create src/lib/api/endpoints/evolution.ts",
+        "Add getMetrics() function calling GET /evolution/metrics",
+        "Add getGenerationHistory() function calling GET /evolution/generation-history",
+        "Add getControllerHistory() function calling GET /evolution/controller-history",
+        "Add getFeatureSuccess() function calling GET /evolution/feature-success",
+        "Add getMutationSuccess() function calling GET /evolution/mutation-success",
+        "Add getLogs() function calling GET /evolution/logs",
+        "Add updateParameters() function calling POST /evolution/parameters",
+        "Each function has full TypeScript types and JSDoc comments",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 5, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Create trades and signals API endpoints module",
+      "description": "As a developer, I need API endpoint functions for trading data.",
+      "acceptanceCriteria": [
+        "Create src/lib/api/endpoints/trades.ts",
+        "Add getActiveTrades() function calling GET /trades/active",
+        "Add getRecentTrades() function calling GET /trades/recent",
+        "Add getPendingSignals() function calling GET /trades/pending-signals",
+        "Add getExecutionLog() function calling GET /trades/execution-log",
+        "Add approveSignal() function calling POST /trades/signals/{id}/approve",
+        "Add rejectSignal() function calling POST /trades/signals/{id}/reject",
+        "Add closeTrade() function calling POST /trades/{ticket}/close",
+        "Add modifyTrade() function calling PUT /trades/{ticket}",
+        "Each function has full TypeScript types and JSDoc comments",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 5, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Create portfolio, performance, and markets API endpoints modules",
+      "description": "As a developer, I need API endpoint functions for portfolio, performance, and market data.",
+      "acceptanceCriteria": [
+        "Create src/lib/api/endpoints/portfolio.ts with getMetrics(), getEquityHistory(), getPnlHistory()",
+        "Create src/lib/api/endpoints/performance.ts with getMetrics()",
+        "Create src/lib/api/endpoints/markets.ts with getOverview(), getMarketData(), getTrend()",
+        "Create src/lib/api/endpoints/config.ts with getConfig(), updateConfig()",
+        "Each function has full TypeScript types and JSDoc comments",
+        "Create src/lib/api/endpoints/index.ts exporting all modules",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 5, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Create loading skeleton components",
+      "description": "As a user, I need visual feedback when data is loading.",
+      "acceptanceCriteria": [
+        "Create src/components/ui/loading-skeleton.tsx",
+        "Add Skeleton component with className and variant props",
+        "Add DataTableSkeleton component with rowCount prop",
+        "Add CardSkeleton component for dashboard cards",
+        "Add ChartSkeleton component for chart placeholders",
+        "Add TableSkeleton component for table rows",
+        "Use shadcn/ui Skeleton component as base",
+        "Typecheck passes",
+        "Verify in browser that skeletons render smoothly"
+      ],
+      "mavenSteps": [3, 5, 6],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Create error state component with retry",
+      "description": "As a user, I need helpful error messages when API calls fail.",
+      "acceptanceCriteria": [
+        "Create src/components/ui/error-state.tsx",
+        "Add ErrorState component with error, retry, and fallback props",
+        "Display error icon (AlertCircle)",
+        "Display error message",
+        "Add retry button with RefreshCw icon",
+        "Add troubleshooting tips section",
+        "Add optional fallback UI prop for custom error display",
+        "Use shadcn/ui Button, Alert components",
+        "Typecheck passes",
+        "Verify in browser that error states display correctly"
+      ],
+      "mavenSteps": [3, 5, 6],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Update useDashboardData to use real API calls",
+      "description": "As a user, I need to see real trading data instead of mock data.",
+      "acceptanceCriteria": [
+        "Update src/hooks/useDashboardData.ts to call real API endpoints",
+        "Add loading state (boolean) to hook",
+        "Add error state (Error | null) to hook",
+        "Add refetch() function for manual refresh",
+        "Implement automatic polling every 3 seconds",
+        "Handle API errors with fallback to last known good data",
+        "Use Promise.all to fetch portfolio, trades, metrics in parallel",
+        "Replace all mock data returns with API calls",
+        "Typecheck passes",
+        "Verify in browser that real data displays"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Update useEvolutionData to use real API calls",
+      "description": "As a user, I need to see real evolution metrics instead of mock data.",
+      "acceptanceCriteria": [
+        "Update src/hooks/useEvolutionData.ts to call real API endpoints",
+        "Add loading state (boolean) to hook",
+        "Add error state (Error | null) to hook",
+        "Add refetch() function for manual refresh",
+        "Implement automatic polling every 5 seconds",
+        "Handle API errors with fallback to cached data",
+        "Fetch metrics, history, features, mutations in parallel",
+        "Replace all mock data returns with API calls",
+        "Typecheck passes",
+        "Verify in browser that real evolution data displays"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Update dashboard components to use loading/error states",
+      "description": "As a user, I need visual feedback for loading and error states.",
+      "acceptanceCriteria": [
+        "Update EnhancedActiveTradesTable to show DataTableSkeleton when loading",
+        "Update EnhancedActiveTradesTable to show ErrorState on error",
+        "Update EvolutionMetrics to show CardSkeleton when loading",
+        "Update EvolutionMetrics to show ErrorState on error",
+        "Update PerformanceMetrics to show CardSkeleton when loading",
+        "Update all chart components to show ChartSkeleton when loading",
+        "Update all components to display error messages from hook",
+        "Typecheck passes",
+        "Verify in browser that loading states transition smoothly"
+      ],
+      "mavenSteps": [3, 5, 6],
+      "mcpTools": {},
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Implement in-memory API cache with TTL",
+      "description": "As a user, I need the dashboard to load quickly by caching frequently accessed data.",
+      "acceptanceCriteria": [
+        "Create src/lib/cache.ts with APICache class",
+        "Implement get(key) method that returns null for expired items",
+        "Implement set(key, data, ttl) method with TTL in seconds",
+        "Implement invalidate(pattern) method to delete matching keys",
+        "Implement clear() method to clear all cache",
+        "Add stats tracking (hits, misses, size)",
+        "Export singleton apiCache instance",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Integrate caching into API client",
+      "description": "As a user, I need fast page loads from cached data.",
+      "acceptanceCriteria": [
+        "Add cache option to API client get() method",
+        "Cache GET requests by default (opt-out with cache: false)",
+        "Cache system status for 10 seconds",
+        "Cache configuration for 60 seconds",
+        "Cache market overview for 5 seconds",
+        "Invalidate cache on POST/PUT/DELETE requests",
+        "Add cache warming on app startup for common endpoints",
+        "Log cache stats in development mode",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Create Zod schemas for API response validation",
+      "description": "As a developer, I need runtime validation to ensure API responses match expected types.",
+      "acceptanceCriteria": [
+        "Install zod package if not present",
+        "Create src/lib/api/schemas.ts",
+        "Add SystemStatusSchema with all required fields",
+        "Add EvolutionMetricsSchema",
+        "Add TradeSchema, SignalSchema",
+        "Add PortfolioMetricsSchema, PerformanceMetricsSchema",
+        "Add MarketSchema, MarketDataSchema",
+        "Add ErrorResponseSchema",
+        "Export all schemas",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 5, 7],
+      "mcpTools": {},
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Integrate Zod validation into API client",
+      "description": "As a developer, I need to validate API responses at runtime.",
+      "acceptanceCriteria": [
+        "Add generic schema parameter to API client methods",
+        "Validate responses in response interceptor using Zod parse()",
+        "Log validation errors with full response details",
+        "Return safe default values when validation fails",
+        "Add option to disable validation for development",
+        "Throw ValidationError with details for failed validation",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Implement API request/response logging",
+      "description": "As a developer, I need detailed logging to debug API issues.",
+      "acceptanceCriteria": [
+        "Create src/lib/api/logger.ts with APILogger class",
+        "Add logRequest() method that logs method, URL, params",
+        "Add logResponse() method that logs status, data, duration",
+        "Add logError() method that logs full error details",
+        "Add request timing (start time, end time, duration)",
+        "Add correlation ID generation for request tracking",
+        "Implement log level filtering (error, warn, info, debug)",
+        "Enable verbose logging in development mode",
+        "Sanitize sensitive data (tokens, passwords) from logs",
+        "Integrate logger into API client",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

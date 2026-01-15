@@ -1,0 +1,456 @@
+{
+  "project": "EURABAY Living System v5.0",
+  "branchName": "flow/database-integration",
+  "description": "Database Integration - Drizzle ORM with libSQL for persistent data storage including complete schema for users, trades, evolution, features, mutations, signals, and system logs",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create database schema for users table",
+      "description": "As a developer, I need to create the users table schema to store user account information with authentication data.",
+      "acceptanceCriteria": [
+        "Create users table with fields: id (text primary key), email (unique), passwordHash, name, role (enum: admin|trader|viewer), createdAt, updatedAt",
+        "Add NOT NULL constraints to required fields",
+        "Add default value 'viewer' for role field",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Create database schema for trades table",
+      "description": "As a developer, I need to create the trades table schema to store all trading data with MT5 ticket mapping.",
+      "acceptanceCriteria": [
+        "Create trades table with fields: systemTicket (text primary key), mt5Ticket (unique integer), symbol, direction (BUY|SELL enum), lots, entryPrice, currentPrice, stopLoss, takeProfit, openTime, closeTime, pnl, status (active|closed|pending enum), evolutionGeneration, featuresUsed (JSON text), confidence, userId (foreign key to users)",
+        "Add NOT NULL constraints to required fields",
+        "Add foreign key constraint from userId to users.id",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Create database schema for evolution_generations table",
+      "description": "As a developer, I need to create the evolution_generations table schema to track evolution cycles.",
+      "acceptanceCriteria": [
+        "Create evolution_generations table with fields: id (integer primary key auto increment), generationNumber (unique integer), timestamp, fitness, avgPerformance, controllerDecision, reason",
+        "Add NOT NULL constraints to required fields",
+        "Add unique constraint on generationNumber",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Create database schema for features table",
+      "description": "As a developer, I need to create the features table schema to store evolved trading features and their performance metrics.",
+      "acceptanceCriteria": [
+        "Create features table with fields: featureId (text primary key), featureName, successRate, totalUses, wins, losses, avgPnl, createdAt, updatedAt",
+        "Add NOT NULL constraints to required fields",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Create database schema for mutations table",
+      "description": "As a developer, I need to create the mutations table schema to track mutation history with evolution and feature relationships.",
+      "acceptanceCriteria": [
+        "Create mutations table with fields: id (integer primary key auto increment), mutationType, generationId (foreign key to evolution_generations), targetFeatureId (foreign key to features), success (0|1 integer), fitnessImprovement, timestamp",
+        "Add NOT NULL constraints to required fields",
+        "Add foreign key constraints to evolution_generations.id and features.featureId",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Create database schema for system_logs and signals tables",
+      "description": "As a developer, I need to create the system_logs and signals tables to store system events and trading signals.",
+      "acceptanceCriteria": [
+        "Create system_logs table with fields: id (integer primary key auto increment), timestamp, level (INFO|WARN|ERROR|DEBUG enum), component, message, details (JSON text)",
+        "Create signals table with fields: signalId (text primary key), symbol, signalType (STRONG_BUY|BUY|SELL|STRONG_SELL enum), confidence, htfContext, featuresUsed (JSON text), status (pending|approved|rejected|executed enum), timestamp, evolutionGeneration",
+        "Add NOT NULL constraints to required fields on both tables",
+        "Add enum constraints for level, signalType, and status fields",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Configure Drizzle ORM client and environment variables",
+      "description": "As a developer, I need to set up the Drizzle ORM database client with libSQL configuration for development and production environments.",
+      "acceptanceCriteria": [
+        "Create src/lib/db/index.ts with database client export",
+        "Create environment variables: DATABASE_URL (development), TURSO_DATABASE_URL, TURSO_AUTH_TOKEN (production)",
+        "Configure libSQL client with @libsql/client",
+        "Set up Drizzle ORM with drizzle-orm",
+        "Add development mode check for local SQLite file vs production libSQL",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Configure Drizzle Kit for migrations",
+      "description": "As a developer, I need to configure Drizzle Kit to generate and run database migrations.",
+      "acceptanceCriteria": [
+        "Create or update drizzle.config.ts with schema path",
+        "Configure out folder for migration files",
+        "Set up driver to 'turso' for libSQL",
+        "Add database credentials to config from environment variables",
+        "Create package.json scripts: 'db:generate', 'db:migrate', 'db:push', 'db:studio'",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Generate and test initial database migration",
+      "description": "As a developer, I need to generate the initial migration from the schema and test it on a local database.",
+      "acceptanceCriteria": [
+        "Run drizzle-kit generate to create initial migration",
+        "Verify migration SQL creates all 7 tables: users, trades, evolution_generations, features, mutations, system_logs, signals",
+        "Run migration on local libSQL instance",
+        "Verify all tables exist in database",
+        "Verify all foreign key constraints work correctly",
+        "Verify all enum constraints work correctly",
+        "Test migration rollback",
+        "Document migration process in docs/",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Create seed script for admin and demo users",
+      "description": "As a developer, I need seed data for testing authentication and user management features.",
+      "acceptanceCriteria": [
+        "Create src/lib/db/seed.ts with seed script",
+        "Create admin user: email 'admin@eurabay.com', role 'admin', hashed password",
+        "Create demo trader user: email 'trader@eurabay.com', role 'trader', hashed password",
+        "Use bcrypt or similar for password hashing",
+        "Add package.json script: 'db:seed'",
+        "Document seed data structure in docs/",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Create seed script for sample trades (50 records)",
+      "description": "As a developer, I need sample trade data to test trading features and analytics.",
+      "acceptanceCriteria": [
+        "Add seed function to src/lib/db/seed.ts for trades",
+        "Create 50 sample trades with varying symbols (V10, V25, V50, V75, V100)",
+        "Include mix of BUY and SELL directions",
+        "Include mix of statuses: active, closed, pending",
+        "Set realistic values for lots, prices, pnl (both positive and negative)",
+        "Link trades to demo trader user",
+        "Add evolutionGeneration values (1-10)",
+        "Add featuresUsed JSON arrays with 2-5 feature IDs each",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Create seed script for evolution data (10 generations, 20 features, 100 mutations)",
+      "description": "As a developer, I need sample evolution data to test evolution system features.",
+      "acceptanceCriteria": [
+        "Add seed function to src/lib/db/seed.ts for evolution data",
+        "Create 10 evolution_generations records with increasing generationNumber (1-10)",
+        "Set realistic fitness and avgPerformance values",
+        "Include mix of controller decisions: 'EVOLVE', 'MAINTAIN', 'RESET'",
+        "Create 20 features with varied success rates (0.3-0.9)",
+        "Link features to generations via createdAt timestamps",
+        "Create 100 mutations linking to generations and features",
+        "Include mix of successful (1) and failed (0) mutations",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Create seed script for sample signals and system logs",
+      "description": "As a developer, I need sample signals and logs to complete the seed data set.",
+      "acceptanceCriteria": [
+        "Add seed function for signals to src/lib/db/seed.ts",
+        "Create 30 sample signals with varied types (STRONG_BUY, BUY, SELL, STRONG_SELL)",
+        "Include mix of statuses: pending, approved, rejected, executed",
+        "Link signals to evolution generations (1-10)",
+        "Add confidence values (0.5-0.95)",
+        "Create 50 system_logs with varied levels (INFO, WARN, ERROR, DEBUG)",
+        "Include varied components: 'trading', 'evolution', 'mt5', 'api'",
+        "Add realistic messages and timestamps",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Create user repository with CRUD operations",
+      "description": "As a developer, I need a user repository to provide a clean interface for user data operations.",
+      "acceptanceCriteria": [
+        "Create src/lib/db/repositories/user.repository.ts",
+        "Create UserRepository class with methods: createUser, getUserById, getUserByEmail, updateUser, deleteUser, listUsers",
+        "Use Drizzle ORM queries with eq operator",
+        "Export singleton instance: userRepository",
+        "Add TypeScript types inferred from schema",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Create trade repository with CRUD and query operations",
+      "description": "As a developer, I need a trade repository to handle all trade data operations with complex queries.",
+      "acceptanceCriteria": [
+        "Create src/lib/db/repositories/trade.repository.ts",
+        "Create TradeRepository class with methods: createTrade, getTradeBySystemTicket, getTradeByMT5Ticket, getActiveTrades, getRecentTrades, updateTrade, closeTrade, getTradesBySymbol, getTradesByDateRange, getTradesByUser",
+        "Use Drizzle ORM queries with eq, and, gte, lte, desc operators",
+        "Export singleton instance: tradeRepository",
+        "Add proper TypeScript types",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Create evolution repository with generation and feature queries",
+      "description": "As a developer, I need an evolution repository to manage evolution generations and feature data.",
+      "acceptanceCriteria": [
+        "Create src/lib/db/repositories/evolution.repository.ts",
+        "Create EvolutionRepository class with methods: createGeneration, getLatestGeneration, getGenerationsInRange, createFeature, getFeatureById, getTopFeatures, updateFeatureStats, createMutation, getMutationsByGeneration",
+        "Include queries for feature success rates and mutation analysis",
+        "Export singleton instance: evolutionRepository",
+        "Add proper TypeScript types",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Create signal and log repositories",
+      "description": "As a developer, I need signal and log repositories to manage trading signals and system logs.",
+      "acceptanceCriteria": [
+        "Create src/lib/db/repositories/signal.repository.ts with methods: createSignal, getSignalById, getPendingSignals, updateSignalStatus, getSignalsByGeneration",
+        "Create src/lib/db/repositories/log.repository.ts with methods: createLog, getLogsByComponent, getLogsByLevel, getLogsByDateRange, getRecentErrors",
+        "Export singleton instances: signalRepository, logRepository",
+        "Add proper TypeScript types to both repositories",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Create database index file exporting all repositories",
+      "description": "As a developer, I need a central index file to import all repositories and database client.",
+      "acceptanceCriteria": [
+        "Create src/lib/db/repositories/index.ts",
+        "Export db from parent index.ts",
+        "Export all repositories: userRepository, tradeRepository, evolutionRepository, signalRepository, logRepository",
+        "Export schema types if needed",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Implement database connection pool configuration",
+      "description": "As a system, I need to configure connection pooling for efficient database connections in production.",
+      "acceptanceCriteria": [
+        "Create src/lib/db/pool.ts with connection pool configuration",
+        "Set maximum concurrent connections (default: 10)",
+        "Implement connection timeout (default: 30 seconds)",
+        "Add connection error handling with retry logic",
+        "Log connection pool metrics (active connections, idle connections)",
+        "Support development single connection mode",
+        "Support production connection pool mode",
+        "Add environment variable: DB_POOL_MAX, DB_CONNECTION_TIMEOUT",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-020",
+      "title": "Implement in-memory caching layer for frequently accessed data",
+      "description": "As a system, I need to cache frequently accessed data to reduce database load and improve performance.",
+      "acceptanceCriteria": [
+        "Create src/lib/db/cache.ts with caching utilities",
+        "Implement CacheManager class with generic get/set methods",
+        "Add TTL (time-to-live) support per cache key",
+        "Cache user sessions with 5 minute TTL",
+        "Cache system configuration with 10 minute TTL",
+        "Cache active trades with 30 second TTL",
+        "Cache evolution metrics with 1 minute TTL",
+        "Implement cache invalidation on data changes",
+        "Add cache warming function for pre-loading common data",
+        "Add cache statistics (hit rate, miss rate, size)",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-021",
+      "title": "Integrate caching layer into repositories",
+      "description": "As a developer, I need to integrate the caching layer into repository queries to improve performance.",
+      "acceptanceCriteria": [
+        "Update trade repository to cache active trades query (30s TTL)",
+        "Update evolution repository to cache latest generation (1m TTL)",
+        "Update user repository to cache user by ID (5m TTL)",
+        "Implement cache invalidation on create/update/delete operations",
+        "Add cache warming call to seed script",
+        "Add cache statistics endpoint or logging",
+        "Typecheck passes"
+      ],
+      "mavenSteps": [
+        1,
+        7
+      ],
+      "mcpTools": {},
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

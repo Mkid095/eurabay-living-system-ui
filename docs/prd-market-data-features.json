@@ -1,0 +1,83 @@
+{
+  "project": "EURABAY Living System v5.0",
+  "branchName": "flow/market-data-features",
+  "description": "Market Data Features - Real-time Deriv.com volatility indices (V10, V25, V50, V75, V100) market overview with prices and trends",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Update MarketOverview with real-time prices",
+      "description": "As a trader, I need to see real-time market prices for all volatility indices.",
+      "acceptanceCriteria": [
+        "Update MarketOverview to fetch from GET /markets/overview",
+        "Display all 5 markets: V10, V25, V50, V75, V100",
+        "Display current price with real-time updates",
+        "Display price change (absolute and percentage)",
+        "Color-code price changes (green=up, red=down)",
+        "Display 24-hour high and low",
+        "Display market status (open/closed)",
+        "Add visual flash effect when price updates",
+        "Add last update timestamp",
+        "Add auto-refresh every 3 seconds",
+        "Add loading skeleton",
+        "Add error state with retry",
+        "Subscribe to market_update WebSocket events for instant updates",
+        "Typecheck passes",
+        "Verify in browser that markets display correctly"
+      ],
+      "mavenSteps": [3, 6],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Create MarketDetailModal component",
+      "description": "As a trader, I need detailed view of a single market.",
+      "acceptanceCriteria": [
+        "Create MarketDetailModal component",
+        "Display market symbol and name",
+        "Display current price with large font",
+        "Display price change percentage with color coding",
+        "Display price chart (line or candlestick)",
+        "Display 24h high, low, open, close",
+        "Display volatility index value",
+        "Display market spread",
+        "Display recent price updates (last 10)",
+        "Add refresh button",
+        "Add close (X) button",
+        "Add auto-refresh every 2 seconds",
+        "Use shadcn/ui Dialog components",
+        "Typecheck passes",
+        "Verify in browser that modal displays correctly"
+      ],
+      "mavenSteps": [3, 5, 6],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Add trend indicators to market cards",
+      "description": "As a trader, I need to see market trend at a glance.",
+      "acceptanceCriteria": [
+        "Add trend indicator badge to each market card",
+        "Fetch trend data from GET /markets/{symbol}/trend",
+        "Display trend as: BULLISH, BEARISH, NEUTRAL",
+        "Color-code trends (green=BULLISH, red=BEARISH, gray=NEUTRAL)",
+        "Display trend strength (strong, moderate, weak)",
+        "Add small sparkline chart showing recent price movement",
+        "Update trend indicator every 10 seconds",
+        "Add tooltip explaining trend calculation",
+        "Typecheck passes",
+        "Verify in browser that trends display correctly"
+      ],
+      "mavenSteps": [3, 5, 6],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

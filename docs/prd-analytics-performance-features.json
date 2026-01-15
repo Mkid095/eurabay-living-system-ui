@@ -1,0 +1,90 @@
+{
+  "project": "EURABAY Living System v5.0",
+  "branchName": "flow/analytics-performance-features",
+  "description": "Analytics & Performance Features - Performance metrics display, equity curve chart, and P&L history chart",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Update PerformanceMetrics with real data",
+      "description": "As a trader, I need to see my trading performance metrics.",
+      "acceptanceCriteria": [
+        "Update PerformanceMetrics to fetch from GET /performance/metrics",
+        "Display total return percentage",
+        "Display Sharpe ratio",
+        "Display maximum drawdown percentage",
+        "Display win rate percentage",
+        "Display total trades count",
+        "Display average trade duration",
+        "Display profit factor",
+        "Add date range selector (today, week, month, all)",
+        "Add benchmark comparison",
+        "Add loading skeleton",
+        "Add error state with retry",
+        "Add auto-refresh every 30 seconds",
+        "Use Card, MetricCard components",
+        "Typecheck passes",
+        "Verify in browser that metrics display correctly"
+      ],
+      "mavenSteps": [3, 6],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Update EquityCurve chart with real data",
+      "description": "As a trader, I need to see my equity growth over time.",
+      "acceptanceCriteria": [
+        "Update EquityCurve to fetch from GET /portfolio/equity-history",
+        "Display line chart with date on X-axis",
+        "Display equity value on Y-axis",
+        "Show tooltips with date, equity, P&L on hover",
+        "Add starting equity reference line",
+        "Add peak equity marker",
+        "Add drawdown shading",
+        "Add zoom/pan functionality",
+        "Add date range selector",
+        "Add auto-refresh every 30 seconds",
+        "Use recharts or similar",
+        "Add loading skeleton",
+        "Add error state with retry",
+        "Typecheck passes",
+        "Verify in browser that chart displays correctly"
+      ],
+      "mavenSteps": [3, 5, 6],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Update P&L history chart with real data",
+      "description": "As a trader, I need to see my profit and loss over time.",
+      "acceptanceCriteria": [
+        "Update PnLHistory to fetch from GET /portfolio/pnl-history",
+        "Display bar chart with date on X-axis",
+        "Display P&L amount on Y-axis",
+        "Color-code bars (green=profit, red=loss)",
+        "Show tooltips with date, P&L, trades count on hover",
+        "Add cumulative P&L line overlay",
+        "Add breakeven reference line",
+        "Add zoom/pan functionality",
+        "Add date range selector",
+        "Add filter by symbol",
+        "Add auto-refresh every 30 seconds",
+        "Use recharts or similar",
+        "Add loading skeleton",
+        "Add error state with retry",
+        "Typecheck passes",
+        "Verify in browser that chart displays correctly"
+      ],
+      "mavenSteps": [3, 5, 6],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
