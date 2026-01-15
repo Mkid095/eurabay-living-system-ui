@@ -49,3 +49,23 @@ export const trades = sqliteTable('trades', {
  */
 export type Trade = typeof trades.$inferSelect;
 export type NewTrade = typeof trades.$inferInsert;
+
+/**
+ * Evolution generations table schema
+ * Tracks evolution cycles and their performance
+ */
+export const evolutionGenerations = sqliteTable('evolution_generations', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  generationNumber: integer('generation_number').notNull().unique(),
+  timestamp: integer('timestamp', { mode: 'timestamp' }).notNull(),
+  fitness: real('fitness').notNull(),
+  avgPerformance: real('avg_performance').notNull(),
+  controllerDecision: text('controller_decision').notNull(),
+  reason: text('reason').notNull(),
+});
+
+/**
+ * Type definitions for evolution_generations table
+ */
+export type EvolutionGeneration = typeof evolutionGenerations.$inferSelect;
+export type NewEvolutionGeneration = typeof evolutionGenerations.$inferInsert;
