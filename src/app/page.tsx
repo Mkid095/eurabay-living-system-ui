@@ -24,6 +24,7 @@ import { DerivMarketOverview } from "@/components/dashboard/DerivMarketOverview"
 import { EvolutionMetrics } from "@/components/dashboard/EvolutionMetrics";
 import { GenerationHistoryChart } from "@/components/dashboard/GenerationHistoryChart";
 import { FeatureSuccessChart } from "@/components/dashboard/FeatureSuccessChart";
+import { FeatureSuccessAnalysis } from "@/components/dashboard/FeatureSuccessAnalysis";
 import { MutationSuccessChart } from "@/components/dashboard/MutationSuccessChart";
 import { ControllerDecisionTimeline } from "@/components/dashboard/ControllerDecisionTimeline";
 import { EvolutionLogViewer } from "@/components/dashboard/EvolutionLogViewer";
@@ -56,6 +57,7 @@ export default function Home() {
     loading,
     error,
     refetchGenerationHistory,
+    refetchFeatures,
   } = useEvolutionData();
 
   const formatCurrency = (value: number) => {
@@ -212,13 +214,19 @@ export default function Home() {
               </div>
 
               {/* Evolution Analytics */}
+              <FeatureSuccessAnalysis
+                data={featureSuccess}
+                loading={loading.features}
+                error={error.features}
+                onRefresh={refetchFeatures}
+              />
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <FeatureSuccessChart data={featureSuccess} />
                 <MutationSuccessChart data={mutationSuccess} />
+                <PerformanceMetrics metrics={performanceMetrics} />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <PerformanceMetrics metrics={performanceMetrics} />
                 <ControllerDecisionTimeline data={controllerHistory} />
               </div>
 
@@ -255,8 +263,14 @@ export default function Home() {
               </div>
 
               {/* Feature & Mutation Success */}
+              <FeatureSuccessAnalysis
+                data={featureSuccess}
+                loading={loading.features}
+                error={error.features}
+                onRefresh={refetchFeatures}
+              />
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <FeatureSuccessChart data={featureSuccess} />
                 <MutationSuccessChart data={mutationSuccess} />
               </div>
 
