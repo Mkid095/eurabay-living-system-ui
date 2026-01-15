@@ -20,10 +20,10 @@
 
 'use client';
 
-import React, { Suspense, useCallback, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Stars, Sphere, Html } from '@react-three/drei';
-import { Mesh, Group } from 'three';
+import { OrbitControls, Stars, Sphere, Html, Line } from '@react-three/drei';
+import { Mesh, Group, BufferGeometry, Float32BufferAttribute } from 'three';
 import * as THREE from 'three';
 
 /**
@@ -40,11 +40,26 @@ export interface TradeMarker {
 }
 
 /**
+ * Trade path data structure for animated paths
+ */
+export interface TradePath {
+  id: string;
+  fromIndex: 'V10' | 'V25' | 'V50' | 'V75' | 'V100';
+  toIndex: 'V10' | 'V25' | 'V50' | 'V75' | 'V100';
+  symbol: string;
+  pnl: number;
+  volume: number;
+  timestamp: number;
+}
+
+/**
  * Component props
  */
 export interface TradingGlobeProps {
   /** Array of trade markers to display on the globe */
   trades?: TradeMarker[];
+  /** Array of trade paths to display */
+  tradePaths?: TradePath[];
   /** Whether the globe is loading data */
   isLoading?: boolean;
   /** Error message if data loading failed */
@@ -53,6 +68,10 @@ export interface TradingGlobeProps {
   height?: string | number;
   /** CSS class name for styling */
   className?: string;
+  /** Filter paths by symbol */
+  pathSymbolFilter?: string | null;
+  /** Show/hide paths toggle */
+  showPaths?: boolean;
 }
 
 /**
@@ -79,6 +98,171 @@ function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector
   const z = radius * Math.sin(phi) * Math.sin(theta);
 
   return new THREE.Vector3(x, y, z);
+}
+
+/**
+ * Create arc points between two 3D positions on sphere surface
+ */
+function createArcPoints(
+  start: THREE.Vector3,
+  end: THREE.Vector3,
+  radius: number,
+  segments: number = 50
+): THREE.Vector3[] {
+  const points: THREE.Vector3[] = [];
+
+  // Calculate the angle between start and end vectors
+  const angle = start.angleTo(end);
+
+  // Calculate the axis of rotation (cross product)
+  const axis = new THREE.Vector3().crossVectors(start, end).normalize();
+
+  // Create quaternion for rotation
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const theta = angle * t;
+
+    // Interpolate along the great circle arc
+    const point = start.clone().applyAxisAngle(axis, theta);
+
+    // Elevate the arc above the surface for better visibility
+    const elevation = Math.sin(t * Math.PI) * radius * 0.3;
+    point.normalize().multiplyScalar(radius + elevation);
+
+    points.push(point);
+  }
+
+  return points;
+}
+
+/**
+ * Trade path arc component with animation
+ */
+function TradePathArc({
+  path,
+  radius = 5,
+  visible = true,
+  onFadeComplete
+}: {
+  path: TradePath;
+  radius?: number;
+  visible?: boolean;
+  onFadeComplete?: (pathId: string) => void;
+}) {
+  const meshRef = useRef<Mesh>(null);
+  const [progress, setProgress] = useState(0);
+  const [opacity, setOpacity] = useState(1);
+  const createdAt = useRef(Date.now());
+  const fadeStarted = useRef(false);
+
+  const fromCoords = VOLATILITY_COORDINATES[path.fromIndex];
+  const toCoords = VOLATILITY_COORDINATES[path.toIndex];
+
+  const startPosition = useMemo(
+    () => latLonToVector3(fromCoords.lat, fromCoords.lon, radius),
+    [fromCoords, radius]
+  );
+
+  const endPosition = useMemo(
+    () => latLonToVector3(toCoords.lat, toCoords.lon, radius),
+    [toCoords, radius]
+  );
+
+  // Generate all arc points
+  const allPoints = useMemo(
+    () => createArcPoints(startPosition, endPosition, radius),
+    [startPosition, endPosition, radius]
+  );
+
+  // Color based on P&L
+  const color = useMemo(() => {
+    return path.pnl >= 0 ? '#10b981' : '#ef4444';
+  }, [path.pnl]);
+
+  // Line width based on volume (normalized between 1 and 3)
+  const lineWidth = useMemo(() => {
+    const minVolume = 1000;
+    const maxVolume = 100000;
+    const normalizedVolume = Math.min(
+      Math.max((path.volume - minVolume) / (maxVolume - minVolume), 0),
+      1
+    );
+    return 1 + normalizedVolume * 2;
+  }, [path.volume]);
+
+  // Animate path drawing
+  useFrame((state, delta) => {
+    if (!visible) return;
+
+    const age = Date.now() - createdAt.current;
+    const animationDuration = 2000; // 2 seconds to draw
+
+    if (progress < 1) {
+      setProgress(Math.min((age / animationDuration), 1));
+    }
+
+    // Start fading after 10 seconds
+    if (age > 10000 && !fadeStarted.current) {
+      fadeStarted.current = true;
+    }
+
+    if (fadeStarted.current) {
+      const fadeDuration = 2000; // 2 seconds to fade
+      const fadeProgress = Math.min((age - 10000) / fadeDuration, 1);
+      setOpacity(1 - fadeProgress);
+
+      if (fadeProgress >= 1 && onFadeComplete) {
+        onFadeComplete(path.id);
+      }
+    }
+  });
+
+  // Calculate visible points based on progress
+  const visiblePoints = useMemo(() => {
+    const totalPoints = allPoints.length;
+    const visibleCount = Math.floor(totalPoints * progress * opacity);
+    return allPoints.slice(0, Math.max(visibleCount, 2)).map(p => [p.x, p.y, p.z] as [number, number, number]);
+  }, [allPoints, progress, opacity]);
+
+  if (opacity <= 0 || !visible) return null;
+
+  return (
+    <group ref={meshRef}>
+      {/* Animated arc path */}
+      <Line
+        points={visiblePoints}
+        color={color}
+        lineWidth={lineWidth}
+        opacity={opacity}
+        transparent
+        dashed={false}
+      />
+
+      {/* Origin point marker */}
+      <mesh position={startPosition}>
+        <sphereGeometry args={[0.08, 8, 8]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.6}
+          transparent
+          opacity={opacity}
+        />
+      </mesh>
+
+      {/* Destination point marker */}
+      <mesh position={endPosition}>
+        <sphereGeometry args={[0.08, 8, 8]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.6}
+          transparent
+          opacity={opacity}
+        />
+      </mesh>
+    </group>
+  );
 }
 
 /**
@@ -223,12 +407,41 @@ function TradeMarker({ trade, radius = 5 }: { trade: TradeMarker; radius?: numbe
  */
 function Scene({
   trades,
+  tradePaths,
   radius = 5,
+  showPaths = true,
+  pathSymbolFilter = null,
 }: {
   trades: TradeMarker[];
+  tradePaths: TradePath[];
   radius?: number;
+  showPaths?: boolean;
+  pathSymbolFilter?: string | null;
 }) {
   const { camera } = useThree();
+  const [activePaths, setActivePaths] = useState<Set<string>>(new Set());
+
+  // Filter paths by symbol if filter is active
+  const filteredPaths = useMemo(() => {
+    if (pathSymbolFilter) {
+      return tradePaths.filter(path => path.symbol === pathSymbolFilter);
+    }
+    return tradePaths;
+  }, [tradePaths, pathSymbolFilter]);
+
+  // Handle path fade completion
+  const handleFadeComplete = useCallback((pathId: string) => {
+    setActivePaths(prev => {
+      const next = new Set(prev);
+      next.delete(pathId);
+      return next;
+    });
+  }, []);
+
+  // Track active paths
+  useEffect(() => {
+    setActivePaths(new Set(tradePaths.map(p => p.id)));
+  }, [tradePaths]);
 
   // Set initial camera position
   useMemo(() => {
@@ -258,6 +471,17 @@ function Scene({
 
       {/* Earth sphere */}
       <EarthSphere radius={radius} />
+
+      {/* Trade paths */}
+      {showPaths && filteredPaths.map((path) => (
+        <TradePathArc
+          key={path.id}
+          path={path}
+          radius={radius}
+          visible={activePaths.has(path.id)}
+          onFadeComplete={handleFadeComplete}
+        />
+      ))}
 
       {/* Trade markers */}
       {trades.map((trade) => (
@@ -483,10 +707,13 @@ function EmptyState() {
  */
 export function TradingGlobe({
   trades = [],
+  tradePaths = [],
   isLoading = false,
   error = null,
   height = '600px',
   className = '',
+  pathSymbolFilter = null,
+  showPaths = true,
 }: TradingGlobeProps) {
   const containerStyle: React.CSSProperties = useMemo(
     () => ({
@@ -510,7 +737,7 @@ export function TradingGlobe({
   }
 
   // Show empty state
-  if (trades.length === 0) {
+  if (trades.length === 0 && tradePaths.length === 0) {
     return <div style={containerStyle}><EmptyState /></div>;
   }
 
@@ -527,7 +754,13 @@ export function TradingGlobe({
         performance={{ min: 0.5 }} // Maintain 60 FPS
       >
         <Suspense fallback={null}>
-          <Scene trades={trades} radius={5} />
+          <Scene
+            trades={trades}
+            tradePaths={tradePaths}
+            radius={5}
+            showPaths={showPaths}
+            pathSymbolFilter={pathSymbolFilter}
+          />
         </Suspense>
       </Canvas>
 
