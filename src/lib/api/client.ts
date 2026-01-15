@@ -35,12 +35,29 @@ export class ApiRequestError extends Error implements ApiError {
 }
 
 /**
- * Build full URL from path
+ * Build full URL from path and optional query parameters
  */
-function buildUrl(path: string): string {
+function buildUrl(path: string, params?: Record<string, string | number | boolean | undefined>): string {
   // Remove leading slash if present and join with base URL
   const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-  return `${API_CONFIG.baseURL}/${cleanPath}`;
+  let url = `${API_CONFIG.baseURL}/${cleanPath}`;
+
+  // Add query parameters if provided
+  if (params && Object.keys(params).length > 0) {
+    // Filter out undefined values
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) {
+        searchParams.append(key, String(value));
+      }
+    });
+    const queryString = searchParams.toString();
+    if (queryString) {
+      url += `?${queryString}`;
+    }
+  }
+
+  return url;
 }
 
 /**
@@ -113,10 +130,14 @@ async function parseResponse<T>(response: Response): Promise<ApiResponse<T>> {
 }
 
 /**
- * GET request
+ * GET request with optional URL parameters
  */
-export async function get<T>(path: string, options?: RequestInit): Promise<ApiResponse<T>> {
-  const url = buildUrl(path);
+export async function get<T>(
+  path: string,
+  params?: Record<string, string | number | boolean | undefined>,
+  options?: RequestInit
+): Promise<ApiResponse<T>> {
+  const url = buildUrl(path, params);
   const response = await fetchWithTimeout(url, { ...options, method: 'GET' });
   return parseResponse<T>(response);
 }

@@ -10,8 +10,8 @@ export const API_CONFIG = {
   // Using placeholder value - should be configured via environment variables
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
 
-  // Request timeout in milliseconds
-  timeout: 10000,
+  // Request timeout in milliseconds (from NEXT_PUBLIC_API_TIMEOUT env var, default 30s)
+  timeout: Number(process.env.NEXT_PUBLIC_API_TIMEOUT) || 30000,
 
   // Default headers
   headers: {
