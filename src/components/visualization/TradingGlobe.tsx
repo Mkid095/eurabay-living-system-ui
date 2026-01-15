@@ -40,6 +40,19 @@ export interface TradeMarker {
 }
 
 /**
+ * Market region data structure for region indicators
+ */
+export interface MarketRegion {
+  index: 'V10' | 'V25' | 'V50' | 'V75' | 'V100';
+  name: string;
+  isActive: boolean;
+  volume: number;
+  price: number;
+  changePercent: number;
+  trend: 'bullish' | 'bearish' | 'neutral';
+}
+
+/**
  * Trade path data structure for animated paths
  */
 export interface TradePath {
@@ -60,6 +73,8 @@ export interface TradingGlobeProps {
   trades?: TradeMarker[];
   /** Array of trade paths to display */
   tradePaths?: TradePath[];
+  /** Array of market regions to display */
+  marketRegions?: MarketRegion[];
   /** Whether the globe is loading data */
   isLoading?: boolean;
   /** Error message if data loading failed */
@@ -72,6 +87,8 @@ export interface TradingGlobeProps {
   pathSymbolFilter?: string | null;
   /** Show/hide paths toggle */
   showPaths?: boolean;
+  /** Highlight region on new trade (region index) */
+  highlightRegion?: 'V10' | 'V25' | 'V50' | 'V75' | 'V100' | null;
 }
 
 /**
@@ -403,20 +420,207 @@ function TradeMarker({ trade, radius = 5 }: { trade: TradeMarker; radius?: numbe
 }
 
 /**
+ * Market region indicator component with volume pillar and tooltip
+ */
+function MarketRegionIndicator({
+  region,
+  radius = 5,
+  isHighlighted = false,
+}: {
+  region: MarketRegion;
+  radius?: number;
+  isHighlighted?: boolean;
+}) {
+  const meshRef = useRef<Mesh>(null);
+  const [hovered, setHovered] = useState(false);
+  const groupRef = useRef<Group>(null);
+
+  const coords = VOLATILITY_COORDINATES[region.index];
+  const position = useMemo(
+    () => latLonToVector3(coords.lat, coords.lon, radius),
+    [coords, radius]
+  );
+
+  // Color based on volatility index
+  const color = useMemo(() => {
+    const colors: Record<string, string> = {
+      V10: '#3b82f6',  // blue
+      V25: '#10b981',  // green
+      V50: '#f59e0b',  // yellow
+      V75: '#f97316',  // orange
+      V100: '#ef4444', // red
+    };
+    return colors[region.index];
+  }, [region.index]);
+
+  // Height based on volume (scale between 0.2 and 1.5)
+  const pillarHeight = useMemo(() => {
+    const minVolume = 1000;
+    const maxVolume = 100000;
+    const normalizedVolume = Math.min(Math.max((region.volume - minVolume) / (maxVolume - minVolume), 0), 1);
+    return 0.2 + normalizedVolume * 1.3;
+  }, [region.volume]);
+
+  // Scale based on activity and highlight
+  const baseScale = region.isActive ? 1 : 0.6;
+  const highlightScale = isHighlighted ? 1.3 : 1;
+
+  // Pulse animation for active regions or highlighted regions
+  useFrame((state) => {
+    if (groupRef.current) {
+      const pulseSpeed = region.isActive ? 2 : 0;
+      const highlightPulse = isHighlighted ? 4 : 0;
+      const speed = Math.max(pulseSpeed, highlightPulse);
+
+      if (speed > 0) {
+        const scale = baseScale * highlightScale + Math.sin(state.clock.elapsedTime * speed) * 0.15;
+        groupRef.current.scale.setScalar(scale);
+      } else {
+        groupRef.current.scale.setScalar(baseScale * highlightScale);
+      }
+    }
+  });
+
+  return (
+    <group ref={groupRef} position={position}>
+      {/* Volume pillar (cylinder extending from surface) */}
+      <mesh
+        ref={meshRef}
+        position={[0, pillarHeight / 2, 0]}
+        rotation={[0, 0, 0]}
+        onPointerOver={() => setHovered(true)}
+        onPointerOut={() => setHovered(false)}
+      >
+        <cylinderGeometry args={[0.08, 0.12, pillarHeight, 8]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={region.isActive ? 0.6 : 0.2}
+          transparent
+          opacity={region.isActive ? 0.8 : 0.4}
+          metalness={0.3}
+          roughness={0.4}
+        />
+      </mesh>
+
+      {/* Base marker on globe surface */}
+      <mesh position={[0, 0, 0]}>
+        <sphereGeometry args={[0.12, 16, 16]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={hovered ? 0.9 : 0.5}
+          transparent
+          opacity={region.isActive ? 0.9 : 0.5}
+        />
+      </mesh>
+
+      {/* Top cap */}
+      <mesh position={[0, pillarHeight, 0]}>
+        <sphereGeometry args={[0.06, 8, 8]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={region.isActive ? 0.8 : 0.3}
+          transparent
+          opacity={0.7}
+        />
+      </mesh>
+
+      {/* Tooltip */}
+      {hovered && (
+        <Html
+          position={[0, pillarHeight + 0.3, 0]}
+          center
+          distanceFactor={10}
+          style={{
+            pointerEvents: 'none',
+            transition: 'all 0.2s',
+          }}
+        >
+          <div
+            style={{
+              background: 'rgba(15, 23, 42, 0.95)',
+              border: `1px solid ${color}`,
+              borderRadius: '8px',
+              padding: '12px',
+              color: '#f1f5f9',
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+              fontSize: '13px',
+              minWidth: '180px',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: '4px', fontSize: '14px' }}>
+              {region.name} ({region.index})
+            </div>
+            <div style={{
+              display: 'inline-block',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              fontSize: '11px',
+              fontWeight: 500,
+              marginBottom: '8px',
+              background: region.isActive ? 'rgba(16, 185, 129, 0.2)' : 'rgba(148, 163, 184, 0.2)',
+              color: region.isActive ? '#10b981' : '#94a3b8',
+            }}>
+              {region.isActive ? 'Active' : 'Inactive'}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
+              <span style={{ color: '#94a3b8' }}>Price:</span>
+              <span style={{ fontWeight: 600 }}>
+                ${region.price.toFixed(2)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+              <span style={{ color: '#94a3b8' }}>Change:</span>
+              <span style={{
+                fontWeight: 600,
+                color: region.changePercent >= 0 ? '#10b981' : '#ef4444',
+              }}>
+                {region.changePercent >= 0 ? '+' : ''}{region.changePercent.toFixed(2)}%
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+              <span style={{ color: '#94a3b8' }}>Volume:</span>
+              <span>{region.volume.toLocaleString()}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+              <span style={{ color: '#94a3b8' }}>Trend:</span>
+              <span style={{
+                fontWeight: 500,
+                color: region.trend === 'bullish' ? '#10b981' :
+                       region.trend === 'bearish' ? '#ef4444' : '#f59e0b',
+              }}>
+                {region.trend.charAt(0).toUpperCase() + region.trend.slice(1)}
+              </span>
+            </div>
+          </div>
+        </Html>
+      )}
+    </group>
+  );
+}
+
+/**
  * Scene component with lighting and controls
  */
 function Scene({
   trades,
   tradePaths,
+  marketRegions,
   radius = 5,
   showPaths = true,
   pathSymbolFilter = null,
+  highlightRegion = null,
 }: {
   trades: TradeMarker[];
   tradePaths: TradePath[];
+  marketRegions: MarketRegion[];
   radius?: number;
   showPaths?: boolean;
   pathSymbolFilter?: string | null;
+  highlightRegion?: 'V10' | 'V25' | 'V50' | 'V75' | 'V100' | null;
 }) {
   const { camera } = useThree();
   const [activePaths, setActivePaths] = useState<Set<string>>(new Set());
@@ -471,6 +675,16 @@ function Scene({
 
       {/* Earth sphere */}
       <EarthSphere radius={radius} />
+
+      {/* Market region indicators */}
+      {marketRegions.map((region) => (
+        <MarketRegionIndicator
+          key={region.index}
+          region={region}
+          radius={radius}
+          isHighlighted={highlightRegion === region.index}
+        />
+      ))}
 
       {/* Trade paths */}
       {showPaths && filteredPaths.map((path) => (
@@ -708,12 +922,14 @@ function EmptyState() {
 export function TradingGlobe({
   trades = [],
   tradePaths = [],
+  marketRegions = [],
   isLoading = false,
   error = null,
   height = '600px',
   className = '',
   pathSymbolFilter = null,
   showPaths = true,
+  highlightRegion = null,
 }: TradingGlobeProps) {
   const containerStyle: React.CSSProperties = useMemo(
     () => ({
@@ -737,7 +953,7 @@ export function TradingGlobe({
   }
 
   // Show empty state
-  if (trades.length === 0 && tradePaths.length === 0) {
+  if (trades.length === 0 && tradePaths.length === 0 && marketRegions.length === 0) {
     return <div style={containerStyle}><EmptyState /></div>;
   }
 
@@ -757,9 +973,11 @@ export function TradingGlobe({
           <Scene
             trades={trades}
             tradePaths={tradePaths}
+            marketRegions={marketRegions}
             radius={5}
             showPaths={showPaths}
             pathSymbolFilter={pathSymbolFilter}
+            highlightRegion={highlightRegion}
           />
         </Suspense>
       </Canvas>
