@@ -18,7 +18,7 @@ import { EquityCurve } from "@/components/dashboard/EquityChart";
 import { PnLChart } from "@/components/dashboard/PnLChart";
 import { PerformanceMetrics } from "@/components/dashboard/PerformanceMetrics";
 import { SystemControls } from "@/components/dashboard/SystemControls";
-import { RiskParameters } from "@/components/dashboard/RiskParameters";
+import { RiskParameterControls } from "@/components/dashboard/RiskParameterControls";
 import { LogsViewer } from "@/components/dashboard/LogsViewer";
 import { DerivMarketOverview } from "@/components/dashboard/DerivMarketOverview";
 import { EvolutionMetrics } from "@/components/dashboard/EvolutionMetrics";
@@ -302,7 +302,7 @@ export default function Home() {
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <SystemControls />
-                <RiskParameters />
+                <RiskParameterControls />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
