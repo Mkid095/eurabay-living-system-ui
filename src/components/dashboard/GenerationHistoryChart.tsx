@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, TrendingUp, RefreshCw, Calendar } from "lucide-react";
+import { AlertCircle, TrendingUp, RefreshCw, Calendar, Download } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   LineChart,
@@ -19,7 +19,19 @@ import {
   ReferenceLine,
   Brush
 } from "recharts";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { GenerationHistory } from "@/types/evolution";
+import {
+  exportEvolutionHistory,
+  type EvolutionExportFormat,
+} from "@/lib/export/evolution";
+import { toast } from "sonner";
 
 type DateRange = 7 | 30 | 90 | 'all';
 
@@ -83,6 +95,8 @@ export const GenerationHistoryChart = ({
 }: GenerationHistoryChartProps) => {
   const [selectedRange, setSelectedRange] = useState<DateRange>('all');
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<ReturnType<typeof setInterval> | null>(null);
+  const [exportFormat, setExportFormat] = useState<EvolutionExportFormat>('csv');
+  const [isExporting, setIsExporting] = useState(false);
 
   /**
    * Handle date range change
@@ -93,6 +107,26 @@ export const GenerationHistoryChart = ({
       onDateRangeChange(range);
     }
   }, [onDateRangeChange]);
+
+  /**
+   * Handle export data
+   */
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      // Convert selected range to days for API
+      const days = selectedRange === 'all' ? undefined : Number(selectedRange);
+      await exportEvolutionHistory(exportFormat, days);
+
+      toast.success(`Evolution history exported to ${exportFormat.toUpperCase()} successfully`);
+    } catch (error) {
+      toast.error(
+        `Failed to export evolution history: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  }, [exportFormat, selectedRange]);
 
   /**
    * Setup auto-refresh every 10 seconds
@@ -243,6 +277,25 @@ export const GenerationHistoryChart = ({
               Refresh
             </Button>
           )}
+          <Select value={exportFormat} onValueChange={(value) => setExportFormat(value as EvolutionExportFormat)}>
+            <SelectTrigger className="w-[100px] h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="csv">CSV</SelectItem>
+              <SelectItem value="json">JSON</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            disabled={isExporting || data.length === 0}
+            className="gap-2"
+          >
+            <Download className="w-4 h-4" />
+            Export
+          </Button>
           <TrendingUp className="w-5 h-5 text-primary" />
         </div>
       </div>

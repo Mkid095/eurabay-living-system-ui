@@ -83,8 +83,8 @@
       "mavenSteps": [1, 7],
       "mcpTools": {},
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented evolution history export with CSV/JSON format support. Created src/lib/export/evolution.ts with exportEvolutionHistoryToCSV() and exportEvolutionHistoryToJSON() functions that fetch from GET /evolution/generation-history, GET /evolution/feature-success, and GET /evolution/mutation-success endpoints. Added export button and format selector to GenerationHistoryChart component with success/error toast notifications using sonner. Typecheck passes with no errors."
     }
   ]
 }
