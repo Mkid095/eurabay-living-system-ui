@@ -1,10 +1,11 @@
 "use client";
 
-import { Bell, Search, User } from "lucide-react";
+import { Bell, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SystemHealth } from "@/hooks/useDashboardData";
 import { cn } from "@/lib/utils";
+import { UserMenu } from "@/components/layout/UserMenu";
 
 interface HeaderProps {
   systemHealth: SystemHealth;
@@ -48,16 +49,8 @@ export function Header({ systemHealth }: HeaderProps) {
             <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
           </Button>
 
-          {/* User Profile */}
-          <Button variant="ghost" className="gap-2">
-            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-              <User className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <div className="hidden sm:block text-left">
-              <p className="text-sm font-medium">Trading Admin</p>
-              <p className="text-xs text-muted-foreground">Premium</p>
-            </div>
-          </Button>
+          {/* User Profile Menu */}
+          <UserMenu />
         </div>
       </div>
     </header>
