@@ -788,6 +788,126 @@ export interface TradeCloseResult {
 }
 
 // ============================================================================
+// MANUAL OVERRIDE TYPES
+// ============================================================================
+
+/**
+ * Manual override action types
+ */
+export type ManualOverrideAction =
+  | 'close_position'
+  | 'disable_trailing_stop'
+  | 'disable_breakeven'
+  | 'set_manual_stop_loss'
+  | 'set_manual_take_profit'
+  | 'pause_management'
+  | 'resume_management';
+
+/**
+ * Manual override state for a position
+ */
+export interface ManualOverrideState {
+  /** Position ticket */
+  ticket: string;
+  /** Whether trailing stop is disabled */
+  trailingStopped: boolean;
+  /** Whether breakeven is disabled */
+  breakevenStopped: boolean;
+  /** Whether active management is paused */
+  managementPaused: boolean;
+  /** Manual stop loss value (if set) */
+  manualStopLoss?: number;
+  /** Manual take profit value (if set) */
+  manualTakeProfit?: number;
+}
+
+/**
+ * Manual override result
+ */
+export interface ManualOverrideResult {
+  /** Whether the override was successful */
+  success: boolean;
+  /** Result message */
+  message: string;
+  /** Action that was performed */
+  action: ManualOverrideAction;
+  /** Current position state */
+  positionState: string;
+}
+
+/**
+ * Manual override record from history
+ */
+export interface ManualOverrideRecord {
+  /** Position ticket */
+  ticket: string;
+  /** Action performed */
+  action: ManualOverrideAction;
+  /** Previous value (if applicable) */
+  previousValue?: number;
+  /** New value (if applicable) */
+  newValue?: number;
+  /** Timestamp of override (ISO 8601) */
+  timestamp: string;
+  /** User who performed the override */
+  user: string;
+  /** Reason for the override */
+  reason: string;
+  /** Whether the override required confirmation */
+  confirmed: boolean;
+}
+
+/**
+ * Manual close position request
+ */
+export interface ManualCloseRequest {
+  /** Trade ticket */
+  ticket: string;
+  /** Optional lots to close (null = full position) */
+  lots?: number;
+  /** User performing the action */
+  user: string;
+  /** Reason for closing */
+  reason: string;
+  /** Whether action was confirmed */
+  confirmed?: boolean;
+}
+
+/**
+ * Manual stop loss/take profit request
+ */
+export interface ManualStopLossTakeProfitRequest {
+  /** Trade ticket */
+  ticket: string;
+  /** New stop loss value */
+  stopLoss?: number;
+  /** New take profit value */
+  takeProfit?: number;
+  /** User performing the action */
+  user: string;
+  /** Reason for the change */
+  reason: string;
+  /** Whether action was confirmed */
+  confirmed?: boolean;
+}
+
+/**
+ * Toggle management request
+ */
+export interface ToggleManagementRequest {
+  /** Trade ticket */
+  ticket: string;
+  /** Action to perform */
+  action: 'pause' | 'resume';
+  /** User performing the action */
+  user: string;
+  /** Reason for the action */
+  reason: string;
+  /** Whether action was confirmed */
+  confirmed?: boolean;
+}
+
+// ============================================================================
 // RESPONSE WRAPPER TYPES
 // ============================================================================
 

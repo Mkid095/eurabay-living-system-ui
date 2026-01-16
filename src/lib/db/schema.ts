@@ -202,3 +202,27 @@ export const signals = sqliteTable('signals', {
  */
 export type Signal = typeof signals.$inferSelect;
 export type NewSignal = typeof signals.$inferInsert;
+
+/**
+ * Manual overrides table schema
+ * Stores manual override actions for active trade management
+ */
+export const manualOverrides = sqliteTable('manual_overrides', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  ticket: integer('ticket').notNull(),
+  action: text('action', {
+    enum: ['close_position', 'disable_trailing_stop', 'disable_breakeven', 'set_manual_stop_loss', 'set_manual_take_profit', 'pause_management', 'resume_management']
+  }).notNull(),
+  previousValue: real('previous_value'),
+  newValue: real('new_value'),
+  timestamp: integer('timestamp', { mode: 'timestamp' }).notNull(),
+  user: text('user').notNull(),
+  reason: text('reason').notNull(),
+  confirmed: integer('confirmed', { mode: 'boolean' }).notNull().default(false),
+});
+
+/**
+ * Type definitions for manual_overrides table
+ */
+export type ManualOverride = typeof manualOverrides.$inferSelect;
+export type NewManualOverride = typeof manualOverrides.$inferInsert;

@@ -20,6 +20,7 @@ from .partial_profit_manager import PartialProfitManager, PartialProfitConfig
 from .holding_time_optimizer import HoldingTimeOptimizer, HoldingTimeConfig, MarketRegime
 from .scale_in_manager import ScaleInManager, ScaleInConfig
 from .scale_out_manager import ScaleOutManager, ScaleOutConfig
+from .manual_override_manager import ManualOverrideManager
 
 
 # Configure logging
@@ -186,6 +187,7 @@ class PositionMonitoringLoop:
         self._holding_time_optimizer = HoldingTimeOptimizer(mt5_connector)
         self._scale_in_manager = ScaleInManager(mt5_connector)
         self._scale_out_manager = ScaleOutManager(mt5_connector)
+        self._manual_override_manager = ManualOverrideManager(mt5_connector)
 
         # Monitoring state
         self._is_monitoring: bool = False
@@ -341,7 +343,14 @@ class PositionMonitoringLoop:
             if await self._check_sl_tp_hits(position):
                 return  # Position closed, skip further checks
 
-            # Run all enabled management checks
+            # Check if management is paused for this position
+            if self._manual_override_manager.is_management_paused(position.ticket):
+                logger.debug(
+                    f"Management paused for position {position.ticket}, skipping automated checks"
+                )
+                return
+
+            # Run all enabled management checks (respecting manual overrides)
             await self._run_trailing_stop_check(position)
             await self._run_breakeven_check(position)
             await self._run_partial_profit_check(position)
@@ -399,6 +408,13 @@ class PositionMonitoringLoop:
         if not self._config.enable_trailing_stop:
             return
 
+        # Check if trailing stop is manually disabled for this position
+        if self._manual_override_manager.is_trailing_stopped(position.ticket):
+            logger.debug(
+                f"Trailing stop disabled for position {position.ticket}, skipping check"
+            )
+            return
+
         try:
             update = await self._trailing_stop_manager.update_trailing_stop(
                 position, self._config.trailing_stop_config
@@ -426,6 +442,13 @@ class PositionMonitoringLoop:
             position: TradePosition to check
         """
         if not self._config.enable_breakeven:
+            return
+
+        # Check if breakeven is manually disabled for this position
+        if self._manual_override_manager.is_breakeven_stopped(position.ticket):
+            logger.debug(
+                f"Breakeven disabled for position {position.ticket}, skipping check"
+            )
             return
 
         try:
@@ -649,4 +672,14 @@ class PositionMonitoringLoop:
             "holding_time": self._holding_time_optimizer,
             "scale_in": self._scale_in_manager,
             "scale_out": self._scale_out_manager,
+            "manual_override": self._manual_override_manager,
         }
+
+    def get_manual_override_manager(self) -> ManualOverrideManager:
+        """
+        Get the manual override manager instance.
+
+        Returns:
+            ManualOverrideManager instance for manual control
+        """
+        return self._manual_override_manager

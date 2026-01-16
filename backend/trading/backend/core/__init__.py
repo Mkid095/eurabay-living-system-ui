@@ -12,6 +12,13 @@ from .holding_time_optimizer import (
     HoldingTimeUpdate,
     MarketRegime,
 )
+from .manual_override_manager import (
+    ManualOverrideManager,
+    OverrideAction,
+    OverrideRecord,
+    OverrideResult,
+    OverrideState,
+)
 from .partial_profit_manager import (
     PartialProfitManager,
     PartialProfitConfig,
@@ -35,8 +42,8 @@ from .trade_state import (
     TradeStateMachine,
     TradeStateTransition,
     TradeStateTracker,
+    TradePosition,
 )
-from .trade_position import TradePosition
 from .trailing_stop_manager import (
     TrailingStopManager,
     TrailingStopConfig,
@@ -60,6 +67,11 @@ __all__ = [
     "HoldingTimeConfig",
     "HoldingTimeUpdate",
     "MarketRegime",
+    "ManualOverrideManager",
+    "OverrideAction",
+    "OverrideRecord",
+    "OverrideResult",
+    "OverrideState",
     "PartialProfitManager",
     "PartialProfitConfig",
     "PartialProfitUpdate",
