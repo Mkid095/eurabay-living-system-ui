@@ -162,16 +162,21 @@ async function fetchWithTimeout(
   timeout: number = API_CONFIG.timeout,
   retryConfig: RetryConfig = DEFAULT_RETRY_CONFIG
 ): Promise<Response> {
-  // Apply request interceptor (add auth headers)
-  const interceptedOptions = applyRequestHeaders(options);
-
   let lastError: Error | null = null;
   let attemptNumber = 0;
 
-  // Retry loop for 5xx errors
+  // Retry loop for 5xx errors and network errors
   while (attemptNumber <= retryConfig.maxRetries) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    // Apply request interceptor (add auth headers and retry count)
+    const interceptedOptions = applyRequestHeaders(options);
+
+    // Add X-Retry-Count header to track retry attempts
+    if (attemptNumber > 0) {
+      (interceptedOptions.headers as Record<string, string>)['X-Retry-Count'] = String(attemptNumber);
+    }
 
     try {
       const response = await fetch(url, {
@@ -181,7 +186,7 @@ async function fetchWithTimeout(
 
       clearTimeout(timeoutId);
 
-      // Check if response is retryable (5xx errors)
+      // Check if response is retryable (5xx errors only - not 4xx)
       if (
         attemptNumber < retryConfig.maxRetries &&
         retryConfig.retryableStatuses.includes(response.status)
