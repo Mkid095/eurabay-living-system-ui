@@ -2,6 +2,11 @@ import { db } from './index';
 import { users, trades, evolutionGenerations, features, mutations, signals, systemLogs } from './schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
+import { cacheWarmer, cacheManager } from './cache';
+import { tradeRepository } from './repositories/trade.repository';
+import { evolutionRepository } from './repositories/evolution.repository';
+import { userRepository } from './repositories/user.repository';
+import { signalRepository } from './repositories/signal.repository';
 
 /**
  * Seed script for admin and demo users
@@ -632,6 +637,32 @@ export async function seed() {
     await seedSignals();
     await seedSystemLogs();
     console.log('\nDatabase seeded successfully!');
+
+    // Warm up cache with common data
+    console.log('\nWarming up cache...');
+    await cacheWarmer.warmUp({
+      loadActiveTrades: () => tradeRepository.getActiveTrades(),
+      loadEvolutionMetrics: async () => {
+        const latest = await evolutionRepository.getLatestGeneration();
+        const features = await evolutionRepository.getAllFeatures();
+        return { latestGeneration: latest, features };
+      },
+      loadConfig: async () => {
+        const adminUser = await userRepository.getUserById('admin-001');
+        return adminUser;
+      },
+      loadPendingSignals: () => signalRepository.getPendingSignals(),
+    });
+
+    // Log cache statistics
+    const stats = cacheManager.getStatistics();
+    console.log('Cache statistics:', {
+      size: stats.size,
+      hits: stats.hits,
+      misses: stats.misses,
+      hitRate: `${(stats.hitRate * 100).toFixed(2)}%`,
+    });
+
     process.exit(0);
   } catch (error) {
     console.error('Error seeding database:', error);

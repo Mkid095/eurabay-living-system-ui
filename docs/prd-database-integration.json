@@ -427,8 +427,8 @@
       ],
       "mcpTools": {},
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "COMPLETED: Created comprehensive caching layer in src/lib/db/cache.ts with CacheManager class (generic get/set, TTL support, auto-cleanup), DomainCache class with domain-specific methods (user sessions 5m, config 10m, active trades 30s, evolution metrics 1m), cacheWarmer utility for pre-loading data, cacheInvalidation helpers for repositories, and cache statistics tracking (hit/miss rates, size, expired entries, invalidations). Exported cacheManager singleton, domainCache instance, and cacheUtils for easy access. Typecheck passes."
     },
     {
       "id": "US-021",
@@ -449,8 +449,8 @@
       ],
       "mcpTools": {},
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "COMPLETED: Integrated caching layer into all repositories. Updated trade.repository.ts: getActiveTrades() caches with 30s TTL, added cacheInvalidation.onTradeChange() to createTrade/updateTrade/closeTrade. Updated evolution.repository.ts: getLatestGeneration() caches with 1m TTL (via EVOLUTION_DATA TTL), added cacheInvalidation.onEvolutionChange() to createGeneration/createFeature/updateFeatureStats/createMutation. Updated user.repository.ts: getUserById() caches with 5m TTL (via USER_DATA TTL), added cacheInvalidation.onUserChange() to createUser/updateUser/deleteUser. Updated seed.ts: added cache warming with loadActiveTrades/loadEvolutionMetrics/loadConfig/loadPendingSignals, added cache statistics logging. Created cache-logger.ts with CacheLogger class, cacheLogger singleton, and cacheStats utilities (log/get/getString/reset/healthCheck/logIfDev). Typecheck passes."
     }
   ]
 }

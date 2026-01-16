@@ -1,6 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../index';
 import { users, type User, type NewUser } from '../schema';
+import { cacheInvalidation, CacheTTL, cacheManager } from '../cache';
+import { CacheKeys } from '../cache';
 
 /**
  * User Repository
@@ -12,15 +14,29 @@ export class UserRepository {
    */
   async createUser(data: NewUser): Promise<User> {
     const [user] = await db.insert(users).values(data).returning();
+    cacheInvalidation.onUserChange(user.id);
     return user;
   }
 
   /**
-   * Get user by ID
+   * Get user by ID (cached with 5m TTL)
    */
   async getUserById(id: string): Promise<User | null> {
+    const cacheKey = CacheKeys.USER_ID(id);
+    const cached = cacheManager.get<User>(cacheKey);
+
+    if (cached !== null) {
+      return cached;
+    }
+
     const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    return user || null;
+    const result = user || null;
+
+    if (result) {
+      cacheManager.set(cacheKey, result, CacheTTL.USER_DATA);
+    }
+
+    return result;
   }
 
   /**
@@ -40,6 +56,7 @@ export class UserRepository {
       .set({ ...data, updatedAt: new Date() })
       .where(eq(users.id, id))
       .returning();
+    cacheInvalidation.onUserChange(id);
     return user || null;
   }
 
@@ -48,6 +65,7 @@ export class UserRepository {
    */
   async deleteUser(id: string): Promise<boolean> {
     const result = await db.delete(users).where(eq(users.id, id));
+    cacheInvalidation.onUserChange(id);
     return result.rowCount > 0;
   }
 

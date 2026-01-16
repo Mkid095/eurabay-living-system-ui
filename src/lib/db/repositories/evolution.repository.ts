@@ -11,6 +11,8 @@ import {
   type Mutation,
   type NewMutation,
 } from '../schema';
+import { cacheInvalidation, CacheTTL, cacheManager, domainCache } from '../cache';
+import { CacheKeys } from '../cache';
 
 /**
  * Evolution Repository
@@ -24,19 +26,33 @@ export class EvolutionRepository {
    */
   async createGeneration(data: NewEvolutionGeneration): Promise<EvolutionGeneration> {
     const [generation] = await db.insert(evolutionGenerations).values(data).returning();
+    cacheInvalidation.onEvolutionChange();
     return generation;
   }
 
   /**
-   * Get the latest evolution generation
+   * Get the latest evolution generation (cached with 1m TTL)
    */
   async getLatestGeneration(): Promise<EvolutionGeneration | null> {
+    const cacheKey = CacheKeys.EVOLUTION_GENERATION('latest');
+    const cached = cacheManager.get<EvolutionGeneration>(cacheKey);
+
+    if (cached !== null) {
+      return cached;
+    }
+
     const [generation] = await db
       .select()
       .from(evolutionGenerations)
       .orderBy(desc(evolutionGenerations.generationNumber))
       .limit(1);
-    return generation || null;
+    const result = generation || null;
+
+    if (result) {
+      cacheManager.set(cacheKey, result, CacheTTL.EVOLUTION_DATA);
+    }
+
+    return result;
   }
 
   /**
@@ -86,6 +102,7 @@ export class EvolutionRepository {
    */
   async createFeature(data: NewFeature): Promise<Feature> {
     const [feature] = await db.insert(features).values(data).returning();
+    cacheInvalidation.onEvolutionChange();
     return feature;
   }
 
@@ -144,6 +161,7 @@ export class EvolutionRepository {
       })
       .where(eq(features.featureId, featureId))
       .returning();
+    cacheInvalidation.onEvolutionChange();
     return feature || null;
   }
 
@@ -189,6 +207,7 @@ export class EvolutionRepository {
    */
   async createMutation(data: NewMutation): Promise<Mutation> {
     const [mutation] = await db.insert(mutations).values(data).returning();
+    cacheInvalidation.onEvolutionChange();
     return mutation;
   }
 

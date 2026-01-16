@@ -1,6 +1,8 @@
 import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import { db } from '../index';
 import { trades, type Trade, type NewTrade } from '../schema';
+import { cacheInvalidation, CacheTTL, cacheManager } from '../cache';
+import { CacheKeys } from '../cache';
 
 /**
  * Trade Repository
@@ -12,6 +14,7 @@ export class TradeRepository {
    */
   async createTrade(data: NewTrade): Promise<Trade> {
     const [trade] = await db.insert(trades).values(data).returning();
+    cacheInvalidation.onTradeChange();
     return trade;
   }
 
@@ -40,14 +43,24 @@ export class TradeRepository {
   }
 
   /**
-   * Get all active trades
+   * Get all active trades (cached with 30s TTL)
    */
   async getActiveTrades(): Promise<Trade[]> {
-    return db
+    const cacheKey = CacheKeys.TRADES_ACTIVE;
+    const cached = cacheManager.get<Trade[]>(cacheKey);
+
+    if (cached !== null) {
+      return cached;
+    }
+
+    const result = await db
       .select()
       .from(trades)
       .where(eq(trades.status, 'active'))
       .orderBy(desc(trades.openTime));
+
+    cacheManager.set(cacheKey, result, CacheTTL.ACTIVE_TRADES);
+    return result;
   }
 
   /**
@@ -70,6 +83,7 @@ export class TradeRepository {
       .set(data)
       .where(eq(trades.systemTicket, systemTicket))
       .returning();
+    cacheInvalidation.onTradeChange();
     return trade || null;
   }
 
@@ -87,6 +101,7 @@ export class TradeRepository {
       })
       .where(eq(trades.systemTicket, systemTicket))
       .returning();
+    cacheInvalidation.onTradeChange();
     return trade || null;
   }
 
