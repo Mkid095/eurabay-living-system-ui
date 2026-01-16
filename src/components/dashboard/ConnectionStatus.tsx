@@ -8,6 +8,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useConnectionState } from '@/hooks/useConnectionState';
+import { useReconnectionState } from '@/hooks/useReconnectionState';
 import { ConnectionState } from '@/lib/websocket/client';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +21,8 @@ import { cn } from '@/lib/utils';
  * - Latency display when connected
  * - Tooltip with detailed connection information
  * - Manual reconnect button when disconnected
+ * - Reconnecting message during reconnection attempts
+ * - Error message after 3 consecutive failed attempts
  */
 
 interface ConnectionStatusProps {
@@ -34,16 +37,24 @@ export function ConnectionStatus({
   showLatency = true,
 }: ConnectionStatusProps) {
   const { state, latency, reconnectAttemptCount, reconnect } = useConnectionState();
-  const [isReconnecting, setIsReconnecting] = useState(false);
+  const { isReconnecting, attempt, consecutiveFailures, hasMaxFailures, reset: resetRecovery } = useReconnectionState();
+  const [isManualReconnecting, setIsManualReconnecting] = useState(false);
 
   const handleReconnect = async () => {
-    setIsReconnecting(true);
+    setIsManualReconnecting(true);
+    // Reset recovery state when manually reconnecting
+    resetRecovery();
     reconnect();
-    // Reset reconnecting state after a short delay
-    setTimeout(() => setIsReconnecting(false), 2000);
+    // Reset manual reconnecting state after a short delay
+    setTimeout(() => setIsManualReconnecting(false), 2000);
   };
 
   const getStatusText = (): string => {
+    // Show "Reconnecting..." when auto-reconnecting
+    if (isReconnecting) {
+      return `Reconnecting... (${attempt})`;
+    }
+
     switch (state) {
       case 'connected':
         return 'Connected';
@@ -85,7 +96,7 @@ export function ConnectionStatus({
               className={cn(
                 'w-2.5 h-2.5 rounded-full relative',
                 getStatusColor(),
-                state === 'connecting' && 'animate-pulse'
+                (state === 'connecting' || isReconnecting) && 'animate-pulse'
               )}
             >
               {/* Outer glow effect for connected state */}
@@ -115,12 +126,22 @@ export function ConnectionStatus({
           <div className="space-y-1">
             <div className="font-medium">Connection Status</div>
             <div className="text-xs text-muted-foreground space-y-0.5">
-              <div>State: {getStatusText()}</div>
+              <div>State: {state === 'connecting' ? 'Connecting' : state}</div>
               {state === 'connected' && latency !== null && (
                 <div>Latency: {latency}ms</div>
               )}
-              {reconnectAttemptCount > 0 && (
-                <div>Reconnect attempts: {reconnectAttemptCount}</div>
+              {isReconnecting && (
+                <div>Reconnection attempt: {attempt}</div>
+              )}
+              {reconnectAttemptCount > 0 && !isReconnecting && (
+                <div>Total reconnect attempts: {reconnectAttemptCount}</div>
+              )}
+              {consecutiveFailures > 0 && (
+                <div className={cn(
+                  consecutiveFailures >= 3 ? 'text-red-500 font-medium' : 'text-yellow-600'
+                )}>
+                  Consecutive failures: {consecutiveFailures}
+                </div>
               )}
             </div>
           </div>
@@ -133,11 +154,18 @@ export function ConnectionStatus({
           variant="outline"
           size="sm"
           onClick={handleReconnect}
-          disabled={isReconnecting}
+          disabled={isReconnecting || isManualReconnecting}
           className="h-7 px-2 text-xs"
         >
-          {isReconnecting ? 'Reconnecting...' : 'Reconnect'}
+          {isManualReconnecting ? 'Reconnecting...' : 'Reconnect'}
         </Button>
+      )}
+
+      {/* Error message after 3 consecutive failed attempts */}
+      {hasMaxFailures && (
+        <div className="text-xs text-red-500 font-medium">
+          Connection failed after {consecutiveFailures} attempts
+        </div>
       )}
     </div>
   );

@@ -738,6 +738,15 @@ export class WSClient {
           `[WS] Max reconnect attempts (${this.config.maxReconnectAttempts}) reached. Stopping auto-reconnect.`
         );
       }
+
+      // Notify recovery manager about reconnection failure
+      // Import dynamically to avoid circular dependencies
+      import('./recovery').then(({ recoveryManager }) => {
+        if (recoveryManager && (recoveryManager as any).handleReconnectionFailure) {
+          (recoveryManager as any).handleReconnectionFailure();
+        }
+      });
+
       this.setState('disconnected');
       return;
     }
@@ -752,6 +761,14 @@ export class WSClient {
         `[WS] Scheduling reconnect attempt ${this.reconnectAttemptCount}/${this.config.maxReconnectAttempts} in ${delay}ms (${timestamp})`
       );
     }
+
+    // Notify recovery manager about reconnection start
+    // Import dynamically to avoid circular dependencies
+    import('./recovery').then(({ recoveryManager }) => {
+      if (recoveryManager && (recoveryManager as any).startReconnection) {
+        (recoveryManager as any).startReconnection(this.reconnectAttemptCount, delay);
+      }
+    });
 
     this.reconnectTimeoutId = setTimeout(() => {
       if (process.env.NODE_ENV === 'development') {
