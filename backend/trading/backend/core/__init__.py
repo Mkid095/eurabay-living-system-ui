@@ -18,6 +18,12 @@ from .partial_profit_manager import (
     PartialProfitUpdate,
     PartialProfitLevel,
 )
+from .scale_in_manager import (
+    ScaleInManager,
+    ScaleInConfig,
+    ScaleInOperation,
+    ScaleInPerformance,
+)
 from .trade_state import TradeState, TradeStateMachine, TradeStateTransition
 from .trade_position import TradePosition
 from .trailing_stop_manager import (
@@ -40,6 +46,10 @@ __all__ = [
     "PartialProfitConfig",
     "PartialProfitUpdate",
     "PartialProfitLevel",
+    "ScaleInManager",
+    "ScaleInConfig",
+    "ScaleInOperation",
+    "ScaleInPerformance",
     "TradeState",
     "TradeStateMachine",
     "TradeStateTransition",
