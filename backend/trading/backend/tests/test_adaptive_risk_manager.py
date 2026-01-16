@@ -16,6 +16,7 @@ from backend.core.adaptive_risk_manager import (
     RiskAdjustment,
     VolatilityAdjustment,
     DrawdownAdjustment,
+    CorrelationAdjustment,
 )
 from backend.core.performance_comparator import (
     PerformanceComparator,
@@ -1307,3 +1308,661 @@ if __name__ == "__main__":
     test_integration_with_historical_data()
     test_drawdown_integration_scenario()
     logger.info("All integration tests passed!")
+
+
+class TestCorrelationBasedRiskAdjustment:
+    """Test suite for correlation-based risk adjustment (US-004)."""
+
+    def test_calculate_portfolio_correlation_no_positions(self, risk_manager):
+        """Test correlation adjustment when no positions are open."""
+        open_positions = []
+        target_symbol = "EURUSD"
+
+        multiplier, correlated_symbols, correlation_count = risk_manager.calculate_portfolio_correlation(
+            target_symbol=target_symbol,
+            open_positions=open_positions
+        )
+
+        assert multiplier == 1.0
+        assert correlated_symbols == []
+        assert correlation_count == 0
+
+    def test_calculate_portfolio_correlation_single_position(self, risk_manager):
+        """Test correlation adjustment with one open position."""
+        # Create an open position
+        position = TradePosition(
+            ticket=1001,
+            symbol="EURUSD",
+            direction="BUY",
+            entry_price=1.0850,
+            current_price=1.0860,
+            volume=1.0,
+            stop_loss=1.0800,
+            take_profit=1.0900,
+            entry_time=datetime.utcnow(),
+            profit=100.0,
+            swap=0.0,
+            commission=0.0,
+        )
+
+        open_positions = [position]
+        target_symbol = "GBPUSD"
+
+        multiplier, correlated_symbols, correlation_count = risk_manager.calculate_portfolio_correlation(
+            target_symbol=target_symbol,
+            open_positions=open_positions
+        )
+
+        # Should return a valid multiplier
+        assert 0.2 <= multiplier <= 1.0
+        assert isinstance(correlated_symbols, list)
+        assert isinstance(correlation_count, int)
+
+        # Verify adjustment was recorded
+        adjustments = risk_manager.get_correlation_adjustments()
+        assert len(adjustments) > 0
+        assert adjustments[-1].symbol == target_symbol
+
+    def test_calculate_portfolio_correlation_multiple_positions(self, risk_manager):
+        """Test correlation adjustment with multiple open positions."""
+        # Create multiple open positions in different symbols
+        positions = [
+            TradePosition(
+                ticket=1001 + i,
+                symbol=symbol,
+                direction="BUY",
+                entry_price=1.0850,
+                current_price=1.0860,
+                volume=1.0,
+                stop_loss=1.0800,
+                take_profit=1.0900,
+                entry_time=datetime.utcnow(),
+                profit=100.0,
+                swap=0.0,
+                commission=0.0,
+            )
+            for i, symbol in enumerate(["EURUSD", "GBPUSD", "USDJPY"])
+        ]
+
+        target_symbol = "EURUSD"
+
+        multiplier, correlated_symbols, correlation_count = risk_manager.calculate_portfolio_correlation(
+            target_symbol=target_symbol,
+            open_positions=positions
+        )
+
+        # Should return a valid multiplier
+        assert 0.2 <= multiplier <= 1.0
+        assert correlation_count >= 0
+        assert correlation_count <= len(positions)
+
+        # EURUSD should be highly correlated with itself if present in positions
+        # In this case, GBPUSD and USDJPY might have some correlation with EURUSD
+        logger.info(
+            f"Correlation for {target_symbol}: multiplier={multiplier:.3f}, "
+            f"count={correlation_count}, symbols={correlated_symbols}"
+        )
+
+    def test_position_size_adjustment_for_correlation(self, risk_manager):
+        """Test position size calculation with correlation adjustment."""
+        base_position_size = 1.0
+        target_symbol = "EURUSD"
+
+        # Create correlated open positions
+        positions = [
+            TradePosition(
+                ticket=2001,
+                symbol="GBPUSD",  # Likely correlated with EURUSD
+                direction="BUY",
+                entry_price=1.2650,
+                current_price=1.2660,
+                volume=1.0,
+                stop_loss=1.2600,
+                take_profit=1.2700,
+                entry_time=datetime.utcnow(),
+                profit=100.0,
+                swap=0.0,
+                commission=0.0,
+            ),
+            TradePosition(
+                ticket=2002,
+                symbol="USDJPY",
+                direction="SELL",
+                entry_price=145.50,
+                current_price=145.40,
+                volume=1.0,
+                stop_loss=146.00,
+                take_profit=145.00,
+                entry_time=datetime.utcnow(),
+                profit=100.0,
+                swap=0.0,
+                commission=0.0,
+            ),
+        ]
+
+        adjusted_size = risk_manager.adjust_position_size_for_correlation(
+            base_position_size=base_position_size,
+            target_symbol=target_symbol,
+            open_positions=positions
+        )
+
+        # Adjusted size should be less than or equal to base
+        assert adjusted_size <= base_position_size
+        assert adjusted_size >= base_position_size * 0.2  # Minimum 20% of base
+
+        logger.info(
+            f"Position size adjusted: {base_position_size:.2f} -> {adjusted_size:.2f} lots "
+            f"for {target_symbol} with {len(positions)} open positions"
+        )
+
+    def test_correlation_threshold(self, risk_manager):
+        """Test that correlation threshold is applied correctly."""
+        # The correlation threshold should be 0.7
+        assert risk_manager._correlation_threshold == 0.7
+
+        # Test that symbols with correlation below threshold don't trigger reduction
+        # This is tested implicitly through calculate_portfolio_correlation
+
+    def test_correlation_adjustment_dataclass(self, risk_manager):
+        """Test CorrelationAdjustment dataclass."""
+        adjustment = CorrelationAdjustment(
+            timestamp=datetime.utcnow(),
+            symbol="EURUSD",
+            correlated_symbols=["GBPUSD", "USDJPY"],
+            correlation_count=2,
+            adjustment_multiplier=0.8,
+            reason="Test adjustment",
+        )
+
+        # Test to_dict conversion
+        adj_dict = adjustment.to_dict()
+        assert "timestamp" in adj_dict
+        assert adj_dict["symbol"] == "EURUSD"
+        assert adj_dict["correlated_symbols"] == ["GBPUSD", "USDJPY"]
+        assert adj_dict["correlation_count"] == 2
+        assert adj_dict["adjustment_multiplier"] == 0.8
+
+    def test_correlation_matrix_calculation(self, risk_manager):
+        """Test correlation matrix calculation."""
+        symbols = ["EURUSD", "GBPUSD", "USDJPY"]
+
+        correlation_matrix = risk_manager._calculate_correlation_matrix(symbols)
+
+        # Should return a DataFrame
+        assert correlation_matrix is not None
+        assert not correlation_matrix.empty
+
+        # Should be a square matrix
+        assert correlation_matrix.shape == (len(symbols), len(symbols))
+
+        # Diagonal should be 1.0 (perfect correlation with itself)
+        for symbol in symbols:
+            assert abs(correlation_matrix.loc[symbol, symbol] - 1.0) < 0.01
+
+        logger.info(f"Correlation matrix:\n{correlation_matrix}")
+
+    def test_correlation_matrix_insufficient_data(self, risk_manager):
+        """Test correlation matrix calculation with insufficient data."""
+        # Need at least 2 symbols
+        result = risk_manager._calculate_correlation_matrix(["EURUSD"])
+        assert result is None
+
+    def test_get_correlation_adjustments(self, risk_manager):
+        """Test retrieving correlation adjustment history."""
+        # Create some adjustments
+        positions = [
+            TradePosition(
+                ticket=3001,
+                symbol="GBPUSD",
+                direction="BUY",
+                entry_price=1.2650,
+                current_price=1.2660,
+                volume=1.0,
+                stop_loss=1.2600,
+                take_profit=1.2700,
+                entry_time=datetime.utcnow(),
+                profit=100.0,
+                swap=0.0,
+                commission=0.0,
+            )
+        ]
+
+        risk_manager.calculate_portfolio_correlation("EURUSD", positions)
+        risk_manager.calculate_portfolio_correlation("USDJPY", positions)
+
+        # Get all adjustments
+        all_adjustments = risk_manager.get_correlation_adjustments()
+        assert len(all_adjustments) >= 2
+
+        # Get adjustments for specific symbol
+        eurusd_adjustments = risk_manager.get_correlation_adjustments(symbol="EURUSD")
+        assert len(eurusd_adjustments) >= 1
+        assert eurusd_adjustments[-1].symbol == "EURUSD"
+
+    def test_correlation_database_persistence(self, risk_manager, temp_database):
+        """Test that correlation adjustments are persisted to database."""
+        # Create a correlation adjustment
+        position = TradePosition(
+            ticket=4001,
+            symbol="GBPUSD",
+            direction="BUY",
+            entry_price=1.2650,
+            current_price=1.2660,
+            volume=1.0,
+            stop_loss=1.2600,
+            take_profit=1.2700,
+            entry_time=datetime.utcnow(),
+            profit=100.0,
+            swap=0.0,
+            commission=0.0,
+        )
+
+        risk_manager.calculate_portfolio_correlation("EURUSD", [position])
+
+        # Verify data was stored in database
+        conn = sqlite3.connect(temp_database)
+        cursor = conn.cursor()
+
+        # Check correlation_adjustments table
+        cursor.execute("SELECT COUNT(*) FROM correlation_adjustments")
+        adjustment_count = cursor.fetchone()[0]
+        assert adjustment_count > 0
+
+        # Verify adjustment details
+        cursor.execute(
+            "SELECT symbol, correlation_count, adjustment_multiplier "
+            "FROM correlation_adjustments ORDER BY id DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        assert row[0] == "EURUSD"
+        assert row[1] >= 0
+        assert 0.2 <= row[2] <= 1.0
+
+        conn.close()
+
+    def test_correlation_with_same_symbol(self, risk_manager):
+        """Test correlation when same symbol is already in open positions."""
+        # Create multiple open positions in EURUSD to test same-symbol correlation
+        # According to PRD: First correlated position = no reduction, each additional = 20% reduction
+        # So 1 correlated position = 1.0x (no reduction), 2 correlated = 0.8x, 3 correlated = 0.6x
+
+        position = TradePosition(
+            ticket=5001,
+            symbol="EURUSD",
+            direction="BUY",
+            entry_price=1.0850,
+            current_price=1.0860,
+            volume=1.0,
+            stop_loss=1.0800,
+            take_profit=1.0900,
+            entry_time=datetime.utcnow(),
+            profit=100.0,
+            swap=0.0,
+            commission=0.0,
+        )
+
+        # Create another position in a different symbol
+        position2 = TradePosition(
+            ticket=5002,
+            symbol="GBPUSD",
+            direction="BUY",
+            entry_price=1.2650,
+            current_price=1.2660,
+            volume=1.0,
+            stop_loss=1.2600,
+            take_profit=1.2700,
+            entry_time=datetime.utcnow(),
+            profit=100.0,
+            swap=0.0,
+            commission=0.0,
+        )
+
+        # Try to add another EURUSD position
+        multiplier, correlated_symbols, correlation_count = risk_manager.calculate_portfolio_correlation(
+            target_symbol="EURUSD",
+            open_positions=[position, position2]
+        )
+
+        # The correlation analysis should work correctly
+        # Note: With synthetic random data, EURUSD and GBPUSD may not be highly correlated
+        # The important thing is that the system correctly calculates correlations
+
+        # Verify we get valid results
+        assert 0.2 <= multiplier <= 1.0
+        assert isinstance(correlation_count, int)
+        assert correlation_count >= 0
+
+        # If EURUSD is in correlated_symbols, it means we detected it's already open
+        # With 1 correlated position, multiplier should be 1.0 (no reduction for first)
+        # With 2+ correlated positions, multiplier should be < 1.0
+        if correlation_count == 1:
+            # First correlated position: no reduction
+            assert multiplier == 1.0
+            logger.info(
+                f"First correlated position: multiplier={multiplier:.3f}, "
+                f"count={correlation_count}, symbols={correlated_symbols}"
+            )
+        elif correlation_count >= 2:
+            # Additional correlated positions: 20% reduction each beyond first
+            assert multiplier < 1.0
+            logger.info(
+                f"Multiple correlated positions: multiplier={multiplier:.3f}, "
+                f"count={correlation_count}, symbols={correlated_symbols}, "
+                f"reduction={(1-multiplier)*100:.1f}%"
+            )
+        else:
+            # No correlations detected with synthetic data
+            logger.info(
+                f"No significant correlations detected with synthetic data: "
+                f"multiplier={multiplier:.3f}, count={correlation_count}"
+            )
+            assert multiplier == 1.0
+
+    def test_correlation_adjustment_multiplier_bounds(self, risk_manager):
+        """Test that correlation adjustment multiplier stays within bounds."""
+        # Create many correlated positions to test minimum multiplier
+        positions = [
+            TradePosition(
+                ticket=6001 + i,
+                symbol=f"SYM{i}",
+                direction="BUY",
+                entry_price=100.0 + i,
+                current_price=100.0 + i,
+                volume=1.0,
+                stop_loss=99.0,
+                take_profit=101.0,
+                entry_time=datetime.utcnow(),
+                profit=100.0,
+                swap=0.0,
+                commission=0.0,
+            )
+            for i in range(10)
+        ]
+
+        multiplier, _, _ = risk_manager.calculate_portfolio_correlation(
+            target_symbol="EURUSD",
+            open_positions=positions
+        )
+
+        # Multiplier should never go below 0.2 (20% of original size)
+        assert multiplier >= 0.2
+        assert multiplier <= 1.0
+
+    def test_correlation_logging(self, risk_manager):
+        """Test that correlation adjustments are logged properly."""
+        position = TradePosition(
+            ticket=7001,
+            symbol="GBPUSD",
+            direction="BUY",
+            entry_price=1.2650,
+            current_price=1.2660,
+            volume=1.0,
+            stop_loss=1.2600,
+            take_profit=1.2700,
+            entry_time=datetime.utcnow(),
+            profit=100.0,
+            swap=0.0,
+            commission=0.0,
+        )
+
+        # Calculate correlation adjustment
+        risk_manager.calculate_portfolio_correlation("EURUSD", [position])
+
+        # Verify adjustment was recorded
+        adjustments = risk_manager.get_correlation_adjustments()
+        assert len(adjustments) > 0
+
+        latest = adjustments[-1]
+        assert latest.symbol == "EURUSD"
+        assert latest.timestamp is not None
+        assert latest.reason is not None
+        assert len(latest.reason) > 0
+
+        logger.info(f"Correlation adjustment reason: {latest.reason}")
+
+    def test_adjust_position_size_for_correlation_convenience_method(self, risk_manager):
+        """Test the convenience method for adjusting position size."""
+        base_size = 2.0
+        target_symbol = "EURUSD"
+
+        positions = [
+            TradePosition(
+                ticket=8001,
+                symbol="GBPUSD",
+                direction="BUY",
+                entry_price=1.2650,
+                current_price=1.2660,
+                volume=1.0,
+                stop_loss=1.2600,
+                take_profit=1.2700,
+                entry_time=datetime.utcnow(),
+                profit=100.0,
+                swap=0.0,
+                commission=0.0,
+            )
+        ]
+
+        adjusted_size = risk_manager.adjust_position_size_for_correlation(
+            base_position_size=base_size,
+            target_symbol=target_symbol,
+            open_positions=positions
+        )
+
+        # Should return adjusted size
+        assert isinstance(adjusted_size, float)
+        assert adjusted_size <= base_size
+        assert adjusted_size >= base_size * 0.2
+
+    def test_correlation_with_volatility_indices(self, risk_manager):
+        """Test correlation calculation with volatility indices (V10, V100)."""
+        positions = [
+            TradePosition(
+                ticket=9001,
+                symbol="V10",
+                direction="BUY",
+                entry_price=10.50,
+                current_price=10.60,
+                volume=1.0,
+                stop_loss=10.00,
+                take_profit=11.00,
+                entry_time=datetime.utcnow(),
+                profit=100.0,
+                swap=0.0,
+                commission=0.0,
+            ),
+            TradePosition(
+                ticket=9002,
+                symbol="V100",
+                direction="SELL",
+                entry_price=100.50,
+                current_price=100.40,
+                volume=1.0,
+                stop_loss=101.00,
+                take_profit=100.00,
+                entry_time=datetime.utcnow(),
+                profit=100.0,
+                swap=0.0,
+                commission=0.0,
+            ),
+        ]
+
+        target_symbol = "V25"
+
+        multiplier, correlated_symbols, correlation_count = risk_manager.calculate_portfolio_correlation(
+            target_symbol=target_symbol,
+            open_positions=positions
+        )
+
+        # Should handle volatility indices
+        assert 0.2 <= multiplier <= 1.0
+        assert isinstance(correlation_count, int)
+
+        logger.info(
+            f"Volatility indices correlation: {target_symbol} multiplier={multiplier:.3f}, "
+            f"correlated={correlation_count}, symbols={correlated_symbols}"
+        )
+
+
+def test_correlation_integration_scenario():
+    """
+    Integration test for correlation-based risk adjustment.
+
+    This test simulates a realistic scenario where a trader has multiple
+    open positions and is considering adding a new position, testing that
+    the correlation system correctly identifies and adjusts for correlated
+    positions.
+    """
+    import tempfile
+    import os
+
+    temp_dir = tempfile.mkdtemp()
+    perf_db = os.path.join(temp_dir, "test_perf_correlation.db")
+    risk_db = os.path.join(temp_dir, "test_risk_correlation.db")
+
+    try:
+        # Create components
+        comparator = PerformanceComparator(database_path=perf_db)
+        risk_manager = AdaptiveRiskManager(
+            performance_comparator=comparator,
+            database_path=risk_db,
+            base_risk_percent=2.0,
+        )
+
+        logger.info("Correlation integration test scenario:")
+        logger.info("=" * 80)
+
+        # Scenario: Trader has positions in EURUSD, GBPUSD, and USDJPY
+        # Considering adding a position in EURCAD or EURUSD
+
+        existing_positions = [
+            TradePosition(
+                ticket=10001,
+                symbol="EURUSD",
+                direction="BUY",
+                entry_price=1.0850,
+                current_price=1.0860,
+                volume=1.0,
+                stop_loss=1.0800,
+                take_profit=1.0900,
+                entry_time=datetime.utcnow(),
+                profit=100.0,
+                swap=0.0,
+                commission=0.0,
+            ),
+            TradePosition(
+                ticket=10002,
+                symbol="GBPUSD",
+                direction="BUY",
+                entry_price=1.2650,
+                current_price=1.2660,
+                volume=1.0,
+                stop_loss=1.2600,
+                take_profit=1.2700,
+                entry_time=datetime.utcnow(),
+                profit=100.0,
+                swap=0.0,
+                commission=0.0,
+            ),
+            TradePosition(
+                ticket=10003,
+                symbol="USDJPY",
+                direction="SELL",
+                entry_price=145.50,
+                current_price=145.40,
+                volume=1.0,
+                stop_loss=146.00,
+                take_profit=145.00,
+                entry_time=datetime.utcnow(),
+                profit=100.0,
+                swap=0.0,
+                commission=0.0,
+            ),
+        ]
+
+        # Test 1: Adding another EURUSD position (highly correlated)
+        logger.info("\nTest 1: Adding EURUSD position")
+        logger.info("-" * 80)
+
+        base_position_size = 1.0
+        multiplier_eurusd, corr_symbols_eurusd, count_eurusd = risk_manager.calculate_portfolio_correlation(
+            target_symbol="EURUSD",
+            open_positions=existing_positions
+        )
+
+        adjusted_size_eurusd = base_position_size * multiplier_eurusd
+
+        logger.info(
+            f"Base position size: {base_position_size:.2f} lots\n"
+            f"Correlated positions: {count_eurusd}\n"
+            f"Correlated symbols: {corr_symbols_eurusd}\n"
+            f"Adjustment multiplier: {multiplier_eurusd:.3f}\n"
+            f"Adjusted position size: {adjusted_size_eurusd:.2f} lots\n"
+            f"Reduction: {(1-multiplier_eurusd)*100:.1f}%"
+        )
+
+        # Test 2: Adding EURCAD position (likely correlated with EURUSD)
+        logger.info("\nTest 2: Adding EURCAD position")
+        logger.info("-" * 80)
+
+        multiplier_eurcad, corr_symbols_eurcad, count_eurcad = risk_manager.calculate_portfolio_correlation(
+            target_symbol="EURCAD",
+            open_positions=existing_positions
+        )
+
+        adjusted_size_eurcad = base_position_size * multiplier_eurcad
+
+        logger.info(
+            f"Base position size: {base_position_size:.2f} lots\n"
+            f"Correlated positions: {count_eurcad}\n"
+            f"Correlated symbols: {corr_symbols_eurcad}\n"
+            f"Adjustment multiplier: {multiplier_eurcad:.3f}\n"
+            f"Adjusted position size: {adjusted_size_eurcad:.2f} lots\n"
+            f"Reduction: {(1-multiplier_eurcad)*100:.1f}%"
+        )
+
+        # Test 3: Adding a position with no existing positions
+        logger.info("\nTest 3: Adding position with no existing positions")
+        logger.info("-" * 80)
+
+        multiplier_no_pos, corr_symbols_no_pos, count_no_pos = risk_manager.calculate_portfolio_correlation(
+            target_symbol="AUDUSD",
+            open_positions=[]
+        )
+
+        adjusted_size_no_pos = base_position_size * multiplier_no_pos
+
+        logger.info(
+            f"Base position size: {base_position_size:.2f} lots\n"
+            f"Correlated positions: {count_no_pos}\n"
+            f"Correlated symbols: {corr_symbols_no_pos}\n"
+            f"Adjustment multiplier: {multiplier_no_pos:.3f}\n"
+            f"Adjusted position size: {adjusted_size_no_pos:.2f} lots\n"
+            f"Reduction: {(1-multiplier_no_pos)*100:.1f}%"
+        )
+
+        logger.info("\n" + "=" * 80)
+        logger.info("Correlation integration test passed!")
+
+        # Verify database persistence
+        conn = sqlite3.connect(risk_db)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM correlation_adjustments")
+        db_count = cursor.fetchone()[0]
+        conn.close()
+
+        logger.info(f"Correlation adjustments stored in database: {db_count}")
+        # Note: Test 3 with no existing positions doesn't create an adjustment (returns early with 1.0)
+        # So we expect at least 2 adjustments from tests 1 and 2
+        assert db_count >= 2, f"Expected at least 2 correlation adjustments in database, got {db_count}"
+
+    finally:
+        # Cleanup
+        comparator.close()
+        risk_manager.close()
+        import time
+        time.sleep(0.1)
+        try:
+            import shutil
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            pass

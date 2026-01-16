@@ -128,6 +128,39 @@ class DrawdownAdjustment:
         }
 
 
+@dataclass
+class CorrelationAdjustment:
+    """
+    Record of a correlation-based risk adjustment.
+
+    Attributes:
+        timestamp: When the adjustment occurred
+        symbol: Symbol being evaluated for new position
+        correlated_symbols: List of symbols highly correlated with the new symbol
+        correlation_count: Number of correlated positions already open
+        adjustment_multiplier: Position size multiplier applied
+        reason: Explanation for the adjustment
+    """
+
+    timestamp: datetime
+    symbol: str
+    correlated_symbols: list[str]
+    correlation_count: int
+    adjustment_multiplier: float
+    reason: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for storage."""
+        return {
+            "timestamp": self.timestamp.isoformat(),
+            "symbol": self.symbol,
+            "correlated_symbols": self.correlated_symbols,
+            "correlation_count": self.correlation_count,
+            "adjustment_multiplier": round(self.adjustment_multiplier, 3),
+            "reason": self.reason,
+        }
+
+
 class AdaptiveRiskManager:
     """
     Manages adaptive risk based on recent trading performance and market volatility.
@@ -227,11 +260,15 @@ class AdaptiveRiskManager:
         self._adjustment_history: list[RiskAdjustment] = []
         self._volatility_adjustments: list[VolatilityAdjustment] = []
         self._drawdown_adjustments: list[DrawdownAdjustment] = []
+        self._correlation_adjustments: list[CorrelationAdjustment] = []
         self._current_risk_percent = base_risk_percent
         self._price_data_cache: dict[str, pd.DataFrame] = {}
         self._initial_account_balance = initial_account_balance
         self._peak_equity = initial_account_balance
         self._trading_halted = False
+        self._correlation_threshold: float = 0.7
+        self._correlation_lookback: int = 100
+        self._correlation_reduction_per_position: float = 0.2
 
         # Initialize database
         self._initialize_database()
@@ -319,6 +356,20 @@ class AdaptiveRiskManager:
                 )
             """)
 
+            # Create correlation_adjustments table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS correlation_adjustments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    correlated_symbols TEXT NOT NULL,
+                    correlation_count INTEGER NOT NULL,
+                    adjustment_multiplier REAL NOT NULL,
+                    reason TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Create indexes
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_adjustments_timestamp
@@ -343,6 +394,16 @@ class AdaptiveRiskManager:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_drawdown_timestamp
                 ON drawdown_adjustments(timestamp DESC)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_correlation_timestamp
+                ON correlation_adjustments(timestamp DESC)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_correlation_symbol
+                ON correlation_adjustments(symbol)
             """)
 
             self._connection.commit()
@@ -1263,3 +1324,253 @@ class AdaptiveRiskManager:
     def __del__(self) -> None:
         """Cleanup when object is destroyed."""
         self.close()
+
+    def calculate_portfolio_correlation(
+        self,
+        target_symbol: str,
+        open_positions: list[TradePosition]
+    ) -> tuple[float, list[str], int]:
+        """
+        Calculate correlation-based risk adjustment for a potential new position.
+
+        This method analyzes the correlation between the target symbol and all
+        currently open positions. It reduces position size when there are multiple
+        positions in highly correlated symbols (correlation > 0.7).
+
+        Args:
+            target_symbol: Symbol for which to calculate correlation adjustment
+            open_positions: List of currently open positions
+
+        Returns:
+            Tuple of (adjustment_multiplier, correlated_symbols, correlation_count)
+            - adjustment_multiplier: Position size multiplier (1.0 = no adjustment)
+            - correlated_symbols: List of symbols correlated with target_symbol
+            - correlation_count: Number of correlated positions found
+        """
+        if not open_positions:
+            # No open positions, no correlation risk
+            logger.debug(f"No open positions, no correlation adjustment needed for {target_symbol}")
+            return 1.0, [], 0
+
+        # Get unique symbols from open positions
+        open_symbols = list(set(pos.symbol for pos in open_positions))
+
+        # Create list of unique symbols to analyze (target + open positions)
+        symbols_to_analyze = list(set([target_symbol] + open_symbols))
+
+        # If we only have one unique symbol (target not in open positions), no correlation analysis needed
+        if len(symbols_to_analyze) < 2:
+            logger.debug(f"Only one unique symbol to analyze, no correlation adjustment needed for {target_symbol}")
+            return 1.0, [], 0
+
+        logger.debug(f"Analyzing correlation for {target_symbol} against {len(open_symbols)} open symbols")
+
+        # Calculate correlation matrix
+        correlation_matrix = self._calculate_correlation_matrix(symbols_to_analyze)
+
+        if correlation_matrix is None or correlation_matrix.empty:
+            logger.warning(f"Could not calculate correlation matrix for {target_symbol}, using no adjustment")
+            return 1.0, [], 0
+
+        # Find symbols highly correlated with target (correlation > 0.7)
+        correlated_symbols = []
+        target_correlations = correlation_matrix[target_symbol]
+
+        for symbol in open_symbols:
+            if symbol in target_correlations:
+                correlation = target_correlations[symbol]
+                # Check if correlation is significant (can be positive or negative)
+                if abs(correlation) > self._correlation_threshold:
+                    correlated_symbols.append((symbol, correlation))
+
+        # Sort by absolute correlation (highest first)
+        correlated_symbols.sort(key=lambda x: abs(x[1]), reverse=True)
+
+        correlation_count = len(correlated_symbols)
+        correlated_symbol_names = [sym for sym, _ in correlated_symbols]
+
+        # Calculate adjustment multiplier
+        # First correlated position: no reduction (1.0)
+        # Each additional correlated position: 20% reduction
+        if correlation_count == 0:
+            adjustment_multiplier = 1.0
+            reason = (
+                f"No significant correlations found for {target_symbol}. "
+                f"Using standard position size."
+            )
+        else:
+            # Calculate reduction: 20% for each correlated position beyond the first
+            reduction = min(correlation_count - 1, 0) * self._correlation_reduction_per_position
+            adjustment_multiplier = max(0.2, 1.0 - reduction)  # Minimum 20% of original size
+
+            correlation_details = ", ".join([
+                f"{sym} ({corr:.2f})" for sym, corr in correlated_symbols
+            ])
+            reason = (
+                f"Found {correlation_count} correlated position(s) for {target_symbol}: "
+                f"{correlation_details}. "
+                f"Applying {adjustment_multiplier:.2f}x position size multiplier "
+                f"({(1-adjustment_multiplier)*100:.1f}% reduction)."
+            )
+
+        # Create and store adjustment record
+        adjustment = CorrelationAdjustment(
+            timestamp=datetime.utcnow(),
+            symbol=target_symbol,
+            correlated_symbols=correlated_symbol_names,
+            correlation_count=correlation_count,
+            adjustment_multiplier=adjustment_multiplier,
+            reason=reason,
+        )
+
+        self._correlation_adjustments.append(adjustment)
+        self._store_correlation_adjustment(adjustment)
+
+        # Log the adjustment
+        logger.info(
+            f"Correlation adjustment for {target_symbol}: {adjustment_multiplier:.3f}x | "
+            f"Correlated positions: {correlation_count} | "
+            f"Symbols: {correlated_symbol_names if correlated_symbol_names else 'None'}"
+        )
+
+        return adjustment_multiplier, correlated_symbol_names, correlation_count
+
+    def _calculate_correlation_matrix(self, symbols: list[str]) -> Optional[pd.DataFrame]:
+        """
+        Calculate correlation matrix between symbols using historical price data.
+
+        Uses the last 100 bars of close prices to calculate Pearson correlation
+        coefficients between all pairs of symbols.
+
+        Args:
+            symbols: List of symbols to analyze
+
+        Returns:
+            DataFrame correlation matrix, or None if calculation fails
+        """
+        if len(symbols) < 2:
+            logger.debug("Need at least 2 symbols to calculate correlation matrix")
+            return None
+
+        try:
+            # Fetch price data for all symbols
+            price_data = {}
+            for symbol in symbols:
+                data = self._fetch_price_data(symbol)
+                if data is not None and len(data) >= self._correlation_lookback:
+                    # Use last N bars of close prices
+                    price_data[symbol] = data['close'].iloc[-self._correlation_lookback:]
+                else:
+                    logger.warning(f"Insufficient price data for {symbol}")
+
+            if len(price_data) < 2:
+                logger.warning("Need price data for at least 2 symbols to calculate correlation")
+                return None
+
+            # Create DataFrame with all symbols
+            df = pd.DataFrame(price_data)
+
+            # Calculate correlation matrix
+            correlation_matrix = df.corr(method='pearson')
+
+            logger.debug(f"Calculated correlation matrix for {len(symbols)} symbols")
+            logger.debug(f"Correlation matrix shape: {correlation_matrix.shape}")
+
+            return correlation_matrix
+
+        except Exception as e:
+            logger.error(f"Failed to calculate correlation matrix: {e}")
+            return None
+
+    def adjust_position_size_for_correlation(
+        self,
+        base_position_size: float,
+        target_symbol: str,
+        open_positions: list[TradePosition]
+    ) -> float:
+        """
+        Adjust position size based on portfolio correlation.
+
+        This is a convenience method that combines correlation analysis with
+        position size calculation.
+
+        Args:
+            base_position_size: Calculated position size before correlation adjustment
+            target_symbol: Symbol for the new position
+            open_positions: List of currently open positions
+
+        Returns:
+            Adjusted position size in lots
+        """
+        multiplier, correlated_symbols, correlation_count = self.calculate_portfolio_correlation(
+            target_symbol=target_symbol,
+            open_positions=open_positions
+        )
+
+        adjusted_size = base_position_size * multiplier
+
+        logger.info(
+            f"Position size adjustment for {target_symbol}: "
+            f"{base_position_size:.2f} -> {adjusted_size:.2f} lots "
+            f"(multiplier: {multiplier:.3f}, correlated: {correlation_count})"
+        )
+
+        return adjusted_size
+
+    def get_correlation_adjustments(
+        self,
+        symbol: Optional[str] = None,
+        limit: int = 100
+    ) -> list[CorrelationAdjustment]:
+        """
+        Get correlation adjustment history.
+
+        Args:
+            symbol: Optional symbol to filter by
+            limit: Maximum number of adjustments to return
+
+        Returns:
+            List of CorrelationAdjustment records
+        """
+        if symbol is None:
+            return self._correlation_adjustments[-limit:]
+        return [c for c in self._correlation_adjustments if c.symbol == symbol][-limit:]
+
+    def _store_correlation_adjustment(self, adjustment: CorrelationAdjustment) -> None:
+        """
+        Store a correlation adjustment in the database.
+
+        Args:
+            adjustment: CorrelationAdjustment to store
+        """
+        if self._connection is None:
+            logger.warning("Database connection not available, adjustment not stored")
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Store correlated symbols as JSON string
+            import json
+            correlated_symbols_json = json.dumps(adjustment.correlated_symbols)
+
+            cursor.execute("""
+                INSERT INTO correlation_adjustments (
+                    timestamp, symbol, correlated_symbols,
+                    correlation_count, adjustment_multiplier, reason
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                adjustment.timestamp.isoformat(),
+                adjustment.symbol,
+                correlated_symbols_json,
+                adjustment.correlation_count,
+                adjustment.adjustment_multiplier,
+                adjustment.reason,
+            ))
+
+            self._connection.commit()
+
+            logger.debug(f"Correlation adjustment stored in database for {adjustment.symbol}")
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to store correlation adjustment in database: {e}")
