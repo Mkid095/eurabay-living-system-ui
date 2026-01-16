@@ -191,6 +191,51 @@ class SessionRiskAdjustment:
         }
 
 
+@dataclass
+class DynamicStopAdjustment:
+    """
+    Record of a dynamic stop loss adjustment.
+
+    Attributes:
+        timestamp: When the stop was calculated
+        symbol: Trading symbol
+        entry_price: Entry price for the position
+        direction: "BUY" or "SELL"
+        current_atr: Current ATR value
+        atr_multiplier: ATR multiplier used for stop calculation
+        volatility_regime: Detected volatility regime (low, normal, high)
+        calculated_stop: The calculated stop loss price
+        stop_distance_pct: Stop distance as percentage of price
+        reason: Explanation for the stop calculation
+    """
+
+    timestamp: datetime
+    symbol: str
+    entry_price: float
+    direction: str
+    current_atr: float
+    atr_multiplier: float
+    volatility_regime: str
+    calculated_stop: float
+    stop_distance_pct: float
+    reason: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for storage."""
+        return {
+            "timestamp": self.timestamp.isoformat(),
+            "symbol": self.symbol,
+            "entry_price": round(self.entry_price, 6),
+            "direction": self.direction,
+            "current_atr": round(self.current_atr, 6),
+            "atr_multiplier": round(self.atr_multiplier, 3),
+            "volatility_regime": self.volatility_regime,
+            "calculated_stop": round(self.calculated_stop, 6),
+            "stop_distance_pct": round(self.stop_distance_pct, 4),
+            "reason": self.reason,
+        }
+
+
 class AdaptiveRiskManager:
     """
     Manages adaptive risk based on recent trading performance and market volatility.
@@ -253,6 +298,10 @@ class AdaptiveRiskManager:
         initial_account_balance: float = 10000.0,
         hourly_risk_multipliers: Optional[dict[int, float]] = None,
         enable_session_adjustment: bool = True,
+        min_stop_distance_pct: float = 0.5,
+        max_stop_distance_pct: float = 2.0,
+        low_volatility_atr_multiplier: float = 1.5,
+        high_volatility_atr_multiplier: float = 3.0,
     ):
         """
         Initialize the AdaptiveRiskManager.
@@ -275,6 +324,10 @@ class AdaptiveRiskManager:
             initial_account_balance: Starting account balance for equity curve tracking (default: 10000.0)
             hourly_risk_multipliers: Dict mapping hour (0-23) to risk multiplier (default: None)
             enable_session_adjustment: Whether to enable time-based session risk adjustment (default: True)
+            min_stop_distance_pct: Minimum stop distance as percentage of price (default: 0.5%)
+            max_stop_distance_pct: Maximum stop distance as percentage of price (default: 2.0%)
+            low_volatility_atr_multiplier: ATR multiplier for low volatility stops (default: 1.5)
+            high_volatility_atr_multiplier: ATR multiplier for high volatility stops (default: 3.0)
         """
         self._performance_comparator = performance_comparator
         self._database_path = database_path
@@ -308,6 +361,13 @@ class AdaptiveRiskManager:
         self._enable_session_adjustment = enable_session_adjustment
         self._hourly_risk_multipliers = hourly_risk_multipliers or self._get_default_hourly_multipliers()
         self._session_risk_adjustments: list[SessionRiskAdjustment] = []
+
+        # Dynamic stop loss parameters
+        self._min_stop_distance_pct = min_stop_distance_pct
+        self._max_stop_distance_pct = max_stop_distance_pct
+        self._low_volatility_atr_multiplier = low_volatility_atr_multiplier
+        self._high_volatility_atr_multiplier = high_volatility_atr_multiplier
+        self._dynamic_stop_adjustments: list[DynamicStopAdjustment] = []
 
         # Initialize database
         self._initialize_database()
@@ -422,6 +482,24 @@ class AdaptiveRiskManager:
                 )
             """)
 
+            # Create dynamic_stop_adjustments table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS dynamic_stop_adjustments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    entry_price REAL NOT NULL,
+                    direction TEXT NOT NULL,
+                    current_atr REAL NOT NULL,
+                    atr_multiplier REAL NOT NULL,
+                    volatility_regime TEXT NOT NULL,
+                    calculated_stop REAL NOT NULL,
+                    stop_distance_pct REAL NOT NULL,
+                    reason TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Create indexes
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_adjustments_timestamp
@@ -466,6 +544,16 @@ class AdaptiveRiskManager:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_session_hour
                 ON session_risk_adjustments(hour)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_dynamic_stop_timestamp
+                ON dynamic_stop_adjustments(timestamp DESC)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_dynamic_stop_symbol
+                ON dynamic_stop_adjustments(symbol)
             """)
 
             self._connection.commit()
@@ -1796,3 +1884,267 @@ class AdaptiveRiskManager:
 
         except sqlite3.Error as e:
             logger.error(f"Failed to store session risk adjustment in database: {e}")
+
+    def calculate_dynamic_stop(
+        self,
+        symbol: str,
+        entry_price: float,
+        direction: str,
+    ) -> tuple[float, float, str]:
+        """
+        Calculate dynamic stop loss based on current volatility (ATR).
+
+        This method implements dynamic stop loss adjustment that adapts to market
+        volatility conditions. Instead of using fixed pip distances, it uses ATR
+        (Average True Range) to set appropriate stop distances that account for
+        current market noise and volatility.
+
+        Formula:
+            stop = entry ± (ATR * multiplier)
+            Where multiplier varies based on volatility regime:
+            - Low volatility: 1.5x ATR (tighter stops)
+            - Normal volatility: 2.25x ATR
+            - High volatility: 3x ATR (wider stops to avoid noise)
+
+        The stop distance is also constrained by minimum and maximum percentages
+        of the entry price to ensure stops are neither too tight nor too wide.
+
+        Args:
+            symbol: Trading symbol (e.g., "EURUSD", "GBPUSD", "V10", "V100")
+            entry_price: Entry price for the position
+            direction: "BUY" or "SELL"
+
+        Returns:
+            Tuple of (stop_loss_price, stop_distance_pct, volatility_regime)
+            - stop_loss_price: Calculated stop loss price
+            - stop_distance_pct: Stop distance as percentage of entry price
+            - volatility_regime: Detected volatility regime ("low", "normal", "high")
+        """
+        try:
+            # Fetch price data for ATR calculation
+            price_data = self._fetch_price_data(symbol)
+
+            if price_data is None or len(price_data) < self._atr_lookback:
+                logger.warning(
+                    f"Insufficient price data for {symbol} to calculate dynamic stop. "
+                    f"Using default stop (2% away from entry)."
+                )
+                # Fallback: use 2% stop distance
+                stop_distance_pct = 2.0
+                if direction.upper() == "BUY":
+                    stop_loss = entry_price * (1 - stop_distance_pct / 100)
+                else:
+                    stop_loss = entry_price * (1 + stop_distance_pct / 100)
+                return stop_loss, stop_distance_pct, "unknown"
+
+            # Calculate ATR values
+            atr_values = self._calculate_atr(price_data, self._atr_period)
+
+            if len(atr_values) < self._atr_lookback:
+                logger.warning(
+                    f"Insufficient ATR values for {symbol}. "
+                    f"Using default stop (2% away from entry)."
+                )
+                stop_distance_pct = 2.0
+                if direction.upper() == "BUY":
+                    stop_loss = entry_price * (1 - stop_distance_pct / 100)
+                else:
+                    stop_loss = entry_price * (1 + stop_distance_pct / 100)
+                return stop_loss, stop_distance_pct, "unknown"
+
+            # Get current ATR (most recent)
+            current_atr = atr_values.iloc[-1]
+
+            # Calculate average ATR over lookback period
+            average_atr = atr_values.iloc[-self._atr_lookback:].mean()
+
+            # Detect volatility regime
+            volatility_ratio = current_atr / average_atr if average_atr > 0 else 1.0
+            volatility_regime, atr_multiplier = self._detect_volatility_regime(volatility_ratio)
+
+            # Calculate initial stop distance using ATR
+            atr_stop_distance = current_atr * atr_multiplier
+
+            # Calculate stop as percentage of price
+            atr_stop_distance_pct = (atr_stop_distance / entry_price) * 100
+
+            # Apply minimum and maximum stop distance constraints
+            final_stop_distance_pct = max(
+                self._min_stop_distance_pct,
+                min(self._max_stop_distance_pct, atr_stop_distance_pct)
+            )
+
+            # Recalculate stop distance in price units with constrained percentage
+            final_stop_distance = entry_price * (final_stop_distance_pct / 100)
+
+            # Calculate final stop loss price
+            if direction.upper() == "BUY":
+                stop_loss = entry_price - final_stop_distance
+            else:  # SELL
+                stop_loss = entry_price + final_stop_distance
+
+            # Generate detailed reason
+            if volatility_regime == "low":
+                regime_description = (
+                    f"Low volatility detected (current ATR is {volatility_ratio:.2f}x average). "
+                    f"Using tighter stop ({atr_multiplier}x ATR = {atr_stop_distance:.6f}) "
+                    f"to maximize risk/reward ratio."
+                )
+            elif volatility_regime == "high":
+                regime_description = (
+                    f"High volatility detected (current ATR is {volatility_ratio:.2f}x average). "
+                    f"Using wider stop ({atr_multiplier}x ATR = {atr_stop_distance:.6f}) "
+                    f"to avoid being stopped out by market noise."
+                )
+            else:
+                regime_description = (
+                    f"Normal volatility conditions (current ATR is {volatility_ratio:.2f}x average). "
+                    f"Using standard stop ({atr_multiplier}x ATR = {atr_stop_distance:.6f})."
+                )
+
+            # Note if constraints were applied
+            constraint_note = ""
+            if final_stop_distance_pct != atr_stop_distance_pct:
+                if final_stop_distance_pct == self._min_stop_distance_pct:
+                    constraint_note = (
+                        f" ATR-based stop ({atr_stop_distance_pct:.3f}%) was too tight, "
+                        f"applied minimum constraint ({self._min_stop_distance_pct:.1f}%)."
+                    )
+                elif final_stop_distance_pct == self._max_stop_distance_pct:
+                    constraint_note = (
+                        f" ATR-based stop ({atr_stop_distance_pct:.3f}%) was too wide, "
+                        f"applied maximum constraint ({self._max_stop_distance_pct:.1f}%)."
+                    )
+
+            reason = (
+                f"Dynamic stop calculation for {symbol} {direction} position. "
+                f"Entry: {entry_price:.6f}, Current ATR: {current_atr:.6f}, "
+                f"Average ATR: {average_atr:.6f}. {regime_description}"
+                f" Stop: {stop_loss:.6f}, Distance: {final_stop_distance_pct:.3f}%."
+                f"{constraint_note}"
+            )
+
+            # Create and store dynamic stop adjustment record
+            adjustment = DynamicStopAdjustment(
+                timestamp=datetime.utcnow(),
+                symbol=symbol,
+                entry_price=entry_price,
+                direction=direction.upper(),
+                current_atr=float(current_atr),
+                atr_multiplier=atr_multiplier,
+                volatility_regime=volatility_regime,
+                calculated_stop=stop_loss,
+                stop_distance_pct=final_stop_distance_pct,
+                reason=reason,
+            )
+
+            self._dynamic_stop_adjustments.append(adjustment)
+            self._store_dynamic_stop_adjustment(adjustment)
+
+            # Log the calculation
+            logger.info(
+                f"Dynamic stop calculated for {symbol} {direction}: "
+                f"Entry={entry_price:.6f}, Stop={stop_loss:.6f}, "
+                f"Distance={final_stop_distance_pct:.3f}%, "
+                f"Regime={volatility_regime}, ATR={current_atr:.6f}, "
+                f"Multiplier={atr_multiplier:.2f}x"
+            )
+
+            return stop_loss, final_stop_distance_pct, volatility_regime
+
+        except Exception as e:
+            logger.error(f"Error calculating dynamic stop for {symbol}: {e}")
+            # Fallback: use 2% stop distance
+            stop_distance_pct = 2.0
+            if direction.upper() == "BUY":
+                stop_loss = entry_price * (1 - stop_distance_pct / 100)
+            else:
+                stop_loss = entry_price * (1 + stop_distance_pct / 100)
+            return stop_loss, stop_distance_pct, "error"
+
+    def _detect_volatility_regime(self, volatility_ratio: float) -> tuple[str, float]:
+        """
+        Detect volatility regime and return appropriate ATR multiplier for stop loss.
+
+        Volatility regimes are classified based on the ratio of current ATR to
+        average ATR over the lookback period:
+        - Low volatility: ratio < 0.8 (use 1.5x ATR for tighter stops)
+        - Normal volatility: 0.8 <= ratio <= 1.2 (use 2.25x ATR)
+        - High volatility: ratio > 1.2 (use 3x ATR for wider stops)
+
+        Args:
+            volatility_ratio: Ratio of current ATR to average ATR
+
+        Returns:
+            Tuple of (volatility_regime, atr_multiplier)
+            - volatility_regime: "low", "normal", or "high"
+            - atr_multiplier: ATR multiplier to use for stop calculation
+        """
+        if volatility_ratio < 0.8:
+            # Low volatility - use tighter stops
+            return "low", self._low_volatility_atr_multiplier
+        elif volatility_ratio > 1.2:
+            # High volatility - use wider stops
+            return "high", self._high_volatility_atr_multiplier
+        else:
+            # Normal volatility - use intermediate multiplier
+            return "normal", (self._low_volatility_atr_multiplier + self._high_volatility_atr_multiplier) / 2
+
+    def get_dynamic_stop_adjustments(
+        self,
+        symbol: Optional[str] = None,
+        limit: int = 100
+    ) -> list[DynamicStopAdjustment]:
+        """
+        Get dynamic stop adjustment history.
+
+        Args:
+            symbol: Optional symbol to filter by
+            limit: Maximum number of adjustments to return
+
+        Returns:
+            List of DynamicStopAdjustment records
+        """
+        if symbol is None:
+            return self._dynamic_stop_adjustments[-limit:]
+        return [d for d in self._dynamic_stop_adjustments if d.symbol == symbol][-limit:]
+
+    def _store_dynamic_stop_adjustment(self, adjustment: DynamicStopAdjustment) -> None:
+        """
+        Store a dynamic stop adjustment in the database.
+
+        Args:
+            adjustment: DynamicStopAdjustment to store
+        """
+        if self._connection is None:
+            logger.warning("Database connection not available, adjustment not stored")
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            cursor.execute("""
+                INSERT INTO dynamic_stop_adjustments (
+                    timestamp, symbol, entry_price, direction,
+                    current_atr, atr_multiplier, volatility_regime,
+                    calculated_stop, stop_distance_pct, reason
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                adjustment.timestamp.isoformat(),
+                adjustment.symbol,
+                adjustment.entry_price,
+                adjustment.direction,
+                adjustment.current_atr,
+                adjustment.atr_multiplier,
+                adjustment.volatility_regime,
+                adjustment.calculated_stop,
+                adjustment.stop_distance_pct,
+                adjustment.reason,
+            ))
+
+            self._connection.commit()
+
+            logger.debug(f"Dynamic stop adjustment stored in database for {adjustment.symbol}")
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to store dynamic stop adjustment in database: {e}")
