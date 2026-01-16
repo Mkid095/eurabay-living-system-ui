@@ -322,8 +322,8 @@
       "mavenSteps": [3, 5, 6],
       "mcpTools": {},
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Successfully implemented MT5TerminalStatus component in src/components/dashboard/MT5TerminalStatus.tsx. Created comprehensive component displaying detailed MT5 terminal status information. Component displays terminal path, build version, connection state with colored badge (green for connected, red for disconnected/error, yellow for error state), ping latency in ms, and last heartbeat time formatted with month/day/time. Shows data buffers status for each symbol (V10-V100) with color-coded indicators (green < 50%, yellow 50-80%, red > 80%) and percentage usage. Displays trade allowed flag with Shield/ShieldAlert icon and colored status (green for allowed, red for not allowed). Displays trade context info with Zap icon showing Available or Busy status. Added 'Test Connection' button that calls testConnection() from hook with loading state. Added 'Restart Connection' button that calls restartConnection() from hook with loading state. Added refresh button for manual status refresh. Shows MT5 error log with timestamps in collapsible section with error code badge, formatted date/time, error message, and error details. Auto-refreshes every 5 seconds via useMT5TerminalStatus hook. Uses shadcn/ui Card, Badge, Button, Collapsible components and CardSkeleton, CompactErrorState for loading/error states. Uses lucide-react icons for visual elements. Component integrated into MT5 section of main page.tsx alongside MT5AccountInfo in a 2-column grid layout. Typecheck passes with no errors."
     },
     {
       "id": "US-016",
@@ -343,8 +343,8 @@
       "mavenSteps": [1, 7],
       "mcpTools": {},
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Successfully implemented useMT5TerminalStatus hook in src/hooks/useMT5TerminalStatus.ts. Created comprehensive hook that provides access to MT5 terminal status information. Hook calls GET /mt5/terminal-info endpoint to fetch terminal status data including connection state, terminal path, build version, ping, last heartbeat, trade permissions, trade context busy status, data buffers for each symbol, and error logs. Returns MT5TerminalStatus object with all status data, loading state, and error state. Includes testConnection() function that calls POST /mt5/test-connection to test connection and refreshes status on success. Includes restartConnection() function that calls POST /mt5/restart-connection to restart connection and refreshes status on success. Includes refreshStatus() function for manual refresh of terminal status. Auto-refreshes every 5 seconds with proper interval cleanup on unmount. Uses useRef for mount tracking to prevent state updates after unmount. Initial fetch occurs immediately on mount. Date string conversion to Date objects for lastHeartbeat and error log timestamps. All fetch attempts include comprehensive error handling with proper error state management and console error logging. Typecheck passes with no errors."
     },
     {
       "id": "US-017",

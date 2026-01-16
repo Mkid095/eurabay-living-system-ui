@@ -33,6 +33,7 @@ import { EnhancedActiveTradesTable } from "@/components/dashboard/EnhancedActive
 import { EvolutionParameterControls } from "@/components/dashboard/EvolutionParameterControls";
 import { ManualEvolutionTrigger } from "@/components/dashboard/ManualEvolutionTrigger";
 import { MT5AccountInfo } from "@/components/dashboard/MT5AccountInfo";
+import { MT5TerminalStatus } from "@/components/dashboard/MT5TerminalStatus";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useEvolutionData } from "@/hooks/useEvolutionData";
 
@@ -301,7 +302,10 @@ export default function Home() {
                 <p className="text-muted-foreground">Manage MT5 terminal connection and account information</p>
               </div>
 
-              <MT5AccountInfo />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <MT5AccountInfo />
+                <MT5TerminalStatus />
+              </div>
             </div>
           )}
 
