@@ -8,7 +8,10 @@
 export const API_CONFIG = {
   // Base URL for the backend API
   // Using placeholder value - should be configured via environment variables
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api',
+
+  // WebSocket URL for real-time updates
+  wsURL: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws',
 
   // Request timeout in milliseconds (from NEXT_PUBLIC_API_TIMEOUT env var, default 30s)
   timeout: Number(process.env.NEXT_PUBLIC_API_TIMEOUT) || 30000,
@@ -18,6 +21,39 @@ export const API_CONFIG = {
     'Content-Type': 'application/json',
   },
 } as const;
+
+/**
+ * Validate required environment variables
+ * Throws an error if required variables are missing in production
+ */
+export function validateEnvVars(): void {
+  const requiredVars: Array<{ name: string; value: string | undefined }> = [
+    { name: 'NEXT_PUBLIC_API_URL', value: process.env.NEXT_PUBLIC_API_URL },
+    { name: 'NEXT_PUBLIC_WS_URL', value: process.env.NEXT_PUBLIC_WS_URL },
+    { name: 'NEXT_PUBLIC_API_TIMEOUT', value: process.env.NEXT_PUBLIC_API_TIMEOUT },
+  ];
+
+  const missingVars = requiredVars.filter((v) => !v.value);
+
+  if (missingVars.length > 0 && process.env.NODE_ENV === 'production') {
+    throw new Error(
+      `Missing required environment variables: ${missingVars.map((v) => v.name).join(', ')}`
+    );
+  }
+
+  // Log warnings in development if vars are missing
+  if (missingVars.length > 0 && process.env.NODE_ENV === 'development') {
+    console.warn(
+      `[API Config] Using default values for: ${missingVars.map((v) => v.name).join(', ')}`
+    );
+  }
+
+  // Validate API timeout is a valid number
+  const timeout = Number(process.env.NEXT_PUBLIC_API_TIMEOUT);
+  if (process.env.NEXT_PUBLIC_API_TIMEOUT && (isNaN(timeout) || timeout <= 0)) {
+    console.warn('[API Config] NEXT_PUBLIC_API_TIMEOUT must be a positive number, using default 30000ms');
+  }
+}
 
 /**
  * API endpoint paths
