@@ -232,8 +232,8 @@
       "mavenSteps": [1, 7],
       "mcpTools": {},
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Successfully implemented Deriv to MT5 price sync functions in src/lib/mt5/sync.ts. Created syncDerivToMT5() function calling POST /mt5/sync/prices endpoint with comprehensive symbol mapping between Deriv volatility indices (V10, V25, V50, V75, V100) and MT5 symbol names (Volatility 10 Index, Volatility 25 Index, etc.). Added bid/ask price support - uses provided bid/ask values or calculates from single price. Implemented DERIV_TO_MT5_SYMBOL_MAP and MT5_TO_DERIV_SYMBOL_MAP for bidirectional symbol conversion with support for alternative MT5 naming variations (VOL10, Volatility10, etc.). Added utility functions: mapDerivToMT5Symbol(), mapMT5ToDerivSymbol(), isDerivVolatilityIndex(), getSupportedVolatilityIndices(), getSymbolMapping(), and syncSingleDerivPrice() convenience function. All price sync attempts are logged with attempt details, synced count, failed count, errors, and duration. Price sync failures are handled gracefully with proper error logging instead of throwing exceptions. Returns PriceSyncResult with success boolean, synced count, failed count, and errors array. Error handling includes MT5ErrorCode mapping for connection-related errors (CONNECTION_LOST, TERMINAL_NOT_FOUND) and proper HTTP status code handling. Typecheck passes with no errors."
     },
     {
       "id": "US-012",
