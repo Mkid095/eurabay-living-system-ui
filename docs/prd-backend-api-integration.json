@@ -247,8 +247,8 @@
       "mavenSteps": [1, 7],
       "mcpTools": {},
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Updated src/hooks/useDashboardData.ts to call real API endpoints (portfolioApi, tradesApi, performanceApi, systemApi). Added loading state (boolean) and error state (Error | null) to hook. Added refetch() function for manual refresh. Implemented automatic polling every 3 seconds using setInterval. Handle API errors with fallback to last known good data using lastKnownDataRef. Use Promise.all to fetch portfolio, trades, metrics in parallel. Replaced all mock data returns with API calls. Typecheck passes. Initialize with default values for backward compatibility with existing components."
     },
     {
       "id": "US-013",
