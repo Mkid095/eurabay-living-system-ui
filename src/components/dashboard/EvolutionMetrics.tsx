@@ -3,8 +3,8 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Dna, Zap, Clock, RefreshCw, AlertCircle } from "lucide-react";
+import { CompactErrorState } from "@/components/ui/error-state";
+import { Activity, Dna, Zap, Clock, RefreshCw } from "lucide-react";
 import type { EvolutionMetrics as EvolutionMetricsType } from "@/types/evolution";
 import { useEvolutionData } from "@/hooks/useEvolutionData";
 
@@ -49,17 +49,17 @@ function EvolutionMetricsSkeleton() {
     <Card className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <Skeleton className="h-6 w-40 mb-2" />
-          <Skeleton className="h-4 w-48" />
+          <div className="h-6 w-40 bg-muted animate-pulse rounded mb-2" />
+          <div className="h-4 w-48 bg-muted animate-pulse rounded" />
         </div>
-        <Skeleton className="w-8 h-8 rounded-full" />
+        <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {[1, 2, 3, 4, 5].map((i) => (
           <div key={i} className="space-y-2">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-8 w-32" />
+            <div className="h-4 w-24 bg-muted animate-pulse rounded" />
+            <div className="h-8 w-32 bg-muted animate-pulse rounded" />
           </div>
         ))}
       </div>
@@ -78,17 +78,11 @@ interface EvolutionMetricsErrorProps {
 function EvolutionMetricsError({ message, onRetry }: EvolutionMetricsErrorProps) {
   return (
     <Card className="p-6">
-      <div className="flex flex-col items-center justify-center py-8 space-y-4">
-        <AlertCircle className="w-12 h-12 text-loss" />
-        <div className="text-center space-y-2">
-          <p className="text-lg font-semibold text-foreground">Failed to load evolution metrics</p>
-          <p className="text-sm text-muted-foreground">{message}</p>
-        </div>
-        <Button onClick={onRetry} variant="outline" size="sm">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Retry
-        </Button>
-      </div>
+      <CompactErrorState
+        error={message}
+        onRetry={onRetry}
+        retryButtonText="Retry"
+      />
     </Card>
   );
 }

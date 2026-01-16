@@ -4,13 +4,13 @@ import { useState, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
+import { DataTableSkeleton } from "@/components/ui/loading-skeleton";
+import { CompactErrorState } from "@/components/ui/error-state";
 import {
   TrendingUp,
   TrendingDown,
   RefreshCw,
-  AlertCircle,
   Clock,
   Target,
   Shield,
@@ -96,14 +96,10 @@ export function EnhancedActiveTradesTable() {
     return (
       <Card className="p-6">
         <div className="mb-6">
-          <Skeleton className="h-6 w-48 mb-2" />
-          <Skeleton className="h-4 w-64" />
+          <h3 className="text-lg font-semibold">Active Trades</h3>
+          <p className="text-sm text-muted-foreground">Loading trades...</p>
         </div>
-        <div className="space-y-3">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <Skeleton key={i} className="h-16 w-full" />
-          ))}
-        </div>
+        <DataTableSkeleton rowCount={5} columnCount={12} />
       </Card>
     );
   }
@@ -111,15 +107,11 @@ export function EnhancedActiveTradesTable() {
   if (error) {
     return (
       <Card className="p-6">
-        <div className="flex flex-col items-center justify-center py-12">
-          <AlertCircle className="w-12 h-12 text-destructive mb-4" />
-          <h3 className="text-lg font-semibold mb-2">Failed to Load Active Trades</h3>
-          <p className="text-sm text-muted-foreground mb-4">{error.message}</p>
-          <Button onClick={refreshTrades} variant="outline">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Retry
-          </Button>
-        </div>
+        <CompactErrorState
+          error={error}
+          onRetry={refreshTrades}
+          retryButtonText="Retry"
+        />
       </Card>
     );
   }

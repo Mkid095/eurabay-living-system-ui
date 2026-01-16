@@ -18,8 +18,8 @@
 
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, AlertCircle, RefreshCw } from "lucide-react";
+import { CompactErrorState } from "@/components/ui/error-state";
+import { TrendingUp } from "lucide-react";
 import { useEquityHistory } from "@/hooks/useEquityHistory";
 import type { DateRange } from "@/types/performance";
 import {
@@ -31,7 +31,6 @@ import {
   ResponsiveContainer,
   ReferenceLine,
   Scatter,
-  ScatterChart,
   Cell,
   TooltipProps,
 } from 'recharts';
@@ -44,12 +43,12 @@ function EquityCurveSkeleton() {
     <Card className="p-4 sm:p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <Skeleton className="h-6 w-40 mb-2" />
-          <Skeleton className="h-4 w-32" />
+          <div className="h-6 w-40 bg-muted animate-pulse rounded mb-2" />
+          <div className="h-4 w-32 bg-muted animate-pulse rounded" />
         </div>
-        <Skeleton className="h-8 w-24" />
+        <div className="h-8 w-24 bg-muted animate-pulse rounded" />
       </div>
-      <Skeleton className="h-64 w-full" />
+      <div className="h-64 w-full bg-muted/30 rounded-lg animate-pulse" />
     </Card>
   );
 }
@@ -65,17 +64,11 @@ interface EquityCurveErrorProps {
 function EquityCurveError({ message, onRetry }: EquityCurveErrorProps) {
   return (
     <Card className="p-6">
-      <div className="flex flex-col items-center justify-center py-8 space-y-4">
-        <AlertCircle className="w-12 h-12 text-loss" />
-        <div className="text-center space-y-2">
-          <p className="text-lg font-semibold text-foreground">Failed to load equity history</p>
-          <p className="text-sm text-muted-foreground">{message}</p>
-        </div>
-        <Button onClick={onRetry} variant="outline" size="sm">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Retry
-        </Button>
-      </div>
+      <CompactErrorState
+        error={message}
+        onRetry={onRetry}
+        retryButtonText="Retry"
+      />
     </Card>
   );
 }

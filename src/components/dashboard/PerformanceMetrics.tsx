@@ -23,9 +23,9 @@
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { Award, TrendingUp, TrendingDown, RefreshCw, AlertCircle, Clock } from "lucide-react";
+import { CompactErrorState } from "@/components/ui/error-state";
+import { Award, Clock } from "lucide-react";
 import { usePerformanceMetrics } from "@/hooks/usePerformanceMetrics";
 import type { DateRange } from "@/types/performance";
 
@@ -37,30 +37,30 @@ function PerformanceMetricsSkeleton() {
     <Card className="p-4 sm:p-6">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
-          <Skeleton className="w-5 h-5 rounded" />
-          <Skeleton className="h-6 w-40" />
+          <div className="w-5 h-5 rounded bg-muted animate-pulse" />
+          <div className="h-6 w-40 bg-muted animate-pulse rounded" />
         </div>
-        <Skeleton className="h-8 w-24" />
+        <div className="h-8 w-24 bg-muted animate-pulse rounded" />
       </div>
 
       <div className="space-y-6">
         <div className="space-y-2">
           <div className="flex justify-between">
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-6 w-16" />
+            <div className="h-4 w-20 bg-muted animate-pulse rounded" />
+            <div className="h-6 w-16 bg-muted animate-pulse rounded" />
           </div>
-          <Skeleton className="h-2 w-full" />
+          <div className="h-2 w-full bg-muted animate-pulse rounded" />
           <div className="flex justify-between">
-            <Skeleton className="h-3 w-16" />
-            <Skeleton className="h-3 w-16" />
+            <div className="h-3 w-16 bg-muted animate-pulse rounded" />
+            <div className="h-3 w-16 bg-muted animate-pulse rounded" />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <div key={i} className="p-3 bg-muted/50 rounded-lg border border-border space-y-2">
-              <Skeleton className="h-4 w-16" />
-              <Skeleton className="h-6 w-20" />
+              <div className="h-4 w-16 bg-muted animate-pulse rounded" />
+              <div className="h-6 w-20 bg-muted animate-pulse rounded" />
             </div>
           ))}
         </div>
@@ -80,17 +80,11 @@ interface PerformanceMetricsErrorProps {
 function PerformanceMetricsError({ message, onRetry }: PerformanceMetricsErrorProps) {
   return (
     <Card className="p-6">
-      <div className="flex flex-col items-center justify-center py-8 space-y-4">
-        <AlertCircle className="w-12 h-12 text-loss" />
-        <div className="text-center space-y-2">
-          <p className="text-lg font-semibold text-foreground">Failed to load performance metrics</p>
-          <p className="text-sm text-muted-foreground">{message}</p>
-        </div>
-        <Button onClick={onRetry} variant="outline" size="sm">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Retry
-        </Button>
-      </div>
+      <CompactErrorState
+        error={message}
+        onRetry={onRetry}
+        retryButtonText="Retry"
+      />
     </Card>
   );
 }
