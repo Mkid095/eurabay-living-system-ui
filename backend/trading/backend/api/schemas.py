@@ -251,3 +251,57 @@ class RiskScoreHistoryResponse(BaseModel):
 
     events: list[RiskLevelChangeEventResponse]
     total_count: int
+
+
+class MarketRegime(str, Enum):
+    """Market volatility regimes."""
+
+    LOW = "LOW"
+    NORMAL = "NORMAL"
+    HIGH = "HIGH"
+
+
+class RiskParameterSetResponse(BaseModel):
+    """Risk parameter set response model."""
+
+    base_risk_percent: float = Field(..., description="Base risk percentage")
+    stop_atr_multiplier: float = Field(..., description="ATR multiplier for stop loss")
+    tp_atr_multiplier: float = Field(..., description="ATR multiplier for take profit")
+
+
+class OptimizationResultResponse(BaseModel):
+    """Optimization result response model."""
+
+    base_risk_percent: float
+    stop_atr_multiplier: float
+    tp_atr_multiplier: float
+    sharpe_ratio: float
+    total_return: float
+    win_rate: float
+    profit_factor: float
+    max_drawdown: float
+    total_trades: int
+    symbol: str
+    market_regime: str
+    timestamp: datetime
+
+
+class OptimalParametersResponse(BaseModel):
+    """Optimal parameters response model."""
+
+    symbol: str
+    market_regime: str
+    base_risk_percent: float
+    stop_atr_multiplier: float
+    tp_atr_multiplier: float
+    sharpe_ratio: float
+    timestamp: datetime
+    valid_until: datetime
+
+
+class OptimizationHistoryResponse(BaseModel):
+    """Optimization history response model."""
+
+    results: list[OptimizationResultResponse]
+    total_count: int
+    symbol: str

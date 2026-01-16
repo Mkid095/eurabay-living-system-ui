@@ -6,7 +6,7 @@ active trade management as specified in US-011.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, HTTPException, status, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -32,6 +32,8 @@ from .schemas import (
     RiskScoreHistoryResponse,
     RiskScoreBreakdownResponse,
     RiskLevelChangeEventResponse,
+    OptimalParametersResponse,
+    OptimizationHistoryResponse,
 )
 
 # Configure logging
@@ -808,3 +810,174 @@ async def websocket_risk(websocket: WebSocket):
     except Exception as e:
         logger.error(f"Risk WebSocket error: {e}")
         risk_indicator_manager.remove_websocket_client(websocket)
+
+
+# =============================================================================
+# Risk Parameter Optimization Endpoints
+# =============================================================================
+
+class ParameterOptimizerManager:
+    """
+    Mock parameter optimizer manager for API demonstration.
+
+    In production, this would integrate with:
+    - RiskParameterOptimizer for parameter optimization
+    - AdaptiveRiskManager for applying optimized parameters
+    """
+
+    def __init__(self):
+        """Initialize with mock data."""
+        pass
+
+    async def get_optimal_parameters(self, symbol: str) -> Optional[dict]:
+        """Get optimal parameters for a symbol."""
+        # Mock implementation
+        return {
+            "symbol": symbol,
+            "market_regime": "NORMAL",
+            "base_risk_percent": 2.0,
+            "stop_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 2.5,
+            "sharpe_ratio": 1.85,
+            "timestamp": datetime.now(),
+            "valid_until": datetime.now() + timedelta(days=7),
+        }
+
+    async def run_optimization(self, symbol: str, force: bool = False) -> Optional[dict]:
+        """Run optimization for a symbol."""
+        # Mock implementation
+        return {
+            "symbol": symbol,
+            "market_regime": "NORMAL",
+            "base_risk_percent": 2.0,
+            "stop_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 2.5,
+            "sharpe_ratio": 1.85,
+            "timestamp": datetime.now(),
+            "valid_until": datetime.now() + timedelta(days=7),
+        }
+
+    async def get_optimization_history(
+        self, symbol: str, limit: int = 100
+    ) -> dict:
+        """Get optimization history for a symbol."""
+        # Mock implementation
+        return {
+            "results": [],
+            "total_count": 0,
+            "symbol": symbol,
+        }
+
+
+# Global parameter optimizer manager instance
+parameter_optimizer_manager = ParameterOptimizerManager()
+
+
+@router.get("/risk/parameters/{symbol:str}", response_model=OptimalParametersResponse)
+async def get_optimal_risk_parameters(symbol: str):
+    """
+    Get optimal risk parameters for a symbol.
+
+    Returns the optimal risk parameters (base risk %, stop ATR multiplier,
+    TP ATR multiplier) for the specified symbol based on historical
+    backtesting and current market regime.
+
+    Args:
+        symbol: Trading symbol (e.g., EURUSD, GBPUSD)
+
+    Returns:
+        OptimalParametersResponse with optimal risk settings
+    """
+    try:
+        params = await parameter_optimizer_manager.get_optimal_parameters(symbol)
+        if params is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No optimal parameters found for {symbol}",
+            )
+        return OptimalParametersResponse(**params)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching optimal parameters: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch optimal parameters",
+        )
+
+
+@router.post("/risk/parameters/{symbol:str}/optimize", response_model=OptimalParametersResponse)
+async def optimize_risk_parameters(
+    symbol: str,
+    force: bool = False,
+):
+    """
+    Run parameter optimization for a symbol.
+
+    Triggers a new optimization run for the specified symbol, testing all
+    combinations of risk parameters to find the optimal settings based on
+    Sharpe ratio.
+
+    Args:
+        symbol: Trading symbol to optimize (e.g., EURUSD, GBPUSD)
+        force: Force re-optimization even if recent valid results exist
+
+    Returns:
+        OptimalParametersResponse with newly optimized risk settings
+    """
+    try:
+        params = await parameter_optimizer_manager.run_optimization(symbol, force)
+        if params is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Insufficient data to optimize {symbol}",
+            )
+        logger.info(f"Optimization completed for {symbol}")
+        return OptimalParametersResponse(**params)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error optimizing parameters: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to optimize parameters",
+        )
+
+
+@router.get("/risk/parameters/{symbol:str}/history", response_model=OptimizationHistoryResponse)
+async def get_optimization_history(
+    symbol: str,
+    limit: int = 100,
+):
+    """
+    Get optimization history for a symbol.
+
+    Returns historical optimization results for the specified symbol,
+    showing all parameter combinations tested and their performance.
+
+    Args:
+        symbol: Trading symbol
+        limit: Maximum number of results to return (default: 100)
+
+    Returns:
+        OptimizationHistoryResponse with list of optimization results
+    """
+    try:
+        if limit < 1 or limit > 1000:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Limit must be between 1 and 1000",
+            )
+
+        history = await parameter_optimizer_manager.get_optimization_history(
+            symbol, limit
+        )
+        return OptimizationHistoryResponse(**history)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching optimization history: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch optimization history",
+        )
