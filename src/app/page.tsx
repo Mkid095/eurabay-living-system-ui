@@ -32,6 +32,7 @@ import { EvolutionLogViewer } from "@/components/dashboard/EvolutionLogViewer";
 import { EnhancedActiveTradesTable } from "@/components/dashboard/EnhancedActiveTradesTable";
 import { EvolutionParameterControls } from "@/components/dashboard/EvolutionParameterControls";
 import { ManualEvolutionTrigger } from "@/components/dashboard/ManualEvolutionTrigger";
+import { MT5AccountInfo } from "@/components/dashboard/MT5AccountInfo";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useEvolutionData } from "@/hooks/useEvolutionData";
 
@@ -289,6 +290,18 @@ export default function Home() {
 
               {/* Enhanced Active Trades */}
               <EnhancedActiveTradesTable />
+            </div>
+          )}
+
+          {/* MT5 Section */}
+          {activeSection === "mt5" && (
+            <div className="space-y-6">
+              <div>
+                <h1 className="text-3xl font-bold mb-2">MetaTrader 5 Integration</h1>
+                <p className="text-muted-foreground">Manage MT5 terminal connection and account information</p>
+              </div>
+
+              <MT5AccountInfo />
             </div>
           )}
 

@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { 
-  LayoutDashboard, 
-  Activity, 
-  BarChart3, 
-  Settings, 
+import {
+  LayoutDashboard,
+  Activity,
+  BarChart3,
+  Settings,
   Menu,
   X,
-  Dna
+  Dna,
+  Server
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ const navItems = [
   { id: 'trading', label: 'Trading', icon: Activity },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'evolution', label: 'Evolution', icon: Dna },
+  { id: 'mt5', label: 'MT5', icon: Server },
   { id: 'config', label: 'Config', icon: Settings },
 ];
 
