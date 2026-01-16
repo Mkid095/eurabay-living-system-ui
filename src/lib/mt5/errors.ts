@@ -7,6 +7,81 @@
 
 import { toast } from "sonner";
 import { MT5ErrorCode, MT5Error, MT5ConnectionState } from "./types";
+import { mt5Client } from "./client";
+
+/**
+ * Reconnection attempt result
+ */
+export interface ReconnectionResult {
+  success: boolean;
+  attempts: number;
+  duration: number;
+  error?: string;
+}
+
+/**
+ * Reconnection statistics
+ */
+export interface ReconnectionStats {
+  totalAttempts: number;
+  successfulReconnections: number;
+  failedReconnections: number;
+  lastReconnectionTime?: Date;
+  averageReconnectionTime?: number;
+}
+
+/**
+ * Maximum reconnection attempts
+ */
+const MAX_RECONNECT_ATTEMPTS = 5;
+
+/**
+ * Reconnection statistics tracker
+ */
+const reconnectionStats: ReconnectionStats = {
+  totalAttempts: 0,
+  successfulReconnections: 0,
+  failedReconnections: 0,
+};
+
+/**
+ * Trading disabled state
+ */
+let isTradingDisabled = false;
+
+/**
+ * Get reconnection statistics
+ */
+export function getReconnectionStats(): ReconnectionStats {
+  return { ...reconnectionStats };
+}
+
+/**
+ * Check if trading is currently disabled
+ */
+export function isMT5TradingDisabled(): boolean {
+  return isTradingDisabled;
+}
+
+/**
+ * Enable trading (called after successful reconnection)
+ */
+export function enableMT5Trading(): void {
+  if (isTradingDisabled) {
+    isTradingDisabled = false;
+    console.log('[MT5 Errors] Trading enabled');
+  }
+}
+
+/**
+ * Disable trading (called when MT5 disconnected)
+ */
+export function disableMT5Trading(): void {
+  if (!isTradingDisabled) {
+    isTradingDisabled = true;
+    console.log('[MT5 Errors] Trading disabled due to MT5 disconnection');
+  }
+}
 
 /**
  * Error message mappings for MT5 error codes
@@ -251,4 +326,159 @@ export function shouldDisableTrading(error: MT5Error): boolean {
     MT5ErrorCode.TRADE_DISABLED,
     MT5ErrorCode.MARKET_CLOSED,
   ].includes(error.code);
+}
+
+/**
+ * Calculate exponential backoff delay
+ *
+ * Implements exponential backoff: 1s, 2s, 4s, 8s, 16s
+ *
+ * @param attemptNumber - Current attempt number (1-indexed)
+ * @returns Delay in milliseconds
+ */
+function calculateBackoffDelay(attemptNumber: number): number {
+  const baseDelay = 1000; // 1 second
+  const maxDelay = 16000; // 16 seconds
+  const delay = Math.min(baseDelay * Math.pow(2, attemptNumber - 1), maxDelay);
+  return delay;
+}
+
+/**
+ * Sleep for specified milliseconds
+ *
+ * @param ms - Milliseconds to sleep
+ * @returns Promise that resolves after delay
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Attempt to reconnect to MT5 with exponential backoff
+ *
+ * Implements automatic reconnection with:
+ * - Exponential backoff: 1s, 2s, 4s, 8s, 16s (5 attempts max)
+ * - Toast notifications during reconnection attempts
+ * - Success toast when reconnected
+ * - Error toast after all attempts fail
+ * - Trading disabled when MT5 disconnected
+ * - Reconnection success rate tracking
+ * - Detailed logging of all attempts
+ *
+ * @returns Promise with reconnection result
+ */
+export async function attemptMT5Reconnect(): Promise<ReconnectionResult> {
+  const startTime = Date.now();
+  let lastError: string | undefined;
+
+  console.log('[MT5 Errors] Starting auto-reconnect sequence');
+  reconnectionStats.totalAttempts++;
+
+  // Disable trading when attempting to reconnect
+  disableMT5Trading();
+
+  for (let attempt = 1; attempt <= MAX_RECONNECT_ATTEMPTS; attempt++) {
+    const delay = calculateBackoffDelay(attempt);
+
+    console.log(`[MT5 Errors] Reconnection attempt ${attempt}/${MAX_RECONNECT_ATTEMPTS} after ${delay}ms delay`);
+
+    // Show reconnection toast
+    if (attempt === 1) {
+      toast.info('Reconnecting to MT5...', {
+        description: `Attempt 1 of ${MAX_RECONNECT_ATTEMPTS}. Please wait.`,
+        duration: 3000,
+        id: 'mt5-reconnecting',
+      });
+    }
+
+    // Wait for backoff delay (skip delay on first attempt for faster response)
+    if (attempt > 1) {
+      await sleep(delay);
+    }
+
+    try {
+      // Attempt to connect
+      await mt5Client.connect();
+
+      const duration = Date.now() - startTime;
+
+      // Success!
+      reconnectionStats.successfulReconnections++;
+      reconnectionStats.lastReconnectionTime = new Date();
+
+      // Update average reconnection time
+      if (reconnectionStats.successfulReconnections === 1) {
+        reconnectionStats.averageReconnectionTime = duration;
+      } else {
+        const total = (reconnectionStats.averageReconnectionTime || 0) * (reconnectionStats.successfulReconnections - 1);
+        reconnectionStats.averageReconnectionTime = (total + duration) / reconnectionStats.successfulReconnections;
+      }
+
+      // Enable trading after successful reconnection
+      enableMT5Trading();
+
+      console.log(`[MT5 Errors] Reconnection successful after ${attempt} attempt(s) (${duration}ms)`);
+
+      // Show success toast
+      toast.success('MT5 Reconnected', {
+        description: `Successfully reconnected to MT5 after ${attempt} attempt${attempt > 1 ? 's' : ''}`,
+        duration: 5000,
+        id: 'mt5-reconnect-success',
+      });
+
+      return {
+        success: true,
+        attempts: attempt,
+        duration,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      lastError = errorMessage;
+
+      console.error(`[MT5 Errors] Reconnection attempt ${attempt} failed:`, errorMessage);
+
+      // Update toast with current attempt
+      if (attempt < MAX_RECONNECT_ATTEMPTS) {
+        toast.info('Reconnecting to MT5...', {
+          description: `Attempt ${attempt + 1} of ${MAX_RECONNECT_ATTEMPTS}. Retrying...`,
+          duration: 3000,
+          id: 'mt5-reconnecting',
+        });
+      }
+    }
+  }
+
+  // All attempts failed
+  const duration = Date.now() - startTime;
+  reconnectionStats.failedReconnections++;
+
+  console.error(`[MT5 Errors] All ${MAX_RECONNECT_ATTEMPTS} reconnection attempts failed (${duration}ms)`);
+
+  // Show error toast
+  toast.error('MT5 Reconnection Failed', {
+    description: `Failed to reconnect after ${MAX_RECONNECT_ATTEMPTS} attempts. ${lastError || 'Please check your connection and try manually.'}`,
+    duration: 8000,
+    id: 'mt5-reconnect-failed',
+  });
+
+  return {
+    success: false,
+    attempts: MAX_RECONNECT_ATTEMPTS,
+    duration,
+    error: lastError,
+  };
+}
+
+/**
+ * Reset reconnection statistics
+ *
+ * Call this after a successful manual connection to reset stats.
+ */
+export function resetReconnectionStats(): void {
+  reconnectionStats.totalAttempts = 0;
+  reconnectionStats.successfulReconnections = 0;
+  reconnectionStats.failedReconnections = 0;
+  reconnectionStats.lastReconnectionTime = undefined;
+  reconnectionStats.averageReconnectionTime = undefined;
+  console.log('[MT5 Errors] Reconnection statistics reset');
 }

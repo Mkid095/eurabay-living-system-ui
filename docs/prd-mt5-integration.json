@@ -296,8 +296,8 @@
       "mavenSteps": [1, 7],
       "mcpTools": {},
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Successfully implemented MT5 auto-reconnect with exponential backoff in src/lib/mt5/errors.ts. Created attemptMT5Reconnect() function with exponential backoff (1s, 2s, 4s, 8s, 16s) for up to 5 attempts. Shows 'Reconnecting to MT5...' toast during attempts with progress indicator. Shows success toast when reconnected with attempt count. Shows error toast after all 5 attempts fail with error details. Disables trading when MT5 disconnected via disableMT5Trading() and enables on successful reconnection. Tracks reconnection success rate via ReconnectionStats interface with totalAttempts, successfulReconnections, failedReconnections, lastReconnectionTime, and averageReconnectionTime. Added getReconnectionStats() to retrieve statistics and resetReconnectionStats() to reset after manual connections. Logs all reconnection attempts with attempt number, delay, success/failure status, and duration. Added helper functions: calculateBackoffDelay() for exponential backoff calculation and sleep() for delay handling. Added isMT5TradingDisabled() to check trading state. Exported ReconnectionResult and ReconnectionStats interfaces. Uses existing sonner toast system. Typecheck passes with no errors."
     },
     {
       "id": "US-015",
