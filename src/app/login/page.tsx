@@ -27,6 +27,10 @@ function LoginForm() {
     if (searchParams.get('reset') === 'success') {
       setSuccess('Your password has been reset successfully. Please sign in with your new password.');
     }
+
+    if (searchParams.get('session') === 'expired') {
+      setError('Your session has expired due to inactivity. Please sign in again.');
+    }
   }, [searchParams]);
 
   useEffect(() => {
