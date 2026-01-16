@@ -5,7 +5,11 @@
  */
 
 import { get } from './client';
-import type { MarketsOverviewResponse, MarketDetailResponse } from '@/types/market';
+import type {
+  MarketsOverviewResponse,
+  MarketDetailResponse,
+  MarketTrendResponse
+} from '@/types/market';
 
 /**
  * Fetch market overview data
@@ -46,6 +50,29 @@ export async function fetchMarketDetail(symbol: string): Promise<MarketDetailRes
 }
 
 /**
+ * Fetch market trend data
+ * GET /markets/{symbol}/trend
+ *
+ * Returns trend information for a single market including:
+ * - Trend direction (BULLISH, BEARISH, NEUTRAL)
+ * - Trend strength (strong, moderate, weak)
+ * - Confidence score (0-100)
+ * - Price history for sparkline chart (last 20 prices)
+ *
+ * @param symbol - Market symbol (e.g., "V10", "V25")
+ * @returns Promise with market trend response
+ */
+export async function fetchMarketTrend(symbol: string): Promise<MarketTrendResponse> {
+  const response = await get<MarketTrendResponse>(`/markets/${symbol}/trend`);
+
+  return response.data;
+}
+
+/**
  * Re-export market types for convenience
  */
-export type { MarketsOverviewResponse, MarketDetailResponse } from '@/types/market';
+export type {
+  MarketsOverviewResponse,
+  MarketDetailResponse,
+  MarketTrendResponse
+} from '@/types/market';

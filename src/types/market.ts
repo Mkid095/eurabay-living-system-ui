@@ -166,3 +166,36 @@ export interface MarketDetailResponse {
   /** Response timestamp */
   timestamp: string;
 }
+
+/**
+ * Market trend strength enumeration
+ */
+export type TrendStrength = 'strong' | 'moderate' | 'weak';
+
+/**
+ * Market trend data structure
+ */
+export interface MarketTrendData {
+  /** Market symbol */
+  symbol: string;
+  /** Current trend direction */
+  trend: MarketTrend;
+  /** Trend strength indicator */
+  strength: TrendStrength;
+  /** Confidence score (0-100) */
+  confidence: number;
+  /** Recent price history for sparkline (last 20 prices) */
+  priceHistory: number[];
+  /** Trend calculation timestamp */
+  timestamp: string;
+}
+
+/**
+ * Market trend API response
+ */
+export interface MarketTrendResponse {
+  /** Market trend data */
+  trend: MarketTrendData;
+  /** Response timestamp */
+  timestamp: string;
+}

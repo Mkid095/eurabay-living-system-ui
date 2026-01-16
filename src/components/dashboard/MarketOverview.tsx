@@ -4,14 +4,18 @@ import { Card } from "@/components/ui/card";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState, useCallback, useRef } from "react";
-import { fetchMarketsOverview } from "@/lib/api/markets";
-import type { MarketOverviewData, FlashState } from "@/types/market";
+import { fetchMarketsOverview, fetchMarketTrend } from "@/lib/api/markets";
+import type { MarketOverviewData, FlashState, MarketTrendData } from "@/types/market";
 import { wsClient } from "@/lib/websocket/client";
 import type { MarketUpdateEvent } from "@/types/market";
 import { MarketDetailModal } from "@/components/dashboard/MarketDetailModal";
+import { TrendBadge } from "@/components/dashboard/TrendBadge";
 
 // Refresh interval for polling (3 seconds as per requirements)
 const POLL_INTERVAL = 3000;
+
+// Trend data refresh interval (10 seconds as per requirements)
+const TREND_REFRESH_INTERVAL = 10000;
 
 // Flash animation duration (ms)
 const FLASH_DURATION = 500;
@@ -56,6 +60,11 @@ export function MarketOverview() {
   const [error, setError] = useState<string | null>(null);
   const [flashStates, setFlashStates] = useState<Record<string, FlashState>>({});
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+
+  // Trend data state
+  const [trends, setTrends] = useState<Record<string, MarketTrendData>>({});
+  const [trendsLoading, setTrendsLoading] = useState<Record<string, boolean>>({});
+  const [trendsError, setTrendsError] = useState<Record<string, string | null>>({});
 
   // Modal state
   const [selectedMarket, setSelectedMarket] = useState<string | null>(null);
@@ -110,6 +119,34 @@ export function MarketOverview() {
       setLoading(false);
     }
   }, []);
+
+  // Fetch trend data for a single market
+  const fetchMarketTrendData = useCallback(async (symbol: string) => {
+    try {
+      setTrendsLoading((prev) => ({ ...prev, [symbol]: true }));
+      setTrendsError((prev) => ({ ...prev, [symbol]: null }));
+
+      const data = await fetchMarketTrend(symbol);
+      setTrends((prev) => ({ ...prev, [symbol]: data.trend }));
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch trend data';
+      setTrendsError((prev) => ({ ...prev, [symbol]: errorMessage }));
+      console.error(`Error fetching trend for ${symbol}:`, err);
+    } finally {
+      setTrendsLoading((prev) => ({ ...prev, [symbol]: false }));
+    }
+  }, []);
+
+  // Fetch trend data for all markets
+  const fetchAllTrends = useCallback(async () => {
+    // Only fetch if we have markets loaded
+    if (markets.length === 0) return;
+
+    // Fetch trends for each market in parallel
+    await Promise.all(
+      markets.map((market) => fetchMarketTrendData(market.symbol))
+    );
+  }, [markets, fetchMarketTrendData]);
 
   // Handle WebSocket market update events
   const handleMarketUpdate = useCallback((event: MarketUpdateEvent) => {
@@ -167,6 +204,19 @@ export function MarketOverview() {
 
     return () => clearInterval(intervalId);
   }, [fetchMarkets]);
+
+  // Trend data refresh setup (10 seconds)
+  useEffect(() => {
+    // Initial fetch after markets are loaded
+    if (markets.length > 0) {
+      fetchAllTrends();
+    }
+
+    // Set up trend refresh interval (10 seconds)
+    const intervalId = setInterval(fetchAllTrends, TREND_REFRESH_INTERVAL);
+
+    return () => clearInterval(intervalId);
+  }, [markets, fetchAllTrends]);
 
   // WebSocket subscription for real-time updates
   useEffect(() => {
@@ -262,6 +312,8 @@ export function MarketOverview() {
         {markets.map((market) => {
           const flashState = flashStates[market.symbol];
           const isUp = market.priceChangePercentage >= 0;
+          const trendData = trends[market.symbol];
+          const trendLoading = trendsLoading[market.symbol];
 
           return (
             <div
@@ -278,7 +330,20 @@ export function MarketOverview() {
                   <span className="font-bold text-primary text-xs">{market.symbol}</span>
                 </div>
                 <div>
-                  <p className="font-bold text-sm">{market.symbol}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold text-sm">{market.symbol}</p>
+                    {trendData && (
+                      <TrendBadge
+                        trend={trendData.trend}
+                        strength={trendData.strength}
+                        priceHistory={trendData.priceHistory}
+                        confidence={trendData.confidence}
+                      />
+                    )}
+                    {trendLoading && (
+                      <div className="w-16 h-5 bg-muted/50 rounded animate-pulse" />
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">{market.displayName}</p>
                 </div>
               </div>
