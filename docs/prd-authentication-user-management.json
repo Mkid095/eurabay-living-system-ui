@@ -81,8 +81,8 @@
       "mavenSteps": [1, 7],
       "mcpTools": {},
       "priority": 1,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented comprehensive server-side auth utilities in src/lib/auth/utils.ts including requireAuth(), getCurrentUser(), hasRole(), hasAnyRole(), isAuthenticated(), requireRole(), requireAnyRole(), canAccessResource(), and signOut(). Created client-side useAuth hook in src/hooks/useAuth.ts with user, loading, error states and login, logout, register functions. Typecheck passes for all new code."
     },
     {
       "id": "US-005",
