@@ -1,0 +1,37 @@
+[project]
+name = "eurabay-active-trade-management"
+version = "0.1.0"
+description = "Active trade management system for EURABAY Living System"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["backend"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
