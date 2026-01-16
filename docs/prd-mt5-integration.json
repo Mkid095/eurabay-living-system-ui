@@ -389,8 +389,8 @@
       "mavenSteps": [3, 6],
       "mcpTools": {},
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Successfully implemented MT5 connection status indicator in header. Created src/components/dashboard/MT5ConnectionStatus.tsx component following ConnectionStatus component style with color-coded status indicator (green for connected with ping animation, red for disconnected/error). Added MT5ConnectionStatus to Header.tsx alongside System Health indicator in a card container with border. Shows account number when connected using tabular-nums font for proper number display. Shows tooltip with connection details including status, latency (in ms), server, and broker information. Added 'Connect MT5' button that appears when disconnected or in error state with loading state ('Connecting...'). Component uses useMT5Connection hook for real-time connection state, account info, and latency data. Status dot has outer glow effect with animate-ping when connected. Button is disabled during connection attempts. Typecheck passes with no errors. Build succeeds without issues."
     },
     {
       "id": "US-019",

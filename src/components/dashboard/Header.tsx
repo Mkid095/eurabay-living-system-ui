@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { SystemHealth } from "@/hooks/useDashboardData";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "@/components/layout/UserMenu";
+import { MT5ConnectionStatus } from "@/components/dashboard/MT5ConnectionStatus";
 
 interface HeaderProps {
   systemHealth: SystemHealth;
@@ -28,6 +29,11 @@ export function Header({ systemHealth }: HeaderProps) {
 
         {/* System Status & Actions */}
         <div className="flex items-center gap-4">
+          {/* MT5 Connection Status */}
+          <div className="hidden md:flex items-center gap-2 px-3 py-2 bg-card rounded-lg border border-border">
+            <MT5ConnectionStatus showLabel={false} />
+          </div>
+
           {/* System Health Indicator */}
           <div className="hidden md:flex items-center gap-2 px-3 py-2 bg-card rounded-lg border border-border">
             <div className={cn(
