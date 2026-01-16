@@ -161,6 +161,36 @@ class CorrelationAdjustment:
         }
 
 
+@dataclass
+class SessionRiskAdjustment:
+    """
+    Record of a time-based session risk adjustment.
+
+    Attributes:
+        timestamp: When the adjustment occurred
+        hour: Hour of day (0-23)
+        day_of_week: Day of week (0=Monday, 6=Sunday)
+        risk_multiplier: Risk multiplier applied based on time
+        reason: Explanation for the adjustment
+    """
+
+    timestamp: datetime
+    hour: int
+    day_of_week: int
+    risk_multiplier: float
+    reason: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for storage."""
+        return {
+            "timestamp": self.timestamp.isoformat(),
+            "hour": self.hour,
+            "day_of_week": self.day_of_week,
+            "risk_multiplier": round(self.risk_multiplier, 3),
+            "reason": self.reason,
+        }
+
+
 class AdaptiveRiskManager:
     """
     Manages adaptive risk based on recent trading performance and market volatility.
@@ -221,6 +251,8 @@ class AdaptiveRiskManager:
         drawdown_threshold_2: float = 15.0,
         drawdown_threshold_3: float = 20.0,
         initial_account_balance: float = 10000.0,
+        hourly_risk_multipliers: Optional[dict[int, float]] = None,
+        enable_session_adjustment: bool = True,
     ):
         """
         Initialize the AdaptiveRiskManager.
@@ -241,6 +273,8 @@ class AdaptiveRiskManager:
             drawdown_threshold_2: Second drawdown threshold for risk reduction (default: 15.0%)
             drawdown_threshold_3: Circuit breaker drawdown threshold (default: 20.0%)
             initial_account_balance: Starting account balance for equity curve tracking (default: 10000.0)
+            hourly_risk_multipliers: Dict mapping hour (0-23) to risk multiplier (default: None)
+            enable_session_adjustment: Whether to enable time-based session risk adjustment (default: True)
         """
         self._performance_comparator = performance_comparator
         self._database_path = database_path
@@ -269,6 +303,11 @@ class AdaptiveRiskManager:
         self._correlation_threshold: float = 0.7
         self._correlation_lookback: int = 100
         self._correlation_reduction_per_position: float = 0.2
+
+        # Time-based session risk adjustment
+        self._enable_session_adjustment = enable_session_adjustment
+        self._hourly_risk_multipliers = hourly_risk_multipliers or self._get_default_hourly_multipliers()
+        self._session_risk_adjustments: list[SessionRiskAdjustment] = []
 
         # Initialize database
         self._initialize_database()
@@ -370,6 +409,19 @@ class AdaptiveRiskManager:
                 )
             """)
 
+            # Create session_risk_adjustments table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS session_risk_adjustments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    hour INTEGER NOT NULL,
+                    day_of_week INTEGER NOT NULL,
+                    risk_multiplier REAL NOT NULL,
+                    reason TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Create indexes
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_adjustments_timestamp
@@ -404,6 +456,16 @@ class AdaptiveRiskManager:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_correlation_symbol
                 ON correlation_adjustments(symbol)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_session_timestamp
+                ON session_risk_adjustments(timestamp DESC)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_session_hour
+                ON session_risk_adjustments(hour)
             """)
 
             self._connection.commit()
@@ -629,32 +691,31 @@ class AdaptiveRiskManager:
         # Calculate base position size in lots
         base_position_size = risk_amount / (risk_per_lot_price * lot_multiplier)
 
+        # Apply adjustments in sequence: volatility -> session
+        adjusted_position_size = base_position_size
+
         # Apply volatility adjustment if enabled
         if self._enable_volatility_adjustment:
             volatility_multiplier = self.calculate_volatility_multiplier(symbol)
-            adjusted_position_size = base_position_size * volatility_multiplier
+            adjusted_position_size *= volatility_multiplier
 
-            logger.debug(
-                f"Position size calculation: balance={account_balance:.2f}, "
-                f"risk_pct={self._current_risk_percent:.2f}%, "
-                f"risk_amount={risk_amount:.2f}, "
-                f"risk_per_lot={risk_per_lot_price:.5f}, "
-                f"base_position_size={base_position_size:.2f} lots, "
-                f"volatility_multiplier={volatility_multiplier:.3f}, "
-                f"adjusted_position_size={adjusted_position_size:.2f} lots"
-            )
+        # Apply session-based time adjustment if enabled
+        if self._enable_session_adjustment:
+            session_multiplier = self.calculate_session_risk_multiplier()
+            adjusted_position_size *= session_multiplier
 
-            return adjusted_position_size
-        else:
-            logger.debug(
-                f"Position size calculation: balance={account_balance:.2f}, "
-                f"risk_pct={self._current_risk_percent:.2f}%, "
-                f"risk_amount={risk_amount:.2f}, "
-                f"risk_per_lot={risk_per_lot_price:.5f}, "
-                f"position_size={base_position_size:.2f} lots (volatility adjustment disabled)"
-            )
+        logger.debug(
+            f"Position size calculation: balance={account_balance:.2f}, "
+            f"risk_pct={self._current_risk_percent:.2f}%, "
+            f"risk_amount={risk_amount:.2f}, "
+            f"risk_per_lot={risk_per_lot_price:.5f}, "
+            f"base_position_size={base_position_size:.2f} lots, "
+            f"volatility_adjustment={self._enable_volatility_adjustment}, "
+            f"session_adjustment={self._enable_session_adjustment}, "
+            f"final_position_size={adjusted_position_size:.2f} lots"
+        )
 
-            return base_position_size
+        return adjusted_position_size
 
     def get_current_risk_percent(self) -> float:
         """
@@ -1574,3 +1635,164 @@ class AdaptiveRiskManager:
 
         except sqlite3.Error as e:
             logger.error(f"Failed to store correlation adjustment in database: {e}")
+
+    def _get_default_hourly_multipliers(self) -> dict[int, float]:
+        """
+        Get default hourly risk multipliers based on trading session patterns.
+
+        Default configuration assumes Forex trading with the following patterns:
+        - Asian session (0-8 UTC): Lower volatility and opportunity, reduce risk
+        - London open (8-12 UTC): Higher volatility and opportunity, increase risk
+        - London/NY overlap (12-16 UTC): Highest volatility, moderate risk
+        - NY session (16-21 UTC): Moderate volatility, standard risk
+        - Weekend/closed (21-24 UTC): Lower activity, reduce risk
+
+        Returns:
+            Dictionary mapping hour (0-23) to risk multiplier
+        """
+        return {
+            # Asian session (00:00 - 08:00 UTC) - Lower risk
+            0: 0.6, 1: 0.6, 2: 0.6, 3: 0.6, 4: 0.6, 5: 0.6, 6: 0.6, 7: 0.6,
+            # London open (08:00 - 12:00 UTC) - Higher risk
+            8: 1.2, 9: 1.2, 10: 1.2, 11: 1.2,
+            # London/NY overlap (12:00 - 16:00 UTC) - Moderate-high risk
+            12: 1.1, 13: 1.1, 14: 1.1, 15: 1.1,
+            # NY session (16:00 - 21:00 UTC) - Standard risk
+            16: 1.0, 17: 1.0, 18: 1.0, 19: 1.0, 20: 1.0,
+            # Evening/closed (21:00 - 24:00 UTC) - Lower risk
+            21: 0.5, 22: 0.5, 23: 0.5,
+        }
+
+    def calculate_session_risk_multiplier(self, current_time: Optional[datetime] = None) -> float:
+        """
+        Calculate time-based session risk multiplier based on hour of day.
+
+        This method adjusts risk based on trading session patterns. Different
+        times of day exhibit different volatility levels and trading opportunities,
+        so risk is adjusted accordingly.
+
+        Session patterns (default for Forex):
+        - Asian session (0-8 UTC): Lower volatility (0.5x-0.6x multiplier)
+        - London open (8-12 UTC): High volatility/opportunity (1.2x multiplier)
+        - London/NY overlap (12-16 UTC): High volatility (1.1x multiplier)
+        - NY session (16-21 UTC): Standard risk (1.0x multiplier)
+        - Evening (21-24 UTC): Low activity (0.5x multiplier)
+
+        Args:
+            current_time: Optional datetime for calculation (default: current UTC time)
+
+        Returns:
+            Risk multiplier for the current time period (0.5 to 1.2)
+        """
+        if not self._enable_session_adjustment:
+            logger.debug("Session-based risk adjustment is disabled")
+            return 1.0
+
+        # Use current time if not provided
+        if current_time is None:
+            current_time = datetime.utcnow()
+
+        hour = current_time.hour
+        day_of_week = current_time.weekday()  # 0=Monday, 6=Sunday
+
+        # Get the multiplier for this hour
+        risk_multiplier = self._hourly_risk_multipliers.get(hour, 1.0)
+
+        # Generate reason based on time period
+        if 0 <= hour < 8:
+            period_name = "Asian session"
+            period_description = "lower volatility and trading opportunity"
+        elif 8 <= hour < 12:
+            period_name = "London open"
+            period_description = "higher volatility and opportunity"
+        elif 12 <= hour < 16:
+            period_name = "London/NY overlap"
+            period_description = "high volatility period"
+        elif 16 <= hour < 21:
+            period_name = "New York session"
+            period_description = "standard volatility"
+        else:
+            period_name = "Evening/weekend"
+            period_description = "low activity period"
+
+        # Apply weekend reduction (Saturday/Sunday)
+        if day_of_week >= 5:  # Saturday=5, Sunday=6
+            risk_multiplier *= 0.5
+            period_name += " (weekend)"
+            period_description += " with additional weekend reduction"
+
+        # Ensure multiplier doesn't go below minimum
+        risk_multiplier = max(0.3, risk_multiplier)
+
+        reason = (
+            f"Time-based adjustment: {period_name} (Hour: {hour:02d}:00 UTC, "
+            f"Day: {current_time.strftime('%A')}). "
+            f"{period_description.capitalize()}. "
+            f"Applying {risk_multiplier:.2f}x risk multiplier."
+        )
+
+        # Create and store session adjustment record
+        adjustment = SessionRiskAdjustment(
+            timestamp=current_time,
+            hour=hour,
+            day_of_week=day_of_week,
+            risk_multiplier=risk_multiplier,
+            reason=reason,
+        )
+
+        self._session_risk_adjustments.append(adjustment)
+        self._store_session_risk_adjustment(adjustment)
+
+        # Log the adjustment
+        logger.info(
+            f"Session risk multiplier: {risk_multiplier:.3f} | "
+            f"Hour: {hour:02d}:00 UTC | Day: {current_time.strftime('%A')} | "
+            f"Period: {period_name}"
+        )
+
+        return risk_multiplier
+
+    def get_session_risk_adjustments(self, limit: int = 100) -> list[SessionRiskAdjustment]:
+        """
+        Get session risk adjustment history.
+
+        Args:
+            limit: Maximum number of adjustments to return
+
+        Returns:
+            List of SessionRiskAdjustment records
+        """
+        return self._session_risk_adjustments[-limit:]
+
+    def _store_session_risk_adjustment(self, adjustment: SessionRiskAdjustment) -> None:
+        """
+        Store a session risk adjustment in the database.
+
+        Args:
+            adjustment: SessionRiskAdjustment to store
+        """
+        if self._connection is None:
+            logger.warning("Database connection not available, adjustment not stored")
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            cursor.execute("""
+                INSERT INTO session_risk_adjustments (
+                    timestamp, hour, day_of_week, risk_multiplier, reason
+                ) VALUES (?, ?, ?, ?, ?)
+            """, (
+                adjustment.timestamp.isoformat(),
+                adjustment.hour,
+                adjustment.day_of_week,
+                adjustment.risk_multiplier,
+                adjustment.reason,
+            ))
+
+            self._connection.commit()
+
+            logger.debug(f"Session risk adjustment stored in database at hour {adjustment.hour}")
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to store session risk adjustment in database: {e}")

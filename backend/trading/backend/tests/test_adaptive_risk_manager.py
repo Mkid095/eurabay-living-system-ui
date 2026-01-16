@@ -17,6 +17,7 @@ from backend.core.adaptive_risk_manager import (
     VolatilityAdjustment,
     DrawdownAdjustment,
     CorrelationAdjustment,
+    SessionRiskAdjustment,
 )
 from backend.core.performance_comparator import (
     PerformanceComparator,
@@ -60,6 +61,7 @@ def risk_manager(performance_comparator, temp_database):
         min_volatility_multiplier=0.3,
         max_volatility_multiplier=1.5,
         enable_volatility_adjustment=False,  # Disabled for backward compatibility with existing tests
+        enable_session_adjustment=False,  # Disabled for backward compatibility with existing tests
     )
 
 
@@ -78,6 +80,21 @@ def risk_manager_with_volatility(performance_comparator, temp_database):
         min_volatility_multiplier=0.3,
         max_volatility_multiplier=1.5,
         enable_volatility_adjustment=True,  # Enabled for volatility tests
+    )
+
+
+@pytest.fixture
+def risk_manager_with_session(performance_comparator, temp_database):
+    """Create an AdaptiveRiskManager with session adjustment enabled."""
+    return AdaptiveRiskManager(
+        performance_comparator=performance_comparator,
+        database_path=temp_database,
+        base_risk_percent=2.0,
+        min_risk_percent=0.5,
+        max_risk_percent=3.0,
+        performance_window=20,
+        enable_volatility_adjustment=False,  # Disable to isolate session tests
+        enable_session_adjustment=True,  # Enabled for session tests
     )
 
 
@@ -1966,3 +1983,425 @@ def test_correlation_integration_scenario():
             shutil.rmtree(temp_dir)
         except PermissionError:
             pass
+
+
+class TestSessionBasedRiskAdjustment:
+    """Test suite for time-based session risk adjustment (US-005)."""
+
+    def test_session_risk_multiplier_asian_session(self, risk_manager_with_session):
+        """Test risk multiplier during Asian session (0-8 UTC)."""
+        # Test during Asian session (e.g., 3:00 AM UTC)
+        test_time = datetime(2024, 1, 15, 3, 0, 0)  # 3:00 AM UTC
+        multiplier = risk_manager_with_session.calculate_session_risk_multiplier(test_time)
+
+        # Asian session should have lower multiplier (0.6x)
+        assert multiplier == 0.6
+
+        # Verify adjustment was recorded
+        adjustments = risk_manager_with_session.get_session_risk_adjustments()
+        assert len(adjustments) > 0
+        assert adjustments[-1].hour == 3
+        assert "Asian session" in adjustments[-1].reason
+
+    def test_session_risk_multiplier_london_open(self, risk_manager_with_session):
+        """Test risk multiplier during London open (8-12 UTC)."""
+        # Test during London open (e.g., 10:00 AM UTC)
+        test_time = datetime(2024, 1, 15, 10, 0, 0)  # 10:00 AM UTC
+        multiplier = risk_manager_with_session.calculate_session_risk_multiplier(test_time)
+
+        # London open should have higher multiplier (1.2x)
+        assert multiplier == 1.2
+
+        # Verify adjustment was recorded
+        adjustments = risk_manager_with_session.get_session_risk_adjustments()
+        assert len(adjustments) > 0
+        assert adjustments[-1].hour == 10
+        assert "London open" in adjustments[-1].reason
+
+    def test_session_risk_multiplier_london_ny_overlap(self, risk_manager_with_session):
+        """Test risk multiplier during London/NY overlap (12-16 UTC)."""
+        # Test during overlap (e.g., 2:00 PM UTC = 14:00)
+        test_time = datetime(2024, 1, 15, 14, 0, 0)  # 2:00 PM UTC
+        multiplier = risk_manager_with_session.calculate_session_risk_multiplier(test_time)
+
+        # London/NY overlap should have moderate-high multiplier (1.1x)
+        assert multiplier == 1.1
+
+        # Verify adjustment was recorded
+        adjustments = risk_manager_with_session.get_session_risk_adjustments()
+        assert len(adjustments) > 0
+        assert adjustments[-1].hour == 14
+        assert "overlap" in adjustments[-1].reason.lower()
+
+    def test_session_risk_multiplier_ny_session(self, risk_manager_with_session):
+        """Test risk multiplier during New York session (16-21 UTC)."""
+        # Test during NY session (e.g., 6:00 PM UTC = 18:00)
+        test_time = datetime(2024, 1, 15, 18, 0, 0)  # 6:00 PM UTC
+        multiplier = risk_manager_with_session.calculate_session_risk_multiplier(test_time)
+
+        # NY session should have standard multiplier (1.0x)
+        assert multiplier == 1.0
+
+        # Verify adjustment was recorded
+        adjustments = risk_manager_with_session.get_session_risk_adjustments()
+        assert len(adjustments) > 0
+        assert adjustments[-1].hour == 18
+        assert "New York session" in adjustments[-1].reason
+
+    def test_session_risk_multiplier_evening(self, risk_manager_with_session):
+        """Test risk multiplier during evening (21-24 UTC)."""
+        # Test during evening (e.g., 11:00 PM UTC = 23:00)
+        test_time = datetime(2024, 1, 15, 23, 0, 0)  # 11:00 PM UTC
+        multiplier = risk_manager_with_session.calculate_session_risk_multiplier(test_time)
+
+        # Evening should have low multiplier (0.5x)
+        assert multiplier == 0.5
+
+        # Verify adjustment was recorded
+        adjustments = risk_manager_with_session.get_session_risk_adjustments()
+        assert len(adjustments) > 0
+        assert adjustments[-1].hour == 23
+        assert "Evening" in adjustments[-1].reason
+
+    def test_session_risk_multiplier_weekend_reduction(self, risk_manager_with_session):
+        """Test that weekend has additional risk reduction."""
+        # Test on Saturday (day_of_week = 5)
+        test_time_saturday = datetime(2024, 1, 13, 10, 0, 0)  # Saturday 10:00 AM UTC
+        multiplier_saturday = risk_manager_with_session.calculate_session_risk_multiplier(test_time_saturday)
+
+        # Weekend should reduce the multiplier by 50%
+        # London open multiplier is 1.2x, weekend should make it 0.6x
+        assert multiplier_saturday == 0.6
+
+        # Test on Sunday (day_of_week = 6)
+        test_time_sunday = datetime(2024, 1, 14, 18, 0, 0)  # Sunday 6:00 PM UTC
+        multiplier_sunday = risk_manager_with_session.calculate_session_risk_multiplier(test_time_sunday)
+
+        # Weekend should reduce the multiplier by 50%
+        # NY session multiplier is 1.0x, weekend should make it 0.5x
+        assert multiplier_sunday == 0.5
+
+        # Verify adjustments were recorded
+        adjustments = risk_manager_with_session.get_session_risk_adjustments()
+        assert len(adjustments) >= 2
+        assert "weekend" in adjustments[-1].reason.lower()
+
+    def test_session_risk_multiplier_minimum_bound(self, risk_manager_with_session):
+        """Test that session multiplier never goes below minimum (0.3)."""
+        # Test on Sunday evening (should be very low but capped at 0.3)
+        test_time = datetime(2024, 1, 14, 23, 0, 0)  # Sunday 11:00 PM UTC
+        multiplier = risk_manager_with_session.calculate_session_risk_multiplier(test_time)
+
+        # Evening is 0.5x, weekend reduces to 0.25x, but minimum is 0.3x
+        assert multiplier >= 0.3
+        assert multiplier == 0.3  # Should hit the minimum
+
+    def test_session_risk_multiplier_disabled(self, risk_manager):
+        """Test that session adjustment returns 1.0 when disabled."""
+        # Session adjustment is disabled in the default risk_manager fixture
+        test_time = datetime(2024, 1, 15, 10, 0, 0)  # London open
+        multiplier = risk_manager.calculate_session_risk_multiplier(test_time)
+
+        # Should return 1.0 when disabled
+        assert multiplier == 1.0
+
+    def test_session_risk_multiplier_current_time(self, risk_manager_with_session):
+        """Test that session adjustment works with current time when no time provided."""
+        # Call without providing time (should use current time)
+        multiplier = risk_manager_with_session.calculate_session_risk_multiplier()
+
+        # Should return a valid multiplier
+        assert 0.3 <= multiplier <= 1.2
+
+        # Verify adjustment was recorded
+        adjustments = risk_manager_with_session.get_session_risk_adjustments()
+        assert len(adjustments) > 0
+
+    def test_session_risk_multiplier_all_hours(self, risk_manager_with_session):
+        """Test session multiplier for all 24 hours."""
+        test_date = datetime(2024, 1, 15)  # Monday
+
+        expected_multipliers = {
+            0: 0.6, 1: 0.6, 2: 0.6, 3: 0.6, 4: 0.6, 5: 0.6, 6: 0.6, 7: 0.6,  # Asian
+            8: 1.2, 9: 1.2, 10: 1.2, 11: 1.2,  # London open
+            12: 1.1, 13: 1.1, 14: 1.1, 15: 1.1,  # London/NY overlap
+            16: 1.0, 17: 1.0, 18: 1.0, 19: 1.0, 20: 1.0,  # NY session
+            21: 0.5, 22: 0.5, 23: 0.5,  # Evening
+        }
+
+        for hour in range(24):
+            test_time = datetime(2024, 1, 15, hour, 0, 0)
+            multiplier = risk_manager_with_session.calculate_session_risk_multiplier(test_time)
+
+            assert multiplier == expected_multipliers[hour], \
+                f"Hour {hour}: expected {expected_multipliers[hour]}, got {multiplier}"
+
+    def test_custom_hourly_multipliers(self, performance_comparator, temp_database):
+        """Test that custom hourly multipliers can be provided."""
+        custom_multipliers = {
+            0: 0.8, 1: 0.8, 2: 0.8, 3: 0.8, 4: 0.8, 5: 0.8, 6: 0.8, 7: 0.8,
+            8: 1.3, 9: 1.3, 10: 1.3, 11: 1.3,
+            12: 1.15, 13: 1.15, 14: 1.15, 15: 1.15,
+            16: 1.05, 17: 1.05, 18: 1.05, 19: 1.05, 20: 1.05,
+            21: 0.6, 22: 0.6, 23: 0.6,
+        }
+
+        risk_manager = AdaptiveRiskManager(
+            performance_comparator=performance_comparator,
+            database_path=temp_database,
+            hourly_risk_multipliers=custom_multipliers,
+            enable_session_adjustment=True,
+        )
+
+        # Test that custom multipliers are used
+        test_time = datetime(2024, 1, 15, 10, 0, 0)  # 10:00 AM UTC
+        multiplier = risk_manager.calculate_session_risk_multiplier(test_time)
+
+        # Should use custom multiplier of 1.3 instead of default 1.2
+        assert multiplier == 1.3
+
+    def test_position_size_with_session_adjustment(self, risk_manager_with_session):
+        """Test that position sizes are adjusted based on time of day."""
+        account_balance = 10000.0
+        entry_price = 1.0850
+        stop_loss = 1.0800
+
+        # Session adjustment is enabled in this fixture
+        # Test during London open (1.2x multiplier)
+        test_time_london = datetime(2024, 1, 15, 10, 0, 0)
+        multiplier_london = risk_manager_with_session.calculate_session_risk_multiplier(test_time_london)
+
+        # Test during Asian session (0.6x multiplier)
+        test_time_asian = datetime(2024, 1, 15, 3, 0, 0)
+        multiplier_asian = risk_manager_with_session.calculate_session_risk_multiplier(test_time_asian)
+
+        # London multiplier should be higher
+        assert multiplier_london > multiplier_asian
+        assert multiplier_london == 1.2
+        assert multiplier_asian == 0.6
+
+    def test_session_adjustment_dataclass(self, risk_manager_with_session):
+        """Test SessionRiskAdjustment dataclass."""
+        adjustment = SessionRiskAdjustment(
+            timestamp=datetime.utcnow(),
+            hour=10,
+            day_of_week=0,  # Monday
+            risk_multiplier=1.2,
+            reason="Test adjustment",
+        )
+
+        # Test to_dict conversion
+        adj_dict = adjustment.to_dict()
+        assert "timestamp" in adj_dict
+        assert adj_dict["hour"] == 10
+        assert adj_dict["day_of_week"] == 0
+        assert adj_dict["risk_multiplier"] == 1.2
+        assert adj_dict["reason"] == "Test adjustment"
+
+    def test_get_session_risk_adjustments(self, risk_manager_with_session):
+        """Test retrieving session adjustment history."""
+        # Create multiple adjustments at different times
+        test_times = [
+            datetime(2024, 1, 15, 3, 0, 0),   # Asian session
+            datetime(2024, 1, 15, 10, 0, 0),  # London open
+            datetime(2024, 1, 15, 14, 0, 0),  # London/NY overlap
+            datetime(2024, 1, 15, 18, 0, 0),  # NY session
+        ]
+
+        for test_time in test_times:
+            risk_manager_with_session.calculate_session_risk_multiplier(test_time)
+
+        # Get all adjustments
+        all_adjustments = risk_manager_with_session.get_session_risk_adjustments()
+        assert len(all_adjustments) >= len(test_times)
+
+        # Verify each adjustment has required fields
+        for adjustment in all_adjustments:
+            assert isinstance(adjustment, SessionRiskAdjustment)
+            assert 0 <= adjustment.hour <= 23
+            assert 0 <= adjustment.day_of_week <= 6
+            assert 0.3 <= adjustment.risk_multiplier <= 1.2
+            assert adjustment.reason is not None
+            assert len(adjustment.reason) > 0
+
+    def test_session_database_persistence(self, risk_manager_with_session, temp_database):
+        """Test that session adjustments are persisted to database."""
+        # Create a session adjustment
+        test_time = datetime(2024, 1, 15, 10, 0, 0)
+        risk_manager_with_session.calculate_session_risk_multiplier(test_time)
+
+        # Verify data was stored in database
+        conn = sqlite3.connect(temp_database)
+        cursor = conn.cursor()
+
+        # Check session_risk_adjustments table
+        cursor.execute("SELECT COUNT(*) FROM session_risk_adjustments")
+        adjustment_count = cursor.fetchone()[0]
+        assert adjustment_count > 0
+
+        # Verify adjustment details
+        cursor.execute(
+            "SELECT hour, day_of_week, risk_multiplier "
+            "FROM session_risk_adjustments ORDER BY id DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        assert row[0] == 10  # hour
+        assert row[1] == 0  # day_of_week (Monday)
+        assert row[2] == 1.2  # risk_multiplier
+
+        conn.close()
+
+    def test_session_adjustment_limit(self, risk_manager_with_session):
+        """Test that limit parameter works for getting adjustments."""
+        # Create multiple adjustments
+        for hour in [3, 10, 14, 18, 23]:
+            test_time = datetime(2024, 1, 15, hour, 0, 0)
+            risk_manager_with_session.calculate_session_risk_multiplier(test_time)
+
+        # Get limited number of adjustments
+        limited_adjustments = risk_manager_with_session.get_session_risk_adjustments(limit=3)
+        assert len(limited_adjustments) == 3
+
+        # Get all adjustments
+        all_adjustments = risk_manager_with_session.get_session_risk_adjustments(limit=100)
+        assert len(all_adjustments) >= 5
+
+    def test_session_multiplier_different_days(self, risk_manager_with_session):
+        """Test session multiplier on different days of the week."""
+        # Test Monday (day_of_week = 0) - London open
+        monday_time = datetime(2024, 1, 15, 10, 0, 0)
+        monday_multiplier = risk_manager_with_session.calculate_session_risk_multiplier(monday_time)
+
+        # Test Saturday (day_of_week = 5) - London open
+        saturday_time = datetime(2024, 1, 13, 10, 0, 0)
+        saturday_multiplier = risk_manager_with_session.calculate_session_risk_multiplier(saturday_time)
+
+        # Saturday should have 50% reduction
+        assert saturday_multiplier < monday_multiplier
+        assert monday_multiplier == 1.2
+        assert saturday_multiplier == 0.6
+
+    def test_session_logging(self, risk_manager_with_session):
+        """Test that session adjustments are logged properly."""
+        test_time = datetime(2024, 1, 15, 10, 0, 0)
+        risk_manager_with_session.calculate_session_risk_multiplier(test_time)
+
+        # Verify adjustment was recorded
+        adjustments = risk_manager_with_session.get_session_risk_adjustments()
+        latest = adjustments[-1]
+
+        assert latest.hour == 10
+        assert latest.day_of_week == 0  # Monday
+        assert latest.risk_multiplier == 1.2
+        assert "London open" in latest.reason
+        assert "higher volatility" in latest.reason.lower()
+
+
+def test_session_integration_scenario():
+    """
+    Integration test for session-based risk adjustment.
+
+    This test simulates a realistic scenario where trades are taken at
+    different times of day to verify that the session-based risk adjustment
+    works correctly in a realistic trading scenario.
+    """
+    import tempfile
+    import os
+
+    temp_dir = tempfile.mkdtemp()
+    perf_db = os.path.join(temp_dir, "test_perf_session.db")
+    risk_db = os.path.join(temp_dir, "test_risk_session.db")
+
+    try:
+        # Create components
+        comparator = PerformanceComparator(database_path=perf_db)
+        risk_manager = AdaptiveRiskManager(
+            performance_comparator=comparator,
+            database_path=risk_db,
+            base_risk_percent=2.0,
+            enable_volatility_adjustment=False,
+            enable_session_adjustment=True,
+        )
+
+        logger.info("Session-based risk adjustment integration test:")
+        logger.info("=" * 80)
+
+        # Simulate trades at different times of day
+        scenarios = [
+            # (hour, expected_multiplier, description)
+            (3, 0.6, "Asian session - low volatility period"),
+            (10, 1.2, "London open - high opportunity period"),
+            (14, 1.1, "London/NY overlap - high volatility period"),
+            (18, 1.0, "New York session - standard volatility"),
+            (23, 0.5, "Evening - low activity period"),
+        ]
+
+        logger.info(f"{'Time (UTC)':<15} {'Multiplier':<12} {'Description'}")
+        logger.info("-" * 80)
+
+        for hour, expected_multiplier, description in scenarios:
+            test_time = datetime(2024, 1, 15, hour, 0, 0)  # Monday
+            multiplier = risk_manager.calculate_session_risk_multiplier(test_time)
+
+            assert multiplier == expected_multiplier, \
+                f"Expected {expected_multiplier} for hour {hour}, got {multiplier}"
+
+            logger.info(f"{hour:02d}:00 UTC{'':<9} {multiplier:<12.2f} {description}")
+
+        logger.info("\n" + "-" * 80)
+
+        # Test weekend reduction
+        logger.info("\nWeekend reduction test:")
+        logger.info("-" * 80)
+
+        # Saturday London open
+        saturday_time = datetime(2024, 1, 13, 10, 0, 0)
+        saturday_multiplier = risk_manager.calculate_session_risk_multiplier(saturday_time)
+
+        # Sunday NY session
+        sunday_time = datetime(2024, 1, 14, 18, 0, 0)
+        sunday_multiplier = risk_manager.calculate_session_risk_multiplier(sunday_time)
+
+        logger.info(f"Saturday 10:00 UTC: {saturday_multiplier:.2f}x (weekday: 1.2x, weekend: 50% reduction)")
+        logger.info(f"Sunday 18:00 UTC:   {sunday_multiplier:.2f}x (weekday: 1.0x, weekend: 50% reduction)")
+
+        assert saturday_multiplier == 0.6, "Saturday London open should be 0.6x"
+        assert sunday_multiplier == 0.5, "Sunday NY session should be 0.5x"
+
+        logger.info("\n" + "=" * 80)
+        logger.info("Session-based risk adjustment integration test passed!")
+
+        # Verify adjustments were recorded
+        adjustments = risk_manager.get_session_risk_adjustments()
+        logger.info(f"Total session adjustments recorded: {len(adjustments)}")
+
+        # Verify database persistence
+        conn = sqlite3.connect(risk_db)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM session_risk_adjustments")
+        db_count = cursor.fetchone()[0]
+        conn.close()
+
+        logger.info(f"Session adjustments in database: {db_count}")
+        assert db_count > 0, "No adjustments found in database"
+
+    finally:
+        # Cleanup
+        comparator.close()
+        risk_manager.close()
+        import time
+        time.sleep(0.1)
+        try:
+            import shutil
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            pass
+
+
+if __name__ == "__main__":
+    # Run the integration tests
+    test_integration_with_historical_data()
+    test_drawdown_integration_scenario()
+    test_correlation_integration_scenario()
+    test_session_integration_scenario()
+    logger.info("All integration tests passed!")
