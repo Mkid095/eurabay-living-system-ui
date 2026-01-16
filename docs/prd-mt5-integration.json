@@ -211,8 +211,8 @@
       "mavenSteps": [1, 7],
       "mcpTools": {},
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented comprehensive MT5 trade history functions in src/lib/mt5/history.ts. Created getMT5TradeHistory() function calling GET /mt5/history/trades with optional filters for startDate, endDate, and symbol parameters. Returns MT5TradeHistory[] array with all completed trade details including ticket, symbol, direction, lots, openPrice, closePrice, openTime, closeTime, profit, commission, swap, comment, and magic number. Added comprehensive validation for date parameters (ISO format, start date before end date) and symbol filtering. All date strings are automatically converted to Date objects. Created convertToCSV() utility function that properly escapes CSV values containing commas, quotes, or newlines. CSV includes headers: Ticket, Symbol, Direction, Lots, Open Price, Close Price, Open Time, Close Time, Profit, Commission, Swap, Comment, Magic Number. Created downloadFile() utility function using Blob API to trigger browser downloads with proper MIME type support and cleanup (revokeObjectURL). Created exportMT5HistoryToCSV() function that fetches trade history, converts to CSV, generates filename with timestamp and optional symbol suffix (e.g., mt5-trades-V10-2024-01-15.csv), and triggers download. All functions include comprehensive error handling with MT5ErrorCode mapping and detailed console logging for all operations (fetch attempts, results, duration). Returns empty array on fetch errors instead of throwing for graceful degradation. Typecheck passes with no errors."
     },
     {
       "id": "US-011",
