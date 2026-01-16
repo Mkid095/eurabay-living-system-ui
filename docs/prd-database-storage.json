@@ -1,0 +1,278 @@
+{
+  "project": "EURABAY Living System - Database & Storage",
+  "branchName": "backend/database-storage",
+  "description": "SQLite database with async support and Parquet file storage for local disk-based data persistence",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Set up SQLite database with async support",
+      "description": "As a system, I need SQLite database with async connection pooling to store structured data locally.",
+      "acceptanceCriteria": [
+        "Install aiosqlite library for async SQLite operations",
+        "Create backend/database/ directory structure",
+        "Create database initialization script (init_db.py)",
+        "Set up connection pooling with aiosqlite",
+        "Create database.py with Database class for connection management",
+        "Implement get_connection() async method",
+        "Implement close() async method for cleanup",
+        "Set up database context manager for transactions",
+        "Create backend/data/ directory for database files",
+        "Test database connection and basic CRUD operations",
+        "Test async operations work correctly"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-002",
+      "title": "Design and create database schema",
+      "description": "As a system, I need a well-designed schema to store trades, performance metrics, configurations, and model metadata.",
+      "acceptanceCriteria": [
+        "Create schema.sql with all table definitions",
+        "Create trades table: id, symbol, entry_time, exit_time, entry_price, exit_price, quantity, pnl, signal, confidence, status",
+        "Create performance_metrics table: date, total_trades, winning_trades, win_rate, total_pnl, max_drawdown, sharpe_ratio, profit_factor",
+        "Create models table: id, name, version, created_at, accuracy, features, metrics",
+        "Create configurations table: key, value, type, description, updated_at",
+        "Create market_data table: id, symbol, timestamp, open, high, low, close, volume",
+        "Create signals table: id, symbol, timestamp, signal_type, confidence, reasons, is_executed",
+        "Create system_logs table: id, timestamp, level, message, context",
+        "Add proper indexes on frequently queried columns",
+        "Add foreign key constraints where appropriate",
+        "Test schema creation and relationships"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-003",
+      "title": "Implement SQLAlchemy async models",
+      "description": "As a developer, I need SQLAlchemy async models to work with database tables using Python ORM.",
+      "acceptanceCriteria": [
+        "Install SQLAlchemy and aiosqlite",
+        "Create backend/models/ directory for ORM models",
+        "Create Base class for all models",
+        "Implement Trade model with all fields and relationships",
+        "Implement PerformanceMetric model",
+        "Implement Model model for ML model metadata",
+        "Implement Configuration model",
+        "Implement MarketData model",
+        "Implement Signal model",
+        "Implement SystemLog model",
+        "Add __repr__ methods for all models",
+        "Add to_dict() methods for JSON serialization",
+        "Test model creation and querying"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-004",
+      "title": "Implement database service class",
+      "description": "As a developer, I need a database service class to encapsulate all database operations.",
+      "acceptanceCriteria": [
+        "Create backend/database/database_service.py",
+        "Create DatabaseService class with async methods",
+        "Implement create_trade() async method",
+        "Implement get_trade() async method",
+        "Implement get_all_trades() async method",
+        "Implement update_trade() async method",
+        "Implement delete_trade() async method",
+        "Implement create_performance_metric() async method",
+        "Implement get_performance_metrics() async method with date range filtering",
+        "Implement create_model() async method",
+        "Implement get_latest_model() async method",
+        "Implement get_configuration() async method",
+        "Implement set_configuration() async method",
+        "Add proper error handling for database operations",
+        "Test all CRUD operations"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-005",
+      "title": "Set up Parquet file storage for time-series data",
+      "description": "As a system, I need Parquet file storage for efficient time-series market data storage and retrieval.",
+      "acceptanceCriteria": [
+        "Install pyarrow and fastparquet libraries",
+        "Create backend/storage/ directory for file storage",
+        "Create TimeSeriesStorage class",
+        "Implement save_market_data() method to save as Parquet",
+        "Implement load_market_data() method to load Parquet files",
+        "Use zstd compression for Parquet files",
+        "Create partition structure: backend/data/market/{symbol}/{date}.parquet",
+        "Implement data deduplication before saving",
+        "Implement append mode for adding new data to existing files",
+        "Add metadata storage (file stats, row counts)",
+        "Test saving and loading time-series data",
+        "Verify Parquet compression ratio (> 5x better than CSV)"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-006",
+      "title": "Implement data retention and cleanup",
+      "description": "As a system, I need automatic data retention policies to prevent disk space issues.",
+      "acceptanceCriteria": [
+        "Create DataRetentionService class",
+        "Implement cleanup_old_market_data() method (keep 90 days)",
+        "Implement cleanup_old_logs() method (keep 30 days)",
+        "Implement compress_old_files() method (compress files > 7 days)",
+        "Create cleanup scheduler (runs daily at 2 AM)",
+        "Log all cleanup operations",
+        "Calculate disk space before and after cleanup",
+        "Implement dry-run mode for testing",
+        "Add configuration for retention periods",
+        "Test cleanup on test data"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false
+    },
+    {
+      "id": "US-007",
+      "title": "Implement database migration system",
+      "description": "As a developer, I need a migration system to track and apply schema changes over time.",
+      "acceptanceCriteria": [
+        "Create backend/migrations/ directory",
+        "Create migration tracking table (schema_migrations)",
+        "Create Migration class with up() and down() methods",
+        "Implement migrate() command to run pending migrations",
+        "Implement rollback() command to revert migrations",
+        "Create initial migration (001_create_schema.py)",
+        "Auto-generate migration files from schema changes",
+        "Log all migration operations",
+        "Verify migration order is maintained",
+        "Test migration and rollback"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-008",
+      "title": "Implement database backup and restore",
+      "description": "As a system administrator, I need backup and restore functionality to protect against data loss.",
+      "acceptanceCriteria": [
+        "Create backup_database() method",
+        "Backup SQLite database to timestamped file",
+        "Compress backup files with gzip",
+        "Store backups in backend/backups/ directory",
+        "Implement restore_database() method",
+        "Implement list_backups() method",
+        "Implement auto-backup scheduler (daily at 3 AM)",
+        "Keep last 7 backups (delete older)",
+        "Log all backup and restore operations",
+        "Test backup and restore on test database"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false
+    },
+    {
+      "id": "US-009",
+      "title": "Implement database query optimization",
+      "description": "As a system, I need optimized database queries for performance with large datasets.",
+      "acceptanceCriteria": [
+        "Add composite indexes on commonly queried column combinations",
+        "Implement query result caching (LRU cache)",
+        "Implement pagination for large result sets",
+        "Use EXPLAIN QUERY PLAN to analyze slow queries",
+        "Add query execution time logging (> 100ms warning)",
+        "Implement prepared statements for repeated queries",
+        "Optimize JOIN queries with proper indexes",
+        "Create read replicas for complex analytical queries",
+        "Test query performance with 10,000+ rows",
+        "Verify query execution time < 100ms for common queries"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false
+    },
+    {
+      "id": "US-010",
+      "title": "Create database documentation",
+      "description": "As a developer, I need comprehensive database documentation to understand schema and relationships.",
+      "acceptanceCriteria": [
+        "Create ER diagram showing all tables and relationships",
+        "Document each table with purpose and column descriptions",
+        "Document indexes and their purpose",
+        "Document foreign key relationships",
+        "Create data dictionary with field types and constraints",
+        "Document common query patterns",
+        "Add example queries for each table",
+        "Document backup and restore procedures",
+        "Review documentation completeness"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false
+    }
+  ],
+  "functionalRequirements": [
+    "FR-1: Database must use SQLite for local storage (no remote database)",
+    "FR-2: Database must support async operations with aiosqlite",
+    "FR-3: Database must store all data on local hard disk",
+    "FR-4: Time-series data must use Parquet format for efficiency",
+    "FR-5: Database must have proper schema with relationships and indexes",
+    "FR-6: Database must support migrations for schema changes",
+    "FR-7: Database must have backup and restore functionality",
+    "FR-8: Database must implement data retention policies (90 days for market data)",
+    "FR-9: Database must be optimized for performance (< 100ms query time)",
+    "FR-10: Database operations must have comprehensive error handling"
+  ],
+  "nonGoals": [
+    "No remote database or cloud storage (local disk only)",
+    "No distributed database or replication",
+    "No database sharding",
+    "No real-time database streaming"
+  ],
+  "technicalConsiderations": [
+    "SQLite has excellent performance for read-heavy workloads",
+    "Parquet files provide 10-100x better performance than CSV for time-series",
+    "Async operations prevent blocking the trading loop",
+    "Connection pooling improves performance",
+    "Indexes are critical for query performance",
+    "Database files stored in backend/data/ directory",
+    "Parquet files stored in backend/storage/ directory",
+    "Compression (zstd) reduces storage requirements by 5-10x",
+    "Regular cleanup prevents disk space issues",
+    "Backups are essential for data protection"
+  ],
+  "successMetrics": [
+    "Database file created successfully in backend/data/",
+    "All tables created with proper schema",
+    "CRUD operations work correctly for all models",
+    "Parquet files save and load time-series data efficiently",
+    "Data retention cleanup runs successfully",
+    "Backup and restore work correctly",
+    "Query performance < 100ms for common queries",
+    "Migrations apply and rollback correctly",
+    "Database passes all tests"
+  ],
+  "techStack": {
+    "database": "SQLite 3",
+    "async": "aiosqlite 0.19+",
+    "orm": "SQLAlchemy 2.0+",
+    "storage": "Parquet (pyarrow)",
+    "compression": "zstd",
+    "migration": "Custom migration system",
+    "backup": "Python shutil + gzip"
+  }
+}

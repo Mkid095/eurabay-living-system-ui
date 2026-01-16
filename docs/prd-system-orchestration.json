@@ -1,0 +1,403 @@
+{
+  "project": "EURABAY Living System v5.0",
+  "branchName": "backend/system-orchestration",
+  "description": "System Orchestration - Trading loop orchestration, error handling and recovery, state management, workflow coordination, and system health monitoring for autonomous trading operations",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Set up trading loop orchestration foundation",
+      "description": "As a trading system, I need to set up a trading loop orchestration foundation to coordinate all trading operations.",
+      "acceptanceCriteria": [
+        "Create backend/services/trading_loop.py module",
+        "Implement TradingLoop class with async architecture",
+        "Set up loop scheduling (runs every 1 second)",
+        "Implement loop state management (idle, running, paused, stopped, error)",
+        "Set up loop configuration (symbols, timeframes, parameters)",
+        "Add loop logging and monitoring",
+        "Create unit tests for trading loop",
+        "Add integration tests with all services",
+        "Document trading loop workflow and states"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Heart of the trading system"
+    },
+    {
+      "id": "US-002",
+      "title": "Implement main trading loop workflow",
+      "description": "As a trading system, I need to implement the main trading loop workflow that orchestrates all trading operations.",
+      "acceptanceCriteria": [
+        "Implement async loop execution (runs every 1 second)",
+        "Orchestrate workflow: data fetch → features → prediction → signal → risk → execution",
+        "Implement per-symbol parallel processing (5 symbols simultaneously)",
+        "Add workflow step timing (measure latency for each step)",
+        "Implement workflow result logging",
+        "Add workflow error handling (continue on non-critical errors)",
+        "Implement workflow state tracking (current step, results)",
+        "Test loop workflow with paper trading",
+        "Validate loop completes in < 1 second",
+        "Monitor loop performance metrics"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Loop must complete in < 1 second for real-time trading"
+    },
+    {
+      "id": "US-003",
+      "title": "Implement trading loop control interface",
+      "description": "As a system operator, I need to control the trading loop (start, stop, pause, resume) via API.",
+      "acceptanceCriteria": [
+        "Implement start() method to begin trading loop",
+        "Implement stop() method to halt trading loop gracefully",
+        "Implement pause() method to pause loop temporarily",
+        "Implement resume() method to resume paused loop",
+        "Add state validation (can't start if already running)",
+        "Add state transition logging",
+        "Implement loop status API endpoint",
+        "Add loop control API endpoints",
+        "Test all state transitions",
+        "Validate graceful shutdown (close positions, save state)"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Control interface essential for system operation"
+    },
+    {
+      "id": "US-004",
+      "title": "Implement error handling framework",
+      "description": "As a robust system, I need a comprehensive error handling framework to catch and handle all errors gracefully.",
+      "acceptanceCriteria": [
+        "Create backend/core/error_handling.py module",
+        "Implement custom exception classes for each service",
+        "Implement error logging with context (timestamp, service, error details)",
+        "Implement error severity levels (warning, error, critical)",
+        "Implement error alerting (send notifications for critical errors)",
+        "Add error tracking (error count per service)",
+        "Implement error context preservation (stack trace, variables)",
+        "Create unit tests for error handling",
+        "Test error scenarios (MT5 disconnect, database error, model error)",
+        "Document error handling procedures"
+      ],
+      "mavenSteps": [1, 10],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Error handling is critical for 24/7 operation"
+    },
+    {
+      "id": "US-005",
+      "title": "Implement MT5 connection error recovery",
+      "description": "As a robust system, I need to automatically recover from MT5 connection failures.",
+      "acceptanceCriteria": [
+        "Implement MT5 connection health check (every 10 seconds)",
+        "Implement MT5 reconnection logic (exponential backoff: 1s, 5s, 10s, 30s, 60s)",
+        "Implement connection state tracking (connected, disconnected, reconnecting)",
+        "Pause trading while disconnected",
+        "Implement connection recovery validation",
+        "Add connection event logging",
+        "Implement connection failure alerting",
+        "Test reconnection with manual disconnect",
+        "Test reconnection with MT5 terminal restart",
+        "Validate reconnection succeeds within 5 minutes"
+      ],
+      "mavenSteps": [1, 10],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "MT5 connections are unreliable, need robust recovery"
+    },
+    {
+      "id": "US-006",
+      "title": "Implement database error recovery",
+      "description": "As a robust system, I need to automatically recover from database connection failures.",
+      "acceptanceCriteria": [
+        "Implement database health check (every 30 seconds)",
+        "Implement database reconnection logic",
+        "Implement operation retry on database errors (3 attempts)",
+        "Implement operation queuing while disconnected",
+        "Implement data consistency checks after reconnection",
+        "Add database event logging",
+        "Implement database failure alerting",
+        "Test recovery with database lock",
+        "Test recovery with database restart",
+        "Validate no data loss after recovery"
+      ],
+      "mavenSteps": [1, 10],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Database errors must not crash the system"
+    },
+    {
+      "id": "US-007",
+      "title": "Implement model error recovery and fallback",
+      "description": "As a robust system, I need to handle model errors and fall back to safe defaults.",
+      "acceptanceCriteria": [
+        "Implement model health check (validate predictions)",
+        "Implement model fallback on prediction errors (use last valid prediction)",
+        "Implement model reload on corruption",
+        "Implement backup model activation",
+        "Implement model error logging",
+        "Implement model error alerting",
+        "Implement model performance degradation detection",
+        "Test recovery with model corruption",
+        "Test fallback with prediction timeout",
+        "Validate fallback prevents trading on bad predictions"
+      ],
+      "mavenSteps": [1, 10],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Model errors must not cause bad trades"
+    },
+    {
+      "id": "US-008",
+      "title": "Implement circuit breaker pattern",
+      "description": "As a robust system, I need to implement circuit breakers to prevent cascading failures.",
+      "acceptanceCriteria": [
+        "Implement circuit breaker for MT5 service (open after 5 consecutive errors)",
+        "Implement circuit breaker for database (open after 10 consecutive errors)",
+        "Implement circuit breaker for model inference (open after 3 consecutive errors)",
+        "Implement circuit breaker states (closed, open, half-open)",
+        "Implement automatic reset (half-open after timeout)",
+        "Implement circuit breaker logging",
+        "Implement circuit breaker monitoring",
+        "Test circuit breaker with repeated failures",
+        "Test circuit breaker reset after timeout",
+        "Validate circuit breaker prevents cascading failures"
+      ],
+      "mavenSteps": [1, 10],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Circuit breakers prevent system overload"
+    },
+    {
+      "id": "US-009",
+      "title": "Implement graceful degradation",
+      "description": "As a robust system, I need to implement graceful degradation when services fail.",
+      "acceptanceCriteria": [
+        "Implement reduced trading mode when services degrade",
+        "Implement feature fallback (use cached features if feature engineering fails)",
+        "Implement signal filtering (only high confidence signals when model degrades)",
+        "Implement position reduction (close partial positions when risk increases)",
+        "Implement operation queuing (queue operations when database is slow)",
+        "Add degradation logging",
+        "Implement degradation alerts",
+        "Test degradation scenarios",
+        "Validate system continues operating with degraded services",
+        "Document degradation modes and triggers"
+      ],
+      "mavenSteps": [1, 10],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Graceful degradation keeps system running"
+    },
+    {
+      "id": "US-010",
+      "title": "Implement system state management",
+      "description": "As a trading system, I need to manage system state across restarts and failures.",
+      "acceptanceCriteria": [
+        "Implement state persistence (save state to database every 30 seconds)",
+        "Implement state recovery on startup (load last state)",
+        "Implement state validation (check consistency on recovery)",
+        "Implement state snapshot (full state before major operations)",
+        "Implement state rollback (revert to last good state)",
+        "Add state change logging",
+        "Implement state synchronization across services",
+        "Test state persistence and recovery",
+        "Test state rollback after error",
+        "Validate state consistency after recovery"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "State management enables recovery from failures"
+    },
+    {
+      "id": "US-011",
+      "title": "Implement system health monitoring",
+      "description": "As a system operator, I need comprehensive health monitoring to track system status.",
+      "acceptanceCriteria": [
+        "Implement service health checks (MT5, database, model, trading loop)",
+        "Implement system resource monitoring (CPU, memory, disk, network)",
+        "Implement performance monitoring (loop execution time, API latency)",
+        "Implement trading metrics monitoring (win rate, drawdown, daily P&L)",
+        "Implement health score calculation (0-100 scale)",
+        "Implement health status API endpoint",
+        "Stream health updates via WebSocket",
+        "Add health alerting (alert when health score < 70)",
+        "Test health monitoring with various scenarios",
+        "Validate health monitoring detects issues"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Health monitoring is essential for operations"
+    },
+    {
+      "id": "US-012",
+      "title": "Implement workflow coordination and dependencies",
+      "description": "As a trading system, I need to coordinate workflows and manage dependencies between services.",
+      "acceptanceCriteria": [
+        "Implement service dependency graph (data ingestion → features → model → signal → risk → execution)",
+        "Implement workflow orchestration (coordinate parallel and sequential steps)",
+        "Implement dependency checking (validate services are ready before use)",
+        "Implement workflow timeout handling (fail fast on timeout)",
+        "Implement workflow result aggregation (combine results from parallel steps)",
+        "Add workflow visualization (optional)",
+        "Implement workflow logging",
+        "Test workflow with various scenarios",
+        "Validate workflow handles service failures gracefully",
+        "Document workflow dependencies"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Workflow coordination ensures proper execution order"
+    },
+    {
+      "id": "US-013",
+      "title": "Implement automatic restart and recovery",
+      "description": "As a robust system, I need to implement automatic restart and recovery from critical failures.",
+      "acceptanceCriteria": [
+        "Implement crash detection (watchdog process)",
+        "Implement automatic restart on crash",
+        "Implement state restoration after restart",
+        "Implement recovery logging (what happened, what was recovered)",
+        "Implement recovery validation (check system integrity after restart)",
+        "Implement restart backoff (exponential backoff for repeated crashes)",
+        "Implement manual intervention required flag (for unrecoverable errors)",
+        "Test automatic restart with simulated crash",
+        "Test state restoration after restart",
+        "Validate system recovers to consistent state"
+      ],
+      "mavenSteps": [1, 10],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Automatic restart enables 24/7 operation"
+    },
+    {
+      "id": "US-014",
+      "title": "Implement event logging and audit trail",
+      "description": "As a compliant system, I need to implement comprehensive event logging for audit trails.",
+      "acceptanceCriteria": [
+        "Implement event logging for all trading operations",
+        "Implement event logging for all system state changes",
+        "Implement event logging for all errors and recoveries",
+        "Implement event storage in database (immutable log)",
+        "Implement event query API (filter by type, time, service)",
+        "Implement event export (CSV, JSON)",
+        "Add event retention policy (90 days)",
+        "Implement event integrity checking (checksums)",
+        "Test event logging with various scenarios",
+        "Validate audit trail completeness"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Audit trail essential for compliance and debugging"
+    },
+    {
+      "id": "US-015",
+      "title": "Implement system diagnostics and debugging tools",
+      "description": "As a developer, I need diagnostic and debugging tools to troubleshoot system issues.",
+      "acceptanceCriteria": [
+        "Implement system diagnostics endpoint (aggregate status of all services)",
+        "Implement performance profiling (measure execution time for each step)",
+        "Implement memory profiling (detect memory leaks)",
+        "Implement deadlock detection (detect blocking operations)",
+        "Implement diagnostics API endpoint",
+        "Implement diagnostics report generation",
+        "Implement debug logging (verbose logging for development)",
+        "Add diagnostics to system status dashboard",
+        "Test diagnostics with various scenarios",
+        "Document diagnostic procedures"
+      ],
+      "mavenSteps": [1, 10],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Diagnostics essential for troubleshooting"
+    }
+  ],
+  "functionalRequirements": [
+    "FR-1: System must orchestrate trading loop with < 1 second execution time",
+    "FR-2: System must handle errors gracefully without crashing",
+    "FR-3: System must recover from MT5 connection failures automatically",
+    "FR-4: System must recover from database failures automatically",
+    "FR-5: System must implement circuit breakers to prevent cascading failures",
+    "FR-6: System must persist state and recover on restart",
+    "FR-7: System must monitor health of all services",
+    "FR-8: System must implement graceful degradation under load",
+    "FR-9: System must log all events for audit trail",
+    "FR-10: System must provide diagnostic tools for troubleshooting"
+  ],
+  "nonGoals": [
+    "No distributed tracing (Jaeger, Zipkin) in this phase",
+    "No service mesh (Istio, Linkerd) in this phase",
+    "No container orchestration (Kubernetes) in this phase",
+    "No multi-region deployment in this phase",
+    "No chaos engineering in this phase",
+    "No disaster recovery with multi-site replication"
+  ],
+  "technicalConsiderations": [
+    "Async/await essential for concurrent operations",
+    "Error handling must be comprehensive (every operation)",
+    "State persistence must be atomic (avoid partial state)",
+    "Circuit breakers prevent cascading failures",
+    "Health monitoring must be real-time (< 5 second latency)",
+    "Recovery logic must be tested thoroughly",
+    "Logging must be structured and queryable",
+    "Diagnostics must not impact performance",
+    "Graceful degradation keeps system running",
+    "Automatic restart enables 24/7 operation"
+  ],
+  "successMetrics": [
+    "Trading loop executes in < 1 second (p95)",
+    "System recovers from MT5 disconnect in < 5 minutes",
+    "System recovers from database failure in < 1 minute",
+    "Circuit breakers prevent cascading failures",
+    "System uptime > 99% (excluding maintenance)",
+    "Graceful degradation keeps system running with 50% service failure",
+    "State recovery succeeds in > 95% of cases",
+    "Health monitoring detects issues within 10 seconds",
+    "Audit trail captures 100% of events",
+    "Diagnostics identify root cause in > 80% of cases"
+  ],
+  "techStack": {
+    "orchestration": "asyncio, custom orchestrator",
+    "errorHandling": "custom exception framework, tenacity for retry",
+    "circuitBreaker": "circuitbreaker library or custom implementation",
+    "stateManagement": "SQLite for state persistence",
+    "monitoring": "psutil for system metrics, custom health checks",
+    "logging": "loguru for structured logging",
+    "profiling": "cProfile for performance profiling",
+    "diagnostics": "custom diagnostic tools"
+  },
+  "architecture": {
+    "tradingLoop": "Data Fetch → Features → Prediction → Signal → Risk → Execution → Log (repeat every 1s)",
+    "errorHandling": "Try-Catch → Log → Retry/Circuit Breaker → Fallback → Alert",
+    "recoveryFlow": "Detect Failure → Pause Trading → Recover Service → Validate → Resume Trading",
+    "stateFlow": "Operation → Update State → Persist to DB → On Restart: Load State → Validate → Resume"
+  },
+  "timeline": {
+    "phase1": "Foundation (Days 1-4): Trading loop setup, state management",
+    "phase2": "Error Handling (Days 5-8): Error framework, MT5/database recovery",
+    "phase3": "Resilience (Days 9-12): Circuit breakers, graceful degradation",
+    "phase4": "Monitoring (Days 13-15): Health monitoring, diagnostics",
+    "phase5": "Recovery (Days 16-17): Automatic restart, audit trail, validation"
+  }
+}

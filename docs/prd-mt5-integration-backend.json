@@ -1,0 +1,267 @@
+{
+  "project": "EURABAY Living System - MT5 Integration",
+  "branchName": "backend/mt5-integration",
+  "description": "MetaTrader 5 integration service for connection, data fetching, order placement, and position management",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Install and configure MetaTrader5 Python library",
+      "description": "As a developer, I need the MetaTrader5 Python library installed to communicate with MT5 terminal.",
+      "acceptanceCriteria": [
+        "Add MetaTrader5 to requirements.txt",
+        "Install MetaTrader5 library (pip install MetaTrader5)",
+        "Verify installation with import test",
+        "Check MT5 terminal is installed and accessible",
+        "Verify Python can import MetaTrader5 module",
+        "Test basic MT5.initialize() call",
+        "Document MT5 requirements (terminal must be running)",
+        "Create MT5 configuration in backend/.env"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-002",
+      "title": "Implement MT5 connection management",
+      "description": "As a system, I need to connect to MT5 terminal with proper authentication and error handling.",
+      "acceptanceCriteria": [
+        "Create backend/services/mt5_service.py",
+        "Create MT5Service class with connection methods",
+        "Implement initialize() method with login, password, server",
+        "Implement shutdown() method for clean disconnect",
+        "Implement is_connected() method to check connection state",
+        "Implement reconnect() method with retry logic (max 3 attempts)",
+        "Add connection state monitoring with heartbeat",
+        "Implement connection timeout (30 seconds)",
+        "Add comprehensive error handling for connection failures",
+        "Log all connection attempts and results",
+        "Test successful connection to live MT5 terminal",
+        "Test reconnection after disconnect"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-003",
+      "title": "Implement real-time price data fetching",
+      "description": "As a trading system, I need to fetch real-time price data for all volatility indices.",
+      "acceptanceCriteria": [
+        "Implement get_symbol_info() method",
+        "Implement get_tick() method for current price",
+        "Implement get_ticks() method for recent tick data",
+        "Implement get_rates() method for OHLCV data",
+        "Support timeframes: M1, M5, M15, M30, H1, H4, D1",
+        "Implement multi-symbol data fetching (V10, V25, V50, V75, V100)",
+        "Add data validation (check for null/invalid prices)",
+        "Implement data caching (1 second TTL)",
+        "Add error handling for disconnections during fetch",
+        "Log all price fetch operations",
+        "Test fetching data for all 5 volatility indices",
+        "Verify data accuracy (compare with MT5 terminal)"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-004",
+      "title": "Implement historical data retrieval",
+      "description": "As a system, I need to fetch historical OHLCV data for analysis and model training.",
+      "acceptanceCriteria": [
+        "Implement get_historical_data() method",
+        "Support date range filtering (from_date, to_date)",
+        "Support different timeframes",
+        "Return data as pandas DataFrame",
+        "Implement data backfill for missing bars",
+        "Add data quality checks (gaps, duplicates)",
+        "Store historical data in Parquet format",
+        "Implement incremental updates (only fetch new data)",
+        "Add progress logging for large data fetches",
+        "Test fetching 90 days of historical data",
+        "Verify data integrity (no gaps, correct timestamps)"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-005",
+      "title": "Implement order placement functionality",
+      "description": "As a trading system, I need to place orders through MT5 when signals are generated.",
+      "acceptanceCriteria": [
+        "Implement place_order() method",
+        "Support order types: BUY, SELL",
+        "Implement order request structure (symbol, volume, type, price, SL, TP)",
+        "Add order validation before submission",
+        "Implement order result parsing",
+        "Add retry logic for failed orders (max 3 attempts)",
+        "Implement order timeout (10 seconds)",
+        "Log all order placement attempts",
+        "Return order ticket number on success",
+        "Raise detailed exception on failure",
+        "Test placing buy order",
+        "Test placing sell order",
+        "Test order rejection handling"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-006",
+      "title": "Implement position management",
+      "description": "As a trading system, I need to manage open positions (modify, close).",
+      "acceptanceCriteria": [
+        "Implement get_positions() method",
+        "Filter by symbol (optional)",
+        "Implement get_position() method by ticket",
+        "Implement modify_position() method (change SL/TP)",
+        "Implement close_position() method",
+        "Implement close_position_by_symbol() method (close all for symbol)",
+        "Implement close_all_positions() method (emergency close)",
+        "Add position validation before operations",
+        "Log all position management operations",
+        "Test getting open positions",
+        "Test modifying position SL/TP",
+        "Test closing position"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-007",
+      "title": "Implement account information retrieval",
+      "description": "As a system, I need to fetch account information (balance, equity, margin, etc.).",
+      "acceptanceCriteria": [
+        "Implement get_account_info() method",
+        "Return: balance, equity, margin, free_margin, margin_level, profit",
+        "Implement get_open_orders() method",
+        "Implement get_history_orders() method with date range",
+        "Implement get_total_profit() method",
+        "Cache account info (5 second TTL)",
+        "Log account info fetches",
+        "Test fetching account information",
+        "Verify data matches MT5 terminal"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-008",
+      "title": "Implement error handling and reconnection logic",
+      "description": "As a robust system, I need comprehensive error handling and automatic reconnection.",
+      "acceptanceCriteria": [
+        "Create MT5Error exception class",
+        "Implement try-except around all MT5 calls",
+        "Detect connection failures (retcode errors)",
+        "Implement automatic reconnection on disconnect",
+        "Implement exponential backoff for reconnection (1s, 2s, 4s, max 30s)",
+        "Implement circuit breaker (stop trying after 10 consecutive failures)",
+        "Log all errors with full context",
+        "Implement graceful degradation (continue without MT5 if unavailable)",
+        "Test error handling with MT5 terminal closed",
+        "Test reconnection after MT5 restart"
+      ],
+      "mavenSteps": [1, 10],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-009",
+      "title": "Implement MT5 event monitoring",
+      "description": "As a system, I need to monitor MT5 events (triggers, position changes).",
+      "acceptanceCriteria": [
+        "Implement position change monitoring",
+        "Implement order fill monitoring",
+        "Implement margin level monitoring",
+        "Implement connection state monitoring",
+        "Create event callback system for notifications",
+        "Generate alerts on critical events",
+        "Log all MT5 events",
+        "Test event monitoring with live trading"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false
+    },
+    {
+      "id": "US-010",
+      "title": "Create MT5 service documentation",
+      "description": "As a developer, I need documentation for MT5 integration service.",
+      "acceptanceCriteria": [
+        "Document MT5 terminal setup requirements",
+        "Document connection configuration",
+        "Document all service methods with examples",
+        "Document error codes and handling",
+        "Document rate limiting (if any)",
+        "Document best practices",
+        "Add troubleshooting guide",
+        "Review documentation completeness"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false
+    }
+  ],
+  "functionalRequirements": [
+    "FR-1: MT5 service must connect to terminal with login credentials",
+    "FR-2: MT5 service must handle connection failures gracefully",
+    "FR-3: MT5 service must fetch real-time data for all volatility indices",
+    "FR-4: MT5 service must place orders with proper validation",
+    "FR-5: MT5 service must manage open positions",
+    "FR-6: MT5 service must retrieve account information",
+    "FR-7: MT5 service must implement automatic reconnection",
+    "FR-8: MT5 service must log all operations",
+    "FR-9: MT5 service must work with Algo Trading enabled",
+    "FR-10: MT5 service must support all volatility indices (V10, V25, V50, V75, V100)"
+  ],
+  "nonGoals": [
+    "No MT5 EA/Indicator development (Python only)",
+    "No historical data older than 90 days",
+    "No multi-terminal support (single terminal)",
+    "No MT4 support (MT5 only)"
+  ],
+  "technicalConsiderations": [
+    "MT5 terminal must be running and logged in",
+    "Algo Trading must be enabled in MT5",
+    "Connection can fail randomly (requires robust error handling)",
+    "Rate limiting may apply (check with broker)",
+    "Order execution delays during high volatility",
+    "Weekend trading may have limited liquidity",
+    "All MT5 calls should be wrapped in try-except",
+    "Reconnection should use exponential backoff",
+    "Data should be validated after fetching",
+    "Operations should timeout after 10 seconds"
+  ],
+  "successMetrics": [
+    "Successfully connects to MT5 terminal",
+    "Fetches real-time data for all 5 symbols",
+    "Places orders successfully",
+    "Manages positions (modify/close)",
+    "Reconnects automatically after disconnect",
+    "Handles errors without crashing",
+    "All operations logged",
+    "Works with paper trading and live trading"
+  ],
+  "techStack": {
+    "mt5": "MetaTrader5 5.0.45+",
+    "data": "pandas, numpy",
+    "async": "asyncio",
+    "logging": "loguru",
+    "config": "python-dotenv"
+  }
+}

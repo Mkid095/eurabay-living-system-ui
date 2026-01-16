@@ -16,13 +16,14 @@ import { cn } from '@/lib/utils';
  * Connection Status Indicator Component
  *
  * Displays real-time WebSocket connection status with:
- * - Color-coded status indicator (green/yellow/red)
+ * - Color-coded status indicator (green/yellow/red/gray)
  * - Connection state text
  * - Latency display when connected
  * - Tooltip with detailed connection information
  * - Manual reconnect button when disconnected
  * - Reconnecting message during reconnection attempts
  * - Error message after 3 consecutive failed attempts
+ * - Disabled message when WebSocket is disabled
  */
 
 interface ConnectionStatusProps {
@@ -40,6 +41,9 @@ export function ConnectionStatus({
   const { isReconnecting, attempt, consecutiveFailures, hasMaxFailures, reset: resetRecovery } = useReconnectionState();
   const [isManualReconnecting, setIsManualReconnecting] = useState(false);
 
+  // Check if WebSocket is disabled
+  const isWsDisabled = process.env.NEXT_PUBLIC_WS_DISABLED === 'true';
+
   const handleReconnect = async () => {
     setIsManualReconnecting(true);
     // Reset recovery state when manually reconnecting
@@ -50,6 +54,11 @@ export function ConnectionStatus({
   };
 
   const getStatusText = (): string => {
+    // Show disabled message when WebSocket is disabled
+    if (isWsDisabled) {
+      return 'Disabled';
+    }
+
     // Show "Reconnecting..." when auto-reconnecting
     if (isReconnecting) {
       return `Reconnecting... (${attempt})`;
@@ -70,6 +79,10 @@ export function ConnectionStatus({
   };
 
   const getStatusColor = (): string => {
+    if (isWsDisabled) {
+      return 'bg-gray-400';
+    }
+
     switch (state) {
       case 'connected':
         return 'bg-green-500';
@@ -83,7 +96,7 @@ export function ConnectionStatus({
     }
   };
 
-  const shouldShowReconnectButton = state === 'disconnected' || state === 'error';
+  const shouldShowReconnectButton = !isWsDisabled && (state === 'disconnected' || state === 'error');
 
   return (
     <div className={cn('flex items-center gap-2', className)}>
@@ -126,22 +139,28 @@ export function ConnectionStatus({
           <div className="space-y-1">
             <div className="font-medium">Connection Status</div>
             <div className="text-xs text-muted-foreground space-y-0.5">
-              <div>State: {state === 'connecting' ? 'Connecting' : state}</div>
-              {state === 'connected' && latency !== null && (
-                <div>Latency: {latency}ms</div>
-              )}
-              {isReconnecting && (
-                <div>Reconnection attempt: {attempt}</div>
-              )}
-              {reconnectAttemptCount > 0 && !isReconnecting && (
-                <div>Total reconnect attempts: {reconnectAttemptCount}</div>
-              )}
-              {consecutiveFailures > 0 && (
-                <div className={cn(
-                  consecutiveFailures >= 3 ? 'text-red-500 font-medium' : 'text-yellow-600'
-                )}>
-                  Consecutive failures: {consecutiveFailures}
-                </div>
+              {isWsDisabled ? (
+                <div>WebSocket is disabled for frontend-only testing</div>
+              ) : (
+                <>
+                  <div>State: {state === 'connecting' ? 'Connecting' : state}</div>
+                  {state === 'connected' && latency !== null && (
+                    <div>Latency: {latency}ms</div>
+                  )}
+                  {isReconnecting && (
+                    <div>Reconnection attempt: {attempt}</div>
+                  )}
+                  {reconnectAttemptCount > 0 && !isReconnecting && (
+                    <div>Total reconnect attempts: {reconnectAttemptCount}</div>
+                  )}
+                  {consecutiveFailures > 0 && (
+                    <div className={cn(
+                      consecutiveFailures >= 3 ? 'text-red-500 font-medium' : 'text-yellow-600'
+                    )}>
+                      Consecutive failures: {consecutiveFailures}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -162,7 +181,7 @@ export function ConnectionStatus({
       )}
 
       {/* Error message after 3 consecutive failed attempts */}
-      {hasMaxFailures && (
+      {!isWsDisabled && hasMaxFailures && (
         <div className="text-xs text-red-500 font-medium">
           Connection failed after {consecutiveFailures} attempts
         </div>

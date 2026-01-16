@@ -1,0 +1,399 @@
+{
+  "project": "EURABAY Living System v5.0",
+  "branchName": "backend/trading-execution-system",
+  "description": "Trading Execution System - Risk management engine, order execution service, trade lifecycle management, and position monitoring for volatility indices trading with MT5 integration",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Set up risk management system foundation",
+      "description": "As a trading system, I need to set up a risk management foundation to calculate position sizes, stop losses, and manage trading risk.",
+      "acceptanceCriteria": [
+        "Create backend/services/risk_management.py module",
+        "Implement RiskManager class with configurable risk parameters",
+        "Set up risk parameter configuration (max risk per trade, max daily loss, etc.)",
+        "Implement risk validation before trade execution",
+        "Add risk logging and monitoring",
+        "Implement risk limit enforcement",
+        "Create unit tests for risk calculations",
+        "Add integration tests with trading scenarios",
+        "Document risk management rules and parameters"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Foundation for all risk management work"
+    },
+    {
+      "id": "US-002",
+      "title": "Implement position sizing algorithms",
+      "description": "As a trading system, I need to calculate optimal position sizes based on account balance and risk parameters.",
+      "acceptanceCriteria": [
+        "Implement fixed percentage risk (1-2% of account per trade)",
+        "Implement Kelly Criterion position sizing",
+        "Implement volatility-based position sizing (ATR-based)",
+        "Implement risk-reward ratio validation (min 1.5:1)",
+        "Implement position size calculation for MT5 lots",
+        "Add position size validation (min/max lot limits)",
+        "Implement position sizing based on account equity",
+        "Implement position scaling (pyramiding in/out)",
+        "Test position sizing on various account sizes",
+        "Validate position sizes match MT5 requirements"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Never risk more than 2% per trade"
+    },
+    {
+      "id": "US-003",
+      "title": "Implement stop loss and take profit calculation",
+      "description": "As a trading system, I need to calculate optimal stop loss and take profit levels for each trade.",
+      "acceptanceCriteria": [
+        "Implement ATR-based stop loss (2x ATR)",
+        "Implement fixed pip stop loss (configurable)",
+        "Implement percentage-based stop loss (from entry price)",
+        "Implement support/resistance-based stop loss",
+        "Implement risk-reward based take profit (1.5x, 2x, 3x risk)",
+        "Implement trailing stop loss activation",
+        "Implement partial take profit levels (30%, 50%, 100%)",
+        "Implement time-based exit (max trade duration)",
+        "Add stop loss/take profit validation",
+        "Test stop loss calculations on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Stop loss is critical for risk management"
+    },
+    {
+      "id": "US-004",
+      "title": "Implement risk limits and circuit breakers",
+      "description": "As a trading system, I need to enforce risk limits and implement circuit breakers to prevent catastrophic losses.",
+      "acceptanceCriteria": [
+        "Implement maximum daily loss limit (5% of account)",
+        "Implement maximum weekly loss limit (10% of account)",
+        "Implement maximum concurrent positions limit (3-5 trades)",
+        "Implement maximum correlation risk (no trades in same direction on correlated symbols)",
+        "Implement circuit breaker on consecutive losses (3 losses = pause trading)",
+        "Implement circuit breaker on large drawdown (>10% = pause trading)",
+        "Implement daily loss tracking and reset",
+        "Implement risk limit warnings (80%, 90%, 100% of limit)",
+        "Add risk limit breach logging and alerting",
+        "Test risk limits on various scenarios"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Circuit breakers prevent catastrophic losses"
+    },
+    {
+      "id": "US-005",
+      "title": "Set up order execution service foundation",
+      "description": "As a trading system, I need to set up an order execution service to place and manage orders through MT5.",
+      "acceptanceCriteria": [
+        "Create backend/services/order_execution.py module",
+        "Implement OrderExecutionService class",
+        "Set up MT5 order placement integration",
+        "Implement order validation before submission",
+        "Add order status tracking",
+        "Implement order retry logic (3 attempts with exponential backoff)",
+        "Add order execution logging",
+        "Implement error handling for MT5 failures",
+        "Create unit tests for order execution",
+        "Add integration tests with MT5 terminal"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Foundation for all order execution work"
+    },
+    {
+      "id": "US-006",
+      "title": "Implement order placement and validation",
+      "description": "As a trading system, I need to place validated orders through MT5 with proper error handling.",
+      "acceptanceCriteria": [
+        "Implement market order placement (buy/sell)",
+        "Implement order validation (symbol, volume, price, SL/TP)",
+        "Implement account balance check before order",
+        "Implement margin requirement check",
+        "Implement order request formatting for MT5",
+        "Add order result validation and parsing",
+        "Implement order rejection handling",
+        "Add order placement logging",
+        "Implement order confirmation tracking",
+        "Test order placement with paper trading"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Order validation prevents invalid orders"
+    },
+    {
+      "id": "US-007",
+      "title": "Implement order modification and cancellation",
+      "description": "As a trading system, I need to modify and cancel orders through MT5 for active trade management.",
+      "acceptanceCriteria": [
+        "Implement stop loss modification",
+        "Implement take profit modification",
+        "Implement trailing stop loss update",
+        "Implement order cancellation (pending orders)",
+        "Implement position partial close",
+        "Implement position full close",
+        "Add modification validation",
+        "Add modification logging",
+        "Implement modification retry logic",
+        "Test order modification with paper trading"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Active trade management requires order modification"
+    },
+    {
+      "id": "US-008",
+      "title": "Set up trade management system foundation",
+      "description": "As a trading system, I need to set up a trade management system to monitor and manage open positions.",
+      "acceptanceCriteria": [
+        "Create backend/services/trade_management.py module",
+        "Implement TradeManager class",
+        "Set up position monitoring loop (every 5 seconds)",
+        "Implement trade state management (pending, open, closed)",
+        "Add trade lifecycle tracking",
+        "Implement trade event generation",
+        "Add trade management logging",
+        "Create unit tests for trade management",
+        "Add integration tests with MT5 positions",
+        "Document trade management workflow"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Foundation for all trade management work"
+    },
+    {
+      "id": "US-009",
+      "title": "Implement position monitoring and updates",
+      "description": "As a trading system, I need to monitor open positions and update stop losses based on market conditions.",
+      "acceptanceCriteria": [
+        "Implement open position fetching from MT5",
+        "Implement position P&L calculation",
+        "Implement position duration tracking",
+        "Implement trailing stop loss activation (breakeven after 1.5x risk)",
+        "Implement trailing stop loss update (move SL every 0.5x risk)",
+        "Implement position health check (SL/TP distance from current price)",
+        "Add position monitoring alerts (large profit/loss)",
+        "Implement position status updates to frontend",
+        "Test position monitoring with live data",
+        "Validate position updates match MT5"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Active position management improves risk/reward"
+    },
+    {
+      "id": "US-010",
+      "title": "Implement partial profit taking",
+      "description": "As a trading system, I need to implement partial profit taking to lock in gains while keeping position open.",
+      "acceptanceCriteria": [
+        "Implement 30% position close at 1.5x risk",
+        "Implement 30% position close at 2x risk (move SL to breakeven)",
+        "Implement remaining 40% position close at 3x risk or trailing stop",
+        "Implement partial close logic for MT5",
+        "Add partial close logging",
+        "Implement partial close P&L tracking",
+        "Add partial close event generation",
+        "Test partial profit taking on historical data",
+        "Validate partial close calculations"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Partial profit taking locks in gains"
+    },
+    {
+      "id": "US-011",
+      "title": "Implement position scaling and pyramiding",
+      "description": "As a trading system, I need to implement position scaling (adding to winning positions) and pyramiding.",
+      "acceptanceCriteria": [
+        "Implement pyramiding logic (add to position after 1x risk profit)",
+        "Implement maximum pyramid positions (3 additions max)",
+        "Implement pyramid position size calculation (reduce size as price moves)",
+        "Implement pyramid stop loss management (move SL to breakeven)",
+        "Implement position scaling out (reduce size as profit increases)",
+        "Add pyramid validation (only on winning trades)",
+        "Add pyramid logging",
+        "Test pyramiding on historical data",
+        "Validate pyramid risk management"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Pyramiding maximizes winning trades"
+    },
+    {
+      "id": "US-012",
+      "title": "Implement emergency stop functionality",
+      "description": "As a trading system, I need to implement emergency stop functionality to halt all trading and close positions.",
+      "acceptanceCriteria": [
+        "Implement emergency stop API endpoint",
+        "Implement immediate trading halt",
+        "Implement optional position closure on emergency stop",
+        "Implement emergency stop logging",
+        "Implement emergency stop notification",
+        "Add emergency stop reason tracking",
+        "Implement emergency stop recovery (manual restart required)",
+        "Add emergency stop testing",
+        "Document emergency stop procedure",
+        "Test emergency stop with paper trading"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Critical safety feature"
+    },
+    {
+      "id": "US-013",
+      "title": "Implement trade history and analytics",
+      "description": "As a trader, I need comprehensive trade history and analytics to evaluate trading performance.",
+      "acceptanceCriteria": [
+        "Implement trade history storage in database",
+        "Fetch completed trades from MT5",
+        "Store trade details (entry, exit, P&L, duration, etc.)",
+        "Implement trade history API endpoint",
+        "Implement trade analytics (win rate, avg win/loss, profit factor)",
+        "Implement per-symbol trade statistics",
+        "Implement trade timeline visualization",
+        "Generate trade history reports (CSV/PDF)",
+        "Add trade filtering and search",
+        "Test trade history on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Trade history is essential for analysis"
+    },
+    {
+      "id": "US-014",
+      "title": "Implement correlation risk management",
+      "description": "As a trading system, I need to manage correlation risk between volatility indices to avoid overexposure.",
+      "acceptanceCriteria": [
+        "Implement correlation calculation between symbols (V10, V25, V50, V75, V100)",
+        "Implement correlation matrix calculation (rolling 20-period)",
+        "Implement correlated position check (warn if >70% correlation)",
+        "Implement max exposure limit per correlated group",
+        "Implement position size reduction for correlated trades",
+        "Add correlation monitoring dashboard",
+        "Implement correlation-based position limits",
+        "Log correlation warnings",
+        "Test correlation management on historical data",
+        "Document correlation risk rules"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Volatility indices are highly correlated"
+    },
+    {
+      "id": "US-015",
+      "title": "Implement slippage and spread management",
+      "description": "As a trading system, I need to account for slippage and spread in trade execution and risk calculations.",
+      "acceptanceCriteria": [
+        "Implement current spread fetching from MT5",
+        "Implement average spread calculation (rolling 100 ticks)",
+        "Implement slippage estimation (1-2 ticks)",
+        "Implement spread-aware position sizing (adjust for spread cost)",
+        "Implement spread filter (don't trade if spread > threshold)",
+        "Implement slippage-aware backtesting (include spread and slippage)",
+        "Add spread monitoring and alerting",
+        "Log spread and slippage for all trades",
+        "Test spread management on live data",
+        "Validate spread calculations match MT5"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Spread and slippage significantly impact returns"
+    }
+  ],
+  "functionalRequirements": [
+    "FR-1: System must implement risk management with max 2% risk per trade",
+    "FR-2: System must calculate position sizes based on account equity",
+    "FR-3: System must place orders through MT5 with proper validation",
+    "FR-4: System must monitor open positions and update stop losses",
+    "FR-5: System must implement circuit breakers for risk limits",
+    "FR-6: System must support partial profit taking",
+    "FR-7: System must implement emergency stop functionality",
+    "FR-8: System must track trade history and analytics",
+    "FR-9: System must manage correlation risk between symbols",
+    "FR-10: System must account for slippage and spread in trading"
+  ],
+  "nonGoals": [
+    "No hedging strategies in this phase (future enhancement)",
+    "No options or derivatives trading (spot only)",
+    "No algorithmic order types (iceberg, TWAP) in this phase",
+    "No social trading or copy trading",
+    "No multi-broker execution (MT5 only)"
+  ],
+  "technicalConsiderations": [
+    "Risk management is the most important component of trading system",
+    "Never risk more than 2% per trade, 5% per day",
+    "MT5 connection can fail, implement retry logic",
+    "Order execution latency matters (target < 500ms)",
+    "Slippage and spread significantly impact returns",
+    "Volatility indices are highly correlated (manage correlation risk)",
+    "Circuit breakers prevent catastrophic losses",
+    "Position sizing must account for leverage and margin",
+    "Trade history is essential for learning and improvement",
+    "Emergency stop must work reliably even if other systems fail"
+  ],
+  "successMetrics": [
+    "Risk management properly limits losses to 2% per trade",
+    "Circuit breakers trigger correctly on risk limit breaches",
+    "Order execution成功率 > 95%",
+    "Order execution latency < 500ms",
+    "Position size calculations are accurate and validated",
+    "Stop loss and take profit levels are properly set",
+    "Trade management reduces risk on winning trades (trailing stop)",
+    "Partial profit taking locks in gains on >70% of trades",
+    "Emergency stop halts all trading within 1 second",
+    "Trade history captures 100% of completed trades"
+  ],
+  "techStack": {
+    "mt5Integration": "MetaTrader5 Python library",
+    "riskManagement": "Custom risk calculations, pandas for analytics",
+    "orderExecution": "MT5 order API with retry logic",
+    "tradeManagement": "Position monitoring, event-driven updates",
+    "database": "SQLite for trade history and risk metrics",
+    "analytics": "pandas, numpy for trade analysis",
+    "monitoring": "Real-time position tracking and alerts"
+  },
+  "architecture": {
+    "riskFlow": "Signal → Risk Validation → Position Sizing → SL/TP Calculation → Order Placement",
+    "executionFlow": "Order Request → Validation → MT5 Execution → Confirmation → Position Monitoring",
+    "managementFlow": "Open Position → Monitoring → SL/TP Updates → Partial Close → Full Close",
+    "emergencyFlow": "Emergency Stop → Halt Trading → Optional Position Closure → Logging → Notification"
+  },
+  "timeline": {
+    "phase1": "Foundation (Days 1-3): Risk management setup, position sizing, SL/TP",
+    "phase2": "Order Execution (Days 4-7): Order placement, validation, modification",
+    "phase3": "Trade Management (Days 8-11): Position monitoring, trailing stop, partial profit",
+    "phase4": "Risk Controls (Days 12-14): Circuit breakers, correlation risk, emergency stop",
+    "phase5": "Analytics (Days 15-17): Trade history, analytics, reporting"
+  }
+}

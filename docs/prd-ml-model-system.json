@@ -1,0 +1,339 @@
+{
+  "project": "EURABAY Living System v5.0",
+  "branchName": "backend/ml-model-system",
+  "description": "ML Model System - Model training pipeline, inference service, signal generation, and model lifecycle management for autonomous trading predictions on volatility indices",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Set up ML model training pipeline foundation",
+      "description": "As an AI system, I need to set up a model training pipeline foundation to train machine learning models on historical data.",
+      "acceptanceCriteria": [
+        "Create backend/services/model_training.py module",
+        "Implement ModelTrainer class with sklearn-compatible API",
+        "Set up TimeSeriesSplit for cross-validation (5-fold)",
+        "Implement train/test/validation split (70/15/15)",
+        "Set up training data loading from Parquet files",
+        "Implement feature/target separation for supervised learning",
+        "Implement data preprocessing pipeline (scaling, encoding)",
+        "Add training configuration management",
+        "Create unit tests for training pipeline",
+        "Add integration tests with sample data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Foundation for all ML training work"
+    },
+    {
+      "id": "US-002",
+      "title": "Implement XGBoost binary classification model",
+      "description": "As an AI system, I need to train an XGBoost classifier to predict buy/sell signals.",
+      "acceptanceCriteria": [
+        "Implement target variable creation (future price direction)",
+        "Train XGBoost classifier with default hyperparameters",
+        "Implement binary classification: buy (1) vs sell/wait (0)",
+        "Add class balancing for imbalanced data",
+        "Implement early stopping to prevent overfitting",
+        "Save trained model with joblib",
+        "Log training metrics (accuracy, precision, recall, F1, AUC)",
+        "Implement feature importance extraction",
+        "Create training report with metrics and visualizations",
+        "Test model on hold-out test set"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Baseline model targeting 65-70% accuracy"
+    },
+    {
+      "id": "US-003",
+      "title": "Implement XGBoost multi-class classification model",
+      "description": "As an AI system, I need to train a multi-class classifier to predict buy/sell/wait signals.",
+      "acceptanceCriteria": [
+        "Implement 3-class target: buy (1), sell (-1), wait (0)",
+        "Define clear class labels (threshold-based or regime-based)",
+        "Train XGBoost classifier for multi-class prediction",
+        "Implement class weighting for imbalanced classes",
+        "Add per-class metrics (precision, recall, F1)",
+        "Implement confusion matrix analysis",
+        "Save trained model with joblib",
+        "Log training metrics for all 3 classes",
+        "Create multi-class training report",
+        "Test model on hold-out test set"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "More nuanced predictions including wait signals"
+    },
+    {
+      "id": "US-004",
+      "title": "Implement hyperparameter optimization",
+      "description": "As an AI system, I need to optimize model hyperparameters to improve prediction accuracy.",
+      "acceptanceCriteria": [
+        "Define hyperparameter search space (learning_rate, max_depth, n_estimators, etc.)",
+        "Implement Bayesian optimization with Optuna",
+        "Implement cross-validation for hyperparameter evaluation",
+        "Define optimization objective (maximize validation F1 score)",
+        "Set optimization budget (50 trials)",
+        "Implement pruning of poor trials",
+        "Log optimization progress and results",
+        "Extract best hyperparameters",
+        "Retrain model with best hyperparameters",
+        "Document hyperparameter optimization results"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Critical for achieving target 65-70% win rate"
+    },
+    {
+      "id": "US-005",
+      "title": "Implement model evaluation and validation framework",
+      "description": "As an AI system, I need a comprehensive evaluation framework to assess model performance.",
+      "acceptanceCriteria": [
+        "Implement walk-forward validation (time-series cross-validation)",
+        "Calculate performance metrics: accuracy, precision, recall, F1, AUC",
+        "Implement confusion matrix analysis",
+        "Calculate class-specific metrics",
+        "Implement feature importance analysis (gain, cover, weight)",
+        "Implement SHAP values for model explainability",
+        "Generate evaluation report (HTML/PDF)",
+        "Implement per-symbol evaluation (V10, V25, V50, V75, V100)",
+        "Implement temporal evaluation (performance over time)",
+        "Create performance visualizations (equity curve, confusion matrix)"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Essential for understanding model strengths and weaknesses"
+    },
+    {
+      "id": "US-006",
+      "title": "Implement backtesting framework for model validation",
+      "description": "As an AI system, I need a backtesting framework to validate model predictions with realistic trading simulation.",
+      "acceptanceCriteria": [
+        "Create Backtester class for historical simulation",
+        "Implement signal generation on historical data",
+        "Simulate trade execution with realistic slippage (1-2 ticks)",
+        "Implement position sizing based on risk management",
+        "Calculate trading metrics: win rate, profit factor, Sharpe ratio, max drawdown",
+        "Generate equity curve from backtest",
+        "Implement trade-by-trade analysis",
+        "Generate backtesting report (HTML/PDF)",
+        "Test backtest on 60+ days of historical data",
+        "Validate backtest results match expectations"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Critical for validating model before live trading"
+    },
+    {
+      "id": "US-007",
+      "title": "Set up model inference service foundation",
+      "description": "As a trading system, I need to set up a model inference service to generate real-time predictions.",
+      "acceptanceCriteria": [
+        "Create backend/services/model_inference.py module",
+        "Implement ModelInferenceService class",
+        "Implement model loading from disk (joblib)",
+        "Set up model version management",
+        "Implement feature preprocessing for inference",
+        "Implement batch prediction for multiple symbols",
+        "Add prediction caching (1 second TTL)",
+        "Implement prediction performance monitoring",
+        "Add fallback to previous prediction on model error",
+        "Create unit tests for inference service",
+        "Test inference speed (< 100ms per prediction)"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Must be fast for real-time trading"
+    },
+    {
+      "id": "US-008",
+      "title": "Implement real-time prediction generation",
+      "description": "As a trading system, I need to generate real-time predictions with confidence scores.",
+      "acceptanceCriteria": [
+        "Implement predict() method returning signal + confidence",
+        "Implement batch_predict() for all 5 symbols",
+        "Add prediction metadata (timestamp, model version, feature set)",
+        "Implement confidence score calibration",
+        "Implement prediction thresholding (min confidence for trading)",
+        "Add prediction logging for audit trail",
+        "Implement prediction performance tracking (actual vs predicted)",
+        "Add prediction caching with TTL",
+        "Test prediction generation on real-time data",
+        "Validate prediction speed meets latency requirements"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Core function of the trading system"
+    },
+    {
+      "id": "US-009",
+      "title": "Implement signal generation system",
+      "description": "As a trading system, I need to combine ML predictions with technical analysis to generate final trading signals.",
+      "acceptanceCriteria": [
+        "Create SignalGenerator class",
+        "Implement signal aggregation (ML + technical indicators)",
+        "Implement confidence scoring (0-100 scale)",
+        "Add signal filtering (minimum 60% confidence)",
+        "Implement signal cooldown (avoid overtrading, min 5 minutes)",
+        "Add market regime detection (trending/ranging/volatile)",
+        "Implement strategy switching based on regime",
+        "Generate structured signal object (symbol, direction, confidence, reasons, timestamp)",
+        "Log all generated signals",
+        "Test signal generation on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Combines ML predictions with technical analysis for robustness"
+    },
+    {
+      "id": "US-010",
+      "title": "Implement model versioning and management",
+      "description": "As an AI system, I need to manage model versions and track model lifecycle.",
+      "acceptanceCriteria": [
+        "Implement model versioning scheme (semantic versioning)",
+        "Store model metadata in database (version, training_date, metrics, hyperparameters)",
+        "Implement model registration workflow",
+        "Implement model loading by version",
+        "Implement model rollback capability",
+        "Implement A/B testing for model comparison",
+        "Create model comparison reports",
+        "Implement model deprecation workflow",
+        "Store model artifacts in backend/models/ directory",
+        "Document model management process"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Essential for production ML systems"
+    },
+    {
+      "id": "US-011",
+      "title": "Implement model performance monitoring",
+      "description": "As a system operator, I need to monitor model performance in production to detect degradation.",
+      "acceptanceCriteria": [
+        "Implement prediction tracking (log all predictions with actual outcomes)",
+        "Calculate real-time accuracy (last N predictions)",
+        "Implement performance degradation detection (alert if accuracy drops >5%)",
+        "Implement per-symbol performance tracking",
+        "Generate performance reports (daily/weekly/monthly)",
+        "Create performance dashboard API",
+        "Implement model comparison (current vs previous version)",
+        "Add alerting for critical performance issues",
+        "Store performance metrics in database",
+        "Document performance monitoring process"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Critical for detecting when models need retraining"
+    },
+    {
+      "id": "US-012",
+      "title": "Implement ensemble model system",
+      "description": "As an AI system, I need to implement ensemble methods to combine multiple models for better predictions.",
+      "acceptanceCriteria": [
+        "Implement ensemble prediction (voting classifier)",
+        "Implement weighted ensemble (model weights based on performance)",
+        "Implement stacking ensemble (meta-learner on top of base models)",
+        "Implement bagging ensemble (bootstrap aggregating)",
+        "Implement per-symbol ensembles (specialized models for each symbol)",
+        "Implement ensemble performance evaluation",
+        "Select best ensemble method based on validation performance",
+        "Deploy ensemble model for inference",
+        "Log ensemble predictions",
+        "Test ensemble on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Ensembles often outperform single models"
+    }
+  ],
+  "functionalRequirements": [
+    "FR-1: System must train ML models on 60+ days of historical data",
+    "FR-2: System must generate real-time predictions in < 100ms",
+    "FR-3: System must achieve 65-70% win rate in backtesting",
+    "FR-4: System must provide confidence scores with all predictions",
+    "FR-5: System must support model versioning and rollback",
+    "FR-6: System must implement backtesting for validation",
+    "FR-7: System must monitor model performance in production",
+    "FR-8: System must combine ML with technical analysis",
+    "FR-9: System must implement signal filtering to avoid overtrading",
+    "FR-10: System must log all predictions for audit trail"
+  ],
+  "nonGoals": [
+    "No deep learning models (LSTM, Transformer) in this phase (future enhancement)",
+    "No reinforcement learning in this phase",
+    "No neural network architectures",
+    "No hyperparameter optimization with cloud resources (local only)",
+    "No automated model deployment (manual deployment in this phase)",
+    "No multi-model serving (single model per symbol)"
+  ],
+  "technicalConsiderations": [
+    "XGBoost is the baseline model (fast, accurate, interpretable)",
+    "Time-series cross-validation essential (no random shuffling)",
+    "Feature scaling must be fit on training data only (avoid data leakage)",
+    "Class imbalance is common in trading (use class weighting)",
+    "Overfitting is a major risk (use early stopping, regularization)",
+    "Model interpretability important (use SHAP values)",
+    "Prediction latency critical for real-time trading (< 100ms)",
+    "Model versioning essential for production systems",
+    "Backtesting must be realistic (include slippage, spread)",
+    "Paper trading required before live trading (2+ weeks)"
+  ],
+  "successMetrics": [
+    "Model training completes in < 30 minutes for 60 days of data",
+    "Model achieves 65%+ accuracy in backtesting",
+    "Model achieves 60%+ accuracy in paper trading",
+    "Prediction latency < 100ms per symbol",
+    "Model includes 20-30 most predictive features",
+    "Feature importance analysis completed and documented",
+    "Backtesting shows positive Sharpe ratio (> 1.0)",
+    "Model performance monitoring shows stable accuracy over time",
+    "Signal generation produces 5-10 signals per day per symbol",
+    "Model versioning and rollback tested and working"
+  ],
+  "techStack": {
+    "mlFramework": "XGBoost 2.0+, scikit-learn 1.3+",
+    "optimization": "Optuna for Bayesian optimization",
+    "explainability": "SHAP for model interpretation",
+    "dataProcessing": "pandas, numpy",
+    "modelStorage": "joblib for model serialization",
+    "evaluation": "scikit-learn metrics, custom backtesting",
+    "visualization": "matplotlib, plotly for reports",
+    "database": "SQLite for model metadata and predictions"
+  },
+  "architecture": {
+    "trainingFlow": "Historical Data → Feature Engineering → Train/Test Split → Model Training → Validation → Backtesting → Model Registration",
+    "inferenceFlow": "Real-time Data → Feature Engineering → Model Inference → Signal Generation → Risk Management → Order Execution",
+    "modelManagement": "Model Registry with versioning, metadata tracking, performance monitoring",
+    "ensembleStrategy": "Per-symbol models with ensemble aggregation"
+  },
+  "timeline": {
+    "phase1": "Foundation (Days 1-3): Training pipeline setup, data loading, preprocessing",
+    "phase2": "Baseline Model (Days 4-7): XGBoost binary classification, evaluation",
+    "phase3": "Advanced Models (Days 8-11): Multi-class, hyperparameter optimization, ensemble",
+    "phase4": "Inference Service (Days 12-14): Real-time prediction, signal generation, caching",
+    "phase5": "Validation (Days 15-17): Backtesting, paper trading, performance monitoring"
+  }
+}

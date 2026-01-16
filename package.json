@@ -72,6 +72,7 @@
         "estree-walker": "2.0.2",
         "framer-motion": "^12.23.22",
         "input-otp": "^1.4.2",
+        "jspdf": "^4.0.0",
         "lucide-react": "^0.545.0",
         "mini-svg-data-uri": "^1.4.4",
         "motion": "^12.23.22",

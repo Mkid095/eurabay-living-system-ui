@@ -1,0 +1,311 @@
+{
+  "project": "EURABAY Living System - Ensemble Signal System",
+  "branchName": "backend/ensemble-signal-system",
+  "description": "Multiple signal source system with voting mechanisms, confidence calibration, and quality filtering to reduce overfitting and improve prediction reliability",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create ensemble signal foundation class",
+      "description": "As a system architect, I need a foundational ensemble class that manages multiple signal sources and coordinates their outputs.",
+      "acceptanceCriteria": [
+        "Create EnsembleSignalManager class",
+        "Implement register_signal_source() method to add signal providers",
+        "Implement get_all_signals() method to fetch signals from all sources",
+        "Implement validate_signal() method to check signal format and validity",
+        "Create signal schema: {source, type, direction, confidence, timestamp, features}",
+        "Implement signal aggregation pipeline",
+        "Add logging for all signal operations",
+        "Create unit tests for ensemble foundation",
+        "Test with mock signal sources"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-002",
+      "title": "Implement XGBoost model signal source",
+      "description": "As a signal provider, I need an XGBoost model that generates trading signals based on technical features.",
+      "acceptanceCriteria": [
+        "Create XGBoostSignalSource class",
+        "Train XGBoost model on historical data (last 6 months)",
+        "Features: RSI, MACD, ATR, moving averages, price momentum, volume",
+        "Implement predict() method returning probability and direction",
+        "Return signal: BUY if prob_buy > 0.6, SELL if prob_sell > 0.6, HOLD otherwise",
+        "Include confidence score (predicted probability)",
+        "Implement feature importance tracking",
+        "Store model predictions in database",
+        "Test XGBoost signal on out-of-sample data",
+        "Achieve win rate > 55% on test set"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-003",
+      "title": "Implement Random Forest model signal source",
+      "description": "As a signal provider, I need a Random Forest model to provide alternative predictions and reduce overfitting risk.",
+      "acceptanceCriteria": [
+        "Create RandomForestSignalSource class",
+        "Train Random Forest with 100 trees on historical data",
+        "Use same features as XGBoost for consistency",
+        "Implement predict() method with voting from trees",
+        "Return signal: BUY if prob_buy > 0.6, SELL if prob_sell > 0.6, HOLD otherwise",
+        "Include confidence score (agreement between trees)",
+        "Implement feature importance tracking",
+        "Store model predictions in database",
+        "Test Random Forest signal on out-of-sample data",
+        "Achieve win rate > 55% on test set"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-004",
+      "title": "Implement rule-based technical analysis signal",
+      "description": "As a signal provider, I need a rule-based system using technical indicators for interpretable signals.",
+      "acceptanceCriteria": [
+        "Create RuleBasedSignalSource class",
+        "Implement RSI strategy: BUY if RSI < 30, SELL if RSI > 70",
+        "Implement MACD strategy: BUY if MACD crosses above signal, SELL if crosses below",
+        "Implement moving average crossover: BUY if SMA_20 > SMA_50, SELL if SMA_20 < SMA_50",
+        "Implement Bollinger Bands: BUY if price touches lower band, SELL if touches upper",
+        "Combine rules: signal = majority vote of rules",
+        "Include confidence score (number of agreeing rules / total rules)",
+        "Store rule-based signals in database",
+        "Test rule-based signals on historical data",
+        "Achieve win rate > 52% on test set"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-005",
+      "title": "Implement majority voting mechanism",
+      "description": "As an ensemble system, I need to combine signals from multiple sources using majority voting.",
+      "acceptanceCriteria": [
+        "Implement MajorityVoting class",
+        "Fetch signals from all registered sources",
+        "Count votes for BUY, SELL, HOLD",
+        "Apply minimum agreement threshold (2 out of 3 must agree)",
+        "Return ensemble signal only if threshold met",
+        "Return HOLD if no majority or threshold not met",
+        "Include confidence score (percentage of agreeing sources)",
+        "Log voting details (which sources voted how)",
+        "Store ensemble signals in database",
+        "Test voting mechanism on historical signals"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-006",
+      "title": "Implement signal confidence calibration",
+      "description": "As a risk manager, I need to ensure that when the system says 70% confidence, it actually wins 70% of the time.",
+      "acceptanceCriteria": [
+        "Implement ConfidenceCalibrator class",
+        "Track predicted confidence vs actual outcomes for each signal source",
+        "Group predictions into confidence bins (50-60%, 60-70%, 70-80%, 80-90%, 90-100%)",
+        "Calculate actual win rate for each confidence bin",
+        "Calculate calibration error: |predicted_confidence - actual_win_rate|",
+        "Apply calibration adjustment: if 70% bin only wins 60%, adjust down to 60%",
+        "Store calibration data in database",
+        "Update calibration weekly with new data",
+        "Generate calibration report (binned predicted vs actual)",
+        "Achieve calibration error < 5% for all bins"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-007",
+      "title": "Implement signal quality scoring",
+      "description": "As a system, I need to score signal quality to filter out low-quality predictions.",
+      "acceptanceCriteria": [
+        "Implement SignalQualityScorer class",
+        "Calculate quality score (0-100) based on:",
+        "  - Ensemble agreement (higher = better quality)",
+        "  - Confidence calibration (closer to actual = better)",
+        "  - Recent performance of signal source",
+        "  - Market regime alignment (signal matches regime)",
+        "  - Feature strength (how strong are the indicators?)",
+        "Weight factors: agreement (30%), confidence (25%), performance (25%), regime (10%), features (10%)",
+        "Return quality score with ensemble signal",
+        "Store quality scores in database",
+        "Test quality scoring on historical signals",
+        "High quality signals (80+) should win > 60% of time"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-008",
+      "title": "Implement signal decay tracking",
+      "description": "As a system, I need to track when signals lose effectiveness over time (model decay).",
+      "acceptanceCriteria": [
+        "Implement SignalDecayTracker class",
+        "Track signal age (time since generation)",
+        "Calculate signal win rate by age buckets (0-5min, 5-15min, 15-30min, 30-60min, 60+min)",
+        "Calculate signal effectiveness decay curve",
+        "Implement signal freshness check: reject signals older than 30 minutes",
+        "Track performance degradation of each signal source over weeks",
+        "Alert if signal source win rate drops below 50%",
+        "Store decay metrics in database",
+        "Generate decay report weekly",
+        "Test decay tracking on historical signals"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-009",
+      "title": "Implement false positive detection",
+      "description": "As a risk manager, I need to detect patterns that lead to false signals to avoid them.",
+      "acceptanceCriteria": [
+        "Implement FalsePositiveDetector class",
+        "Track all losing trades and analyze common patterns",
+        "Identify high-loss conditions (low quality score, low agreement, wrong regime)",
+        "Calculate false positive rate by market condition",
+        "Implement signal blocking for known bad conditions:",
+        "  - Block if quality score < 50",
+        "  - Block if agreement < 66%",
+        "  - Block if signal opposes regime",
+        "  - Block if signal source is in decay (win rate < 50%)",
+        "Log blocked signals with reason",
+        "Store false positive patterns in database",
+        "Test false positive detection on historical data",
+        "Reduce false signals by 30%"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-010",
+      "title": "Implement ensemble decision making with thresholds",
+      "description": "As a trading system, I need strict decision rules to only trade when ensemble agreement is high.",
+      "acceptanceCriteria": [
+        "Implement EnsembleDecisionMaker class",
+        "Require minimum 2 out of 3 sources agree",
+        "Require minimum confidence of 65% (after calibration)",
+        "Require minimum quality score of 60",
+        "Require signal is not in a known false positive pattern",
+        "Require signal freshness (age < 30 minutes)",
+        "Return TRADE signal only if all thresholds met",
+        "Return NO_TRADE if any threshold not met",
+        "Log decision details (which thresholds passed/failed)",
+        "Store ensemble decisions in database",
+        "Test ensemble decision making on historical data",
+        "Ensemble trades should win > 60% of time"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-011",
+      "title": "Implement signal performance tracking",
+      "description": "As a system, I need to track the performance of each signal source over time.",
+      "acceptanceCriteria": [
+        "Implement SignalPerformanceTracker class",
+        "Track win rate for each signal source (XGBoost, RF, rules)",
+        "Track profit factor for each signal source",
+        "Track average win/loss for each signal source",
+        "Track performance by symbol (V10, V25, V50, V75, V100)",
+        "Track performance by market regime",
+        "Track performance over time (weekly rolling windows)",
+        "Calculate signal source ranking (best to worst)",
+        "Identify underperforming sources (win rate < 52%)",
+        "Store all performance metrics in database",
+        "Generate performance report weekly",
+        "Test performance tracking on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-012",
+      "title": "Implement ensemble signal API endpoints",
+      "description": "As a frontend, I need API endpoints to fetch ensemble signals and performance data.",
+      "acceptanceCriteria": [
+        "Implement GET /api/signals/ensemble - latest ensemble signal",
+        "Implement GET /api/signals/sources - signals from all sources",
+        "Implement GET /api/signals/performance - performance by source",
+        "Implement GET /api/signals/calibration - confidence calibration data",
+        "Implement GET /api/signals/quality - quality score distribution",
+        "Implement GET /api/signals/history - historical ensemble signals",
+        "Stream ensemble signals via WebSocket",
+        "Add CORS headers for frontend access",
+        "Cache latest signal (5 second TTL)",
+        "Test all API endpoints"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    }
+  ],
+  "functionalRequirements": [
+    "FR-1: System must combine signals from 3+ sources",
+    "FR-2: System must use majority voting for decision making",
+    "FR-3: System must calibrate confidence to match actual performance",
+    "FR-4: System must score signal quality",
+    "FR-5: System must track signal decay",
+    "FR-6: System must detect and filter false positives",
+    "FR-7: System must only trade when ensemble agrees (2/3 threshold)",
+    "FR-8: System must provide signal performance visibility"
+  ],
+  "nonGoals": [
+    "No deep learning models (keep it lightweight)",
+    "No stacking/blending complex ensembles (simple voting is enough)",
+    "No online learning (retrain weekly, not online)",
+    "No hyperparameter optimization during trading (do it offline)"
+  ],
+  "technicalConsiderations": [
+    "All signal generation must be fast (< 100ms total)",
+    "Signal sources must be independent (different models, different features)",
+    "Ensemble voting must be transparent (log which sources voted how)",
+    "Confidence calibration must be updated weekly",
+    "Signal quality scoring must be explainable",
+    "Store all signals in database for analysis",
+    "Retrain models weekly with latest data",
+    "Monitor for model drift (performance degradation)",
+    "Ensemble should reduce overfitting compared to single models"
+  ],
+  "successMetrics": [
+    "Ensemble win rate > 60% (vs 55% for individual models)",
+    "Confidence calibration error < 5%",
+    "High quality signals (80+) win > 65% of time",
+    "False positive rate reduced by 30%",
+    "Signal sources agree 60-70% of time (diversity but consensus)",
+    "Ensemble outperforms best individual model by 5%+",
+    "System generates 10-20 signals per day per symbol"
+  ],
+  "techStack": {
+    "language": "Python 3.11+",
+    "ml": "xgboost, scikit-learn (RandomForest)",
+    "math": "numpy, pandas",
+    "technical": "ta-lib or pandas-ta",
+    "storage": "SQLite",
+    "api": "FastAPI"
+  }
+}

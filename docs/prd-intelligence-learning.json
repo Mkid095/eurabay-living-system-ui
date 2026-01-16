@@ -1,0 +1,401 @@
+{
+  "project": "EURABAY Living System v5.0",
+  "branchName": "backend/intelligence-learning-system",
+  "description": "Intelligence & Learning System - Pattern recognition, genetic algorithm optimization, continuous learning, concept drift detection, and adaptive strategy evolution for autonomous trading improvement",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Set up pattern recognition system foundation",
+      "description": "As an AI system, I need to set up a pattern recognition foundation to identify recurring price patterns and market regimes.",
+      "acceptanceCriteria": [
+        "Create backend/services/pattern_recognition.py module",
+        "Implement PatternRecognition class",
+        "Set up pattern storage schema in database",
+        "Implement pattern detection framework",
+        "Add pattern matching algorithm",
+        "Implement pattern logging and tracking",
+        "Create unit tests for pattern recognition",
+        "Add integration tests with historical data",
+        "Document pattern types and detection methods"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Foundation for pattern-based trading strategies"
+    },
+    {
+      "id": "US-002",
+      "title": "Implement support and resistance pattern detection",
+      "description": "As an AI system, I need to detect support and resistance levels to identify key price zones.",
+      "acceptanceCriteria": [
+        "Implement local extrema detection (peaks and troughs)",
+        "Implement support level detection (multiple touches with bounce)",
+        "Implement resistance level detection (multiple touches with rejection)",
+        "Implement level strength scoring (based on touches and time)",
+        "Implement level breakout detection",
+        "Implement level retest after breakout",
+        "Store detected levels in database",
+        "Implement level validation (price reaction)",
+        "Test support/resistance detection on historical data",
+        "Validate detected levels match manual analysis"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Support/resistance levels are key trading zones"
+    },
+    {
+      "id": "US-003",
+      "title": "Implement candlestick pattern recognition",
+      "description": "As an AI system, I need to recognize candlestick patterns for short-term trading signals.",
+      "acceptanceCriteria": [
+        "Implement bullish patterns (hammer, engulfing, morning star)",
+        "Implement bearish patterns (shooting star, engulfing, evening star)",
+        "Implement continuation patterns (doji, spinning top)",
+        "Implement pattern confirmation (next candle validation)",
+        "Implement pattern context filtering (trend, support/resistance)",
+        "Add pattern strength scoring",
+        "Store detected patterns in database",
+        "Implement pattern success rate tracking",
+        "Test candlestick patterns on historical data",
+        "Validate pattern recognition accuracy"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Candlestick patterns provide short-term signals"
+    },
+    {
+      "id": "US-004",
+      "title": "Implement market regime detection",
+      "description": "As an AI system, I need to detect market regimes (trending/ranging/volatile) to adapt trading strategies.",
+      "acceptanceCriteria": [
+        "Implement trend detection (ADX-based, moving average slope)",
+        "Implement ranging market detection (low volatility, sideways price)",
+        "Implement volatile regime detection (high ATR, large price swings)",
+        "Implement regime classification (bull trend, bear trend, ranging, volatile)",
+        "Implement regime transition detection",
+        "Implement regime persistence tracking (how long regime lasts)",
+        "Store regime history in database",
+        "Implement regime-based strategy switching",
+        "Test regime detection on historical data",
+        "Validate regime detection accuracy"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Different strategies work best in different regimes"
+    },
+    {
+      "id": "US-005",
+      "title": "Implement pattern clustering with KMeans",
+      "description": "As an AI system, I need to cluster similar price patterns to identify recurring market behaviors.",
+      "acceptanceCriteria": [
+        "Implement feature extraction for pattern windows (20-50 bars)",
+        "Implement pattern normalization (scale-invariant)",
+        "Implement KMeans clustering (5-10 clusters)",
+        "Implement cluster labeling based on outcome (bullish/bearish)",
+        "Implement cluster quality assessment (silhouette score)",
+        "Implement cluster prediction (which cluster current market is in)",
+        "Store cluster centroids and labels",
+        "Implement cluster-based signal generation",
+        "Test clustering on historical data",
+        "Validate cluster predictive power"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Pattern clustering identifies recurring market behaviors"
+    },
+    {
+      "id": "US-006",
+      "title": "Set up genetic algorithm optimizer foundation",
+      "description": "As an evolving system, I need to set up a genetic algorithm foundation to optimize trading strategy parameters.",
+      "acceptanceCriteria": [
+        "Create backend/services/genetic_optimizer.py module",
+        "Implement GeneticOptimizer class using DEAP library",
+        "Define strategy parameters as genes (RSI period, MACD settings, ATR multiplier, etc.)",
+        "Implement chromosome encoding (parameter representation)",
+        "Implement fitness function (Sharpe ratio + win rate)",
+        "Set up genetic algorithm parameters (population size, generations, mutation rate)",
+        "Create unit tests for genetic algorithm",
+        "Add integration tests with backtesting",
+        "Document optimization process and parameters"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Genetic algorithms optimize complex parameter spaces"
+    },
+    {
+      "id": "US-007",
+      "title": "Implement genetic algorithm operators",
+      "description": "As an evolving system, I need to implement selection, crossover, and mutation operators for genetic optimization.",
+      "acceptanceCriteria": [
+        "Implement tournament selection (size 3)",
+        "Implement single-point crossover",
+        "Implement Gaussian mutation (with adaptive rate)",
+        "Implement elitism (keep top 10% performers)",
+        "Implement population initialization (random + heuristic)",
+        "Implement constraint handling (parameter bounds)",
+        "Implement diversity maintenance (prevent premature convergence)",
+        "Add logging for each generation",
+        "Test operators on sample population",
+        "Validate operator effectiveness"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Proper operators are critical for GA success"
+    },
+    {
+      "id": "US-008",
+      "title": "Implement genetic algorithm optimization workflow",
+      "description": "As an evolving system, I need to implement the complete optimization workflow with evolution tracking.",
+      "acceptanceCriteria": [
+        "Implement evolution loop (50+ generations)",
+        "Implement fitness evaluation using backtesting",
+        "Implement generation tracking (best fitness, average fitness)",
+        "Implement convergence detection (stop if no improvement)",
+        "Implement best parameter extraction",
+        "Implement parameter validation",
+        "Store optimization results in database",
+        "Generate optimization report (best parameters, fitness curve)",
+        "Test optimization on historical data",
+        "Validate optimized parameters improve performance"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Optimization should run during off-hours (weekly)"
+    },
+    {
+      "id": "US-009",
+      "title": "Set up continuous learning system foundation",
+      "description": "As a learning system, I need to set up a continuous learning foundation to retrain models with new data.",
+      "acceptanceCriteria": [
+        "Create backend/services/continuous_learning.py module",
+        "Implement ContinuousLearning class",
+        "Set up learning trigger logic (performance degradation + minimum trades)",
+        "Implement data collection for retraining (new trades since last training)",
+        "Set up incremental learning pipeline",
+        "Implement model versioning and rollback",
+        "Create unit tests for continuous learning",
+        "Add integration tests with model training",
+        "Document learning process and triggers"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Continuous learning adapts to changing markets"
+    },
+    {
+      "id": "US-010",
+      "title": "Implement concept drift detection",
+      "description": "As a learning system, I need to detect concept drift (changing market conditions) to trigger model retraining.",
+      "acceptanceCriteria": [
+        "Implement performance degradation detection (accuracy drop >5%)",
+        "Implement distribution shift detection (feature distribution changes)",
+        "Implement prediction confidence monitoring (decreasing confidence)",
+        "Implement error rate monitoring (increasing errors)",
+        "Implement statistical drift detection (KS test, Population Stability Index)",
+        "Implement drift alerting",
+        "Implement drift severity classification (low/medium/high)",
+        "Store drift events in database",
+        "Test drift detection on simulated scenarios",
+        "Validate drift detection accuracy"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Markets change, models must adapt"
+    },
+    {
+      "id": "US-011",
+      "title": "Implement model retraining pipeline",
+      "description": "As a learning system, I need to implement an automated retraining pipeline to update models with new data.",
+      "acceptanceCriteria": [
+        "Implement incremental learning (update model with new data)",
+        "Implement full retraining (retrain from scratch with all data)",
+        "Implement retraining scheduling (weekly automatic retraining)",
+        "Implement retraining data preparation (feature engineering)",
+        "Implement model validation before deployment",
+        "Implement A/B testing for new models (shadow mode)",
+        "Implement model rollback on performance degradation",
+        "Implement retraining logging and reporting",
+        "Store retraining history in database",
+        "Test retraining pipeline on simulated data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Weekly retraining keeps models current"
+    },
+    {
+      "id": "US-012",
+      "title": "Implement model performance comparison and selection",
+      "description": "As a learning system, I need to compare model versions and select the best performing model.",
+      "acceptanceCriteria": [
+        "Implement model version performance tracking",
+        "Implement statistical significance testing (t-test, bootstrap)",
+        "Implement model comparison metrics (accuracy, Sharpe, win rate)",
+        "Implement champion-challenger testing (A/B test)",
+        "Implement model selection criteria (best performance + stability)",
+        "Implement model promotion workflow (challenger → champion)",
+        "Implement model decommissioning (retire old models)",
+        "Generate model comparison reports",
+        "Store model comparison results",
+        "Test model selection on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Model selection ensures continuous improvement"
+    },
+    {
+      "id": "US-013",
+      "title": "Implement adaptive strategy system",
+      "description": "As an intelligent system, I need to adapt trading strategies based on market conditions and performance.",
+      "acceptanceCriteria": [
+        "Implement strategy library (trend following, mean reversion, breakout)",
+        "Implement strategy performance tracking (per strategy)",
+        "Implement strategy selection based on market regime",
+        "Implement strategy switching logic (regime-based)",
+        "Implement strategy parameter adaptation (genetic optimization)",
+        "Implement strategy combination (ensemble of strategies)",
+        "Implement strategy risk management (per-strategy limits)",
+        "Store strategy performance in database",
+        "Test strategy adaptation on historical data",
+        "Validate adaptive strategies outperform static strategies"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Different strategies work in different conditions"
+    },
+    {
+      "id": "US-014",
+      "title": "Implement learning rate scheduling and optimization",
+      "description": "As a learning system, I need to implement learning rate scheduling to optimize model training.",
+      "acceptanceCriteria": [
+        "Implement learning rate schedules (constant, step decay, exponential decay)",
+        "Implement adaptive learning rate (reduce on plateau)",
+        "Implement learning rate warmup",
+        "Implement learning rate range test (find optimal LR)",
+        "Implement batch size tuning",
+        "Implement epoch-based early stopping",
+        "Implement gradient clipping (prevent explosion)",
+        "Log learning rate and loss curves",
+        "Test learning rate schedules on training data",
+        "Validate optimal learning rate improves convergence"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Learning rate optimization improves model quality"
+    },
+    {
+      "id": "US-015",
+      "title": "Implement memory and experience replay system",
+      "description": "As a learning system, I need to implement a memory system to store and replay important trading experiences.",
+      "acceptanceCriteria": [
+        "Implement experience storage (market state + action + outcome)",
+        "Implement importance sampling (prioritize important experiences)",
+        "Implement experience replay buffer (circular buffer with prioritization)",
+        "Implement rare event memory (store black swan events)",
+        "Implement pattern library (store successful patterns)",
+        "Implement mistake library (store losing trades for analysis)",
+        "Implement memory retrieval (query by market conditions)",
+        "Store memory in database with embeddings",
+        "Test memory system on historical data",
+        "Validate memory retrieval finds relevant experiences"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Memory enables learning from past experiences"
+    }
+  ],
+  "functionalRequirements": [
+    "FR-1: System must detect support/resistance levels with 70%+ accuracy",
+    "FR-2: System must classify market regimes (trending/ranging/volatile)",
+    "FR-3: System must optimize strategy parameters using genetic algorithms",
+    "FR-4: System must detect concept drift and trigger retraining",
+    "FR-5: System must implement continuous learning with weekly retraining",
+    "FR-6: System must adapt strategies based on market conditions",
+    "FR-7: System must store and replay important trading experiences",
+    "FR-8: System must compare model versions and select best performer",
+    "FR-9: System must implement pattern clustering for market behavior analysis",
+    "FR-10: System must track pattern success rates and adapt accordingly"
+  ],
+  "nonGoals": [
+    "No reinforcement learning in this phase (future enhancement)",
+    "No deep neural networks (LSTM, Transformer) in this phase",
+    "No multi-agent learning systems",
+    "No transfer learning from other markets",
+    "No online learning (update model on every trade)",
+    "No unsupervised learning beyond clustering"
+  ],
+  "technicalConsiderations": [
+    "Pattern recognition requires extensive validation (avoid false patterns)",
+    "Genetic algorithms are computationally expensive (run during off-hours)",
+    "Concept drift detection is critical for long-term success",
+    "Continuous learning must be stable (avoid catastrophic forgetting)",
+    "A/B testing new models prevents performance degradation",
+    "Market regime detection improves strategy selection",
+    "Memory system must be efficient (avoid storage bloat)",
+    "Adaptive strategies must be validated before deployment",
+    "Model rollback is essential for safety",
+    "Learning rate optimization improves model convergence"
+  ],
+  "successMetrics": [
+    "Pattern recognition achieves 70%+ accuracy on historical data",
+    "Market regime detection achieves 75%+ accuracy",
+    "Genetic optimization improves Sharpe ratio by >10%",
+    "Concept drift detection triggers within 100 trades of degradation",
+    "Continuous learning maintains model accuracy within 5% of initial performance",
+    "Adaptive strategies outperform static strategies by >15%",
+    "Model selection consistently chooses best performing model",
+    "Memory retrieval finds relevant experiences for 80%+ of queries",
+    "Pattern clustering identifies 5-10 distinct market behaviors",
+    "System adapts to market changes within 1 week"
+  ],
+  "techStack": {
+    "patternRecognition": "scikit-learn, scipy, pandas",
+    "geneticAlgorithm": "DEAP library for genetic algorithms",
+    "clustering": "scikit-learn KMeans, DBSCAN",
+    "driftDetection": "alibi-detect, custom statistical tests",
+    "continuousLearning": "XGBoost incremental learning, joblib",
+    "memorySystem": "SQLite, FAISS for similarity search",
+    "optimization": "Optuna for hyperparameter optimization",
+    "visualization": "matplotlib, plotly for pattern visualization"
+  },
+  "architecture": {
+    "patternFlow": "Market Data → Pattern Detection → Validation → Storage → Matching → Signal Generation",
+    "optimizationFlow": "Parameters → Backtesting → Fitness Evaluation → Selection → Crossover → Mutation → New Generation",
+    "learningFlow": "New Data → Drift Detection → Retraining Trigger → Model Training → Validation → A/B Testing → Deployment",
+    "adaptationFlow": "Market Regime → Strategy Selection → Parameter Adaptation → Execution → Performance Tracking → Adaptation"
+  },
+  "timeline": {
+    "phase1": "Foundation (Days 1-4): Pattern recognition setup, regime detection",
+    "phase2": "Patterns (Days 5-8): Support/resistance, candlestick patterns, clustering",
+    "phase3": "Optimization (Days 9-12): Genetic algorithm setup, operators, workflow",
+    "phase4": "Learning (Days 13-16): Concept drift, continuous learning, model selection",
+    "phase5": "Adaptation (Days 17-20): Adaptive strategies, memory system, optimization"
+  }
+}

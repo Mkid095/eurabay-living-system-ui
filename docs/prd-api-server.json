@@ -1,0 +1,291 @@
+{
+  "project": "EURABAY Living System - Backend API Server",
+  "branchName": "backend/api-server-foundation",
+  "description": "FastAPI server foundation with async support, CORS, WebSocket, logging, and project structure for autonomous trading system",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create backend project structure and virtual environment",
+      "description": "As a developer, I need a proper Python project structure with virtual environment setup to organize code and manage dependencies.",
+      "acceptanceCriteria": [
+        "Create backend/ directory at project root",
+        "Create virtual environment (python -m venv venv)",
+        "Create requirements.txt with all dependencies pinned",
+        "Create directory structure: backend/{api,services,models,database,utils,config,logs}",
+        "Create __init__.py files in all directories",
+        "Create .gitignore for Python (venv, __pycache__, *.pyc, .env)",
+        "Create README.md in backend/ with setup instructions",
+        "Verify virtual environment activates correctly",
+        "Verify all packages can be installed from requirements.txt"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-002",
+      "title": "Initialize FastAPI application with async support",
+      "description": "As a developer, I need a FastAPI application with async support to handle real-time trading operations efficiently.",
+      "acceptanceCriteria": [
+        "Create main.py with FastAPI app initialization",
+        "Enable async support throughout the application",
+        "Set up uvicorn server with async configuration",
+        "Create app startup and shutdown event handlers",
+        "Add application title, description, and version",
+        "Configure maximum request size (10MB)",
+        "Configure timeout values (connection timeout: 30s, read timeout: 60s)",
+        "Test server starts without errors",
+        "Test server responds to basic HTTP requests",
+        "Verify async operations work correctly"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-003",
+      "title": "Configure CORS middleware for frontend communication",
+      "description": "As a system, I need CORS configured to allow Next.js frontend running on port 3000 to communicate with the backend API.",
+      "acceptanceCriteria": [
+        "Install fastapi[all] with CORS middleware",
+        "Configure CORSMiddleware in FastAPI app",
+        "Allow origins: http://localhost:3000, http://127.0.0.1:3000",
+        "Allow methods: GET, POST, PUT, DELETE, PATCH, OPTIONS",
+        "Allow headers: * (all headers)",
+        "Support credentials (cookies, authorization headers)",
+        "Add preflight request handling (OPTIONS)",
+        "Test CORS with frontend fetch request",
+        "Verify browser console shows no CORS errors"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-004",
+      "title": "Set up structured logging with loguru",
+      "description": "As a system operator, I need comprehensive structured logging to monitor system behavior and debug issues.",
+      "acceptanceCriteria": [
+        "Install loguru library",
+        "Configure loguru in backend/utils/logger.py",
+        "Set up log format: {time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}",
+        "Create separate log files for different levels: info.log, error.log, trading.log",
+        "Enable log rotation (daily at midnight)",
+        "Enable log compression (gzip after 7 days)",
+        "Set up console logging with color output",
+        "Add traceback logging for exceptions",
+        "Create logging decorator for function entry/exit",
+        "Test logging produces correct output to files and console"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-005",
+      "title": "Set up environment configuration with python-dotenv",
+      "description": "As a system administrator, I need environment variable configuration to manage settings without code changes.",
+      "acceptanceCriteria": [
+        "Install python-dotenv library",
+        "Create backend/.env.example file with all configuration variables",
+        "Create backend/.env file for local development (gitignored)",
+        "Create backend/config/settings.py to load environment variables",
+        "Define all configuration variables with type hints and validation",
+        "Set default values for all configuration options",
+        "Add configuration validation at startup",
+        "Create configuration class with properties",
+        "Document each configuration variable in .env.example",
+        "Test configuration loads correctly from .env file"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-006",
+      "title": "Create WebSocket manager for real-time communication",
+      "description": "As a frontend, I need WebSocket connection to receive real-time updates on prices, signals, and trades.",
+      "acceptanceCriteria": [
+        "Create backend/api/websocket.py with WebSocket endpoint manager",
+        "Implement /ws/stream WebSocket endpoint",
+        "Create ConnectionManager class to track active connections",
+        "Implement broadcast() method to send messages to all clients",
+        "Implement send_personal_message() for individual clients",
+        "Add connection authentication (token validation)",
+        "Implement heartbeat/ping-pong (every 30 seconds)",
+        "Handle connection and disconnection events",
+        "Add connection state logging",
+        "Test WebSocket connection with multiple clients",
+        "Test message broadcasting to all connected clients"
+      ],
+      "mavenSteps": [1, 9],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-007",
+      "title": "Create API router structure and basic endpoints",
+      "description": "As a frontend, I need REST API endpoints to fetch data and control the system.",
+      "acceptanceCriteria": [
+        "Create backend/api/ directory with router modules",
+        "Create main API router in backend/api/__init__.py",
+        "Create health check endpoint: GET /api/health",
+        "Create root endpoint: GET / (returns API info)",
+        "Include router in main FastAPI app with prefix /api",
+        "Add API versioning (/api/v1/)",
+        "Create separate routers for: auth, trading, account, performance, config",
+        "Implement automatic API documentation (OpenAPI/Swagger)",
+        "Add request ID middleware for request tracking",
+        "Test all endpoints return proper JSON responses",
+        "Test API documentation accessible at /docs"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-008",
+      "title": "Implement Pydantic models for request/response validation",
+      "description": "As a system, I need Pydantic models to validate API requests and serialize responses.",
+      "acceptanceCriteria": [
+        "Install pydantic library",
+        "Create backend/models/ directory for Pydantic models",
+        "Create base response model (status, message, data)",
+        "Create error response model (error code, message, details)",
+        "Create health check response model",
+        "Create configuration models for system settings",
+        "Create trading signal models (signal, confidence, reasons)",
+        "Create trade models (trade info, position details)",
+        "Create performance metric models (win rate, profit factor, etc)",
+        "Add model validation examples in docstrings",
+        "Test model validation with valid and invalid data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-009",
+      "title": "Implement error handling middleware and exception handlers",
+      "description": "As a system, I need global error handling to catch and format all errors consistently.",
+      "acceptanceCriteria": [
+        "Create custom exception classes in backend/utils/exceptions.py",
+        "Create TradingSystemException base class",
+        "Create specific exceptions: MT5Error, DatabaseError, ModelError, RiskError",
+        "Implement global exception handler for FastAPI",
+        "Add exception logging with full traceback",
+        "Return consistent error response format for all exceptions",
+        "Implement HTTP exception handlers (400, 404, 500, etc)",
+        "Add request validation error handling",
+        "Test error handling returns proper error messages",
+        "Test error logging captures full context"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-010",
+      "title": "Create startup and management scripts",
+      "description": "As a system administrator, I need scripts to easily start, stop, and manage the backend service.",
+      "acceptanceCriteria": [
+        "Create backend/scripts/start.sh to start the server",
+        "Create backend/scripts/stop.sh to gracefully shutdown",
+        "Create backend/scripts/restart.sh for quick restart",
+        "Create backend/scripts/status.sh to check if server is running",
+        "Create backend/scripts/install.sh to setup virtual environment and dependencies",
+        "Create backend/scripts/logs.sh to tail log files",
+        "Make all scripts executable (chmod +x)",
+        "Add usage comments in each script",
+        "Test start script launches server correctly",
+        "Test stop script gracefully shuts down server",
+        "Test restart script works correctly",
+        "Test status script reports correct server state"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false
+    },
+    {
+      "id": "US-011",
+      "title": "Create comprehensive documentation",
+      "description": "As a developer, I need comprehensive documentation to understand and maintain the API server.",
+      "acceptanceCriteria": [
+        "Create backend/README.md with project overview",
+        "Document installation and setup process",
+        "Document configuration options (.env variables)",
+        "Document all API endpoints with examples",
+        "Document WebSocket protocol and messages",
+        "Create architecture diagram showing components",
+        "Document development workflow",
+        "Add troubleshooting guide",
+        "Add code examples for common tasks",
+        "Document deployment process",
+        "Review documentation for completeness"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false
+    }
+  ],
+  "functionalRequirements": [
+    "FR-1: API server must start on configurable port (default 8000)",
+    "FR-2: API must support async operations for concurrent requests",
+    "FR-3: API must allow CORS from frontend (localhost:3000)",
+    "FR-4: API must provide WebSocket endpoint for real-time updates",
+    "FR-5: API must log all operations with structured logging",
+    "FR-6: API must validate all requests with Pydantic models",
+    "FR-7: API must handle errors gracefully with consistent error responses",
+    "FR-8: API must have health check endpoint",
+    "FR-9: API must be configurable via environment variables",
+    "FR-10: API must auto-generate OpenAPI/Swagger documentation"
+  ],
+  "nonGoals": [
+    "No authentication/authorization in this PRD (covered in separate auth PRD)",
+    "No database integration (covered in database PRD)",
+    "No MT5 integration (covered in MT5 PRD)",
+    "No trading logic or business logic (covered in respective PRDs)"
+  ],
+  "technicalConsiderations": [
+    "Use Python 3.11+ for best performance",
+    "Use uvicorn[standard] as ASGI server",
+    "All async functions must use async/await properly",
+    "WebSocket connections must be tracked and managed",
+    "Log files must be stored in backend/logs/ directory",
+    "Environment variables must have sensible defaults",
+    "API responses must follow consistent format",
+    "Error handling must never expose sensitive information",
+    "Server must be production-ready with proper error handling"
+  ],
+  "successMetrics": [
+    "Server starts without errors",
+    "Server responds to health check",
+    "CORS allows frontend requests",
+    "WebSocket connects and broadcasts messages",
+    "Logs are written to correct files",
+    "API documentation is accessible at /docs",
+    "All startup scripts work correctly",
+    "System can handle 100+ concurrent connections"
+  ],
+  "techStack": {
+    "language": "Python 3.11+",
+    "framework": "FastAPI 0.104+",
+    "server": "uvicorn[standard] 0.24+",
+    "logging": "loguru 0.7+",
+    "validation": "pydantic 2.5+",
+    "cors": "fastapi[all]",
+    "config": "python-dotenv 1.0+",
+    "async": "asyncio (built-in)"
+  }
+}

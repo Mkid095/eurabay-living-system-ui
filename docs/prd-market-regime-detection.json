@@ -1,0 +1,262 @@
+{
+  "project": "EURABAY Living System - Market Regime Detection",
+  "branchName": "backend/market-regime-detection",
+  "description": "Market regime detection system to identify trending, ranging, volatile, and calm market conditions for adaptive strategy selection",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Implement trend detection using moving averages",
+      "description": "As a trader, I need to detect whether the market is trending or ranging to use appropriate strategies.",
+      "acceptanceCriteria": [
+        "Create RegimeDetector class",
+        "Implement calculate_trend_strength() method",
+        "Calculate SMA_20 and SMA_50",
+        "Calculate trend strength: |SMA_20 - SMA_50| / price",
+        "Classify as TRENDING if trend_strength > 2%",
+        "Classify as RANGING if trend_strength < 2%",
+        "Calculate trend direction: UP if SMA_20 > SMA_50, DOWN if SMA_20 < SMA_50",
+        "Return regime: 'trending_up', 'trending_down', or 'ranging'",
+        "Test trend detection on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-002",
+      "title": "Implement volatility regime classification",
+      "description": "As a trader, I need to classify market as low, medium, or high volatility to adjust strategy parameters.",
+      "acceptanceCriteria": [
+        "Implement calculate_volatility_regime() method",
+        "Calculate ATR over last 20 bars",
+        "Calculate average ATR over last 100 bars",
+        "Calculate volatility ratio: current_ATR / avg_ATR",
+        "Classify as LOW_VOL if ratio < 0.7",
+        "Classify as NORMAL_VOL if ratio between 0.7 and 1.3",
+        "Classify as HIGH_VOL if ratio > 1.3",
+        "Store volatility regime in database",
+        "Test volatility classification on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-003",
+      "title": "Implement market state classification",
+      "description": "As a trader, I need to combine trend and volatility into a single market state for strategy selection.",
+      "acceptanceCriteria": [
+        "Implement classify_market_state() method",
+        "Combine trend and volatility into 6 states:",
+        "  - trending_calm: Trending + low volatility (ideal for trend following)",
+        "  - trending_volatile: Trending + high volatility (use wider stops)",
+        "  - ranging_calm: Ranging + low volatility (ideal for mean reversion)",
+        "  - ranging_volatile: Ranging + high volatility (reduce position size)",
+        "  - transitioning: State change detected (wait for confirmation)",
+        "  - unknown: Insufficient data",
+        "Store market state in database",
+        "Detect state transitions (require 3 consecutive bars in new state)",
+        "Test market state classification on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-004",
+      "title": "Implement regime-specific strategy selection",
+      "description": "As a system, I need to automatically select the best strategy based on current market regime.",
+      "acceptanceCriteria": [
+        "Create StrategySelector class",
+        "Define strategy library: trend_following, mean_reversion, breakout, momentum",
+        "Implement select_strategy() method based on market state",
+        "Map: trending_calm → trend_following_strategy",
+        "Map: ranging_calm → mean_reversion_strategy",
+        "Map: trending_volatile → breakout_strategy (wider stops)",
+        "Map: ranging_volatile → momentum_strategy (smaller positions)",
+        "Return selected strategy with parameters",
+        "Log strategy selections and regime changes",
+        "Test strategy selection on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-005",
+      "title": "Implement regime change detection",
+      "description": "As a system, I need to detect when market regime changes to update strategy selection.",
+      "acceptanceCriteria": [
+        "Implement detect_regime_change() method",
+        "Compare current regime with previous regime",
+        "Require confirmation (3 consecutive bars in new regime)",
+        "Generate regime_change event when confirmed",
+        "Store regime changes in database for analysis",
+        "Log regime changes with timestamp and details",
+        "Calculate regime duration (time in current regime)",
+        "Test regime change detection on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-006",
+      "title": "Implement regime-specific risk parameters",
+      "description": "As a risk manager, I need different risk parameters for different market regimes.",
+      "acceptanceCriteria": [
+        "Implement get_regime_risk_params() method",
+        "Define risk parameters for each regime type:",
+        "  - trending_calm: risk_multiplier=1.2, stop_ATR=2, TP_ATR=3",
+        "  - trending_volatile: risk_multiplier=0.8, stop_ATR=3, TP_ATR=4",
+        "  - ranging_calm: risk_multiplier=1.0, stop_ATR=1.5, TP_ATR=2",
+        "  - ranging_volatile: risk_multiplier=0.6, stop_ATR=2, TP_ATR=3",
+        "Store parameters in configuration file",
+        "Allow runtime updates via API",
+        "Test regime-specific parameters"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-007",
+      "title": "Implement regime performance tracking",
+      "description": "As a system, I need to track performance of each regime to understand which conditions are most profitable.",
+      "acceptanceCriteria": [
+        "Implement track_regime_performance() method",
+        "Calculate win rate for each regime type",
+        "Calculate average P&L for each regime type",
+        "Calculate Sharpe ratio for each regime type",
+        "Count trades in each regime (sample size)",
+        "Identify best and worst performing regimes",
+        "Store regime performance in database",
+        "Generate regime performance report (daily/weekly)",
+        "Test regime performance tracking on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-008",
+      "title": "Implement regime transition probability matrix",
+      "description": "As a system, I need to understand regime transitions to predict future market conditions.",
+      "acceptanceCriteria": [
+        "Implement calculate_transition_matrix() method",
+        "Track all regime transitions in database",
+        "Calculate probability: P(regime_tomorrow | regime_today)",
+        "Calculate average duration of each regime",
+        "Store transition matrix in database",
+        "Update matrix weekly with new data",
+        "Use transition matrix for prediction (optional)",
+        "Log regime transitions",
+        "Test transition matrix calculation on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false
+    },
+    {
+      "id": "US-009",
+      "title": "Implement multi-timeframe regime analysis",
+      "description": "As a trader, I need to analyze regimes across multiple timeframes to confirm market state.",
+      "acceptanceCriteria": [
+        "Implement analyze_multi_timeframe_regime() method",
+        "Analyze regime on M15, H1, H4 timeframes",
+        "Require agreement across 2+ timeframes for confidence",
+        "If H1 says trending but H4 says ranging → wait for confirmation",
+        "If all timeframes agree → high confidence regime",
+        "Store multi-timeframe analysis in database",
+        "Use multi-timeframe agreement for signal filtering",
+        "Test multi-timeframe analysis on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false
+    },
+    {
+      "id": "US-010",
+      "title": "Implement regime filtering for signals",
+      "description": "As a system, I need to filter trading signals based on current market regime to avoid low-probability trades.",
+      "acceptanceCriteria": [
+        "Implement filter_signal_by_regime() method",
+        "Define allowed signal types for each regime:",
+        "  - trending_calm: allow BUY/SELL signals from trend strategies",
+        "  - ranging_calm: allow BUY/SELL from mean reversion strategies",
+        "  - trending_volatile: only allow signals in trend direction",
+        "  - ranging_volatile: block all signals (too risky)",
+        "Implement signal filtering logic",
+        "Log filtered signals with reason",
+        "Test signal filtering on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-011",
+      "title": "Implement regime API endpoints and streaming",
+      "description": "As a frontend, I need API endpoints to fetch current regime and regime history.",
+      "acceptanceCriteria": [
+        "Implement GET /api/regime/current - current market state",
+        "Implement GET /api/regime/history - regime change history",
+        "Implement GET /api/regime/performance - performance by regime",
+        "Implement GET /api/regime/transitions - transition matrix",
+        "Stream regime changes via WebSocket",
+        "Cache current regime (5 second TTL)",
+        "Add regime to signal responses",
+        "Test all regime endpoints"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    }
+  ],
+  "functionalRequirements": [
+    "FR-1: System must detect market regime (trending/ranging, low/high volatility)",
+    "FR-2: System must select strategy based on regime",
+    "FR-3: System must adjust risk parameters based on regime",
+    "FR-4: System must track regime performance",
+    "FR-5: System must filter signals based on regime",
+    "FR-6: System must provide regime visibility via API"
+  ],
+  "nonGoals": [
+    "No ML for regime prediction (keep it rule-based and simple)",
+    "No complex state space models (HMM, etc.)",
+    "No multi-asset regime analysis (focus on individual symbols)"
+  ],
+  "technicalConsiderations": [
+    "Regime detection must be fast (< 5ms)",
+    "Regime changes require confirmation to avoid whipsaw",
+    "Regime-specific parameters must be configurable",
+    "Regime tracking must be persistent (survive restarts)",
+    "Regime analysis must work on all 5 volatility indices",
+    "Regime filtering should reduce false signals by 30-40%"
+  ],
+  "successMetrics": [
+    "Regime detection accuracy > 80% (verified by visual inspection)",
+    "Regime-specific strategies outperform generic strategy by 20%+",
+    "Signal filtering reduces false signals by 30-40%",
+    "Regime transitions are detected within 5 bars",
+    "System adapts strategy within 1 bar of regime change"
+  ],
+  "techStack": {
+    "language": "Python 3.11+",
+    "math": "numpy, pandas",
+    "technical": "ta-lib or pandas-ta",
+    "storage": "SQLite",
+    "api": "FastAPI"
+  }
+}

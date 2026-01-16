@@ -1,0 +1,265 @@
+{
+  "project": "EURABAY Living System - Adaptive Risk Management",
+  "branchName": "backend/adaptive-risk-management",
+  "description": "Dynamic risk management that adapts position sizing and risk parameters based on market conditions, recent performance, and portfolio state",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Implement performance-based position sizing",
+      "description": "As a risk manager, I need to adjust position sizes based on recent trading performance to survive losing streaks and maximize winning streaks.",
+      "acceptanceCriteria": [
+        "Create AdaptiveRiskManager class",
+        "Implement calculate_base_risk() method (default 2%)",
+        "Implement adjust_for_recent_performance() method",
+        "Reduce risk by 50% when win rate < 50% (last 20 trades)",
+        "Increase risk by 25% when win rate > 70% (last 20 trades)",
+        "Cap minimum risk at 0.5% (never go lower)",
+        "Cap maximum risk at 3% (never exceed this)",
+        "Log all risk adjustments with reasoning",
+        "Test risk adjustments with historical performance data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-002",
+      "title": "Implement volatility-based position sizing",
+      "description": "As a risk manager, I need to adjust position sizes based on current market volatility to account for different risk levels in V10 vs V100.",
+      "acceptanceCriteria": [
+        "Implement calculate_volatility_multiplier() method",
+        "Fetch current ATR for each symbol",
+        "Calculate average ATR over last 100 bars",
+        "Compute volatility ratio: current_ATR / avg_ATR",
+        "Adjust position size: size *= (1 / volatility_ratio)",
+        "Apply minimum multiplier of 0.3 (for V100 high volatility)",
+        "Apply maximum multiplier of 1.5 (for V10 low volatility)",
+        "Store volatility multipliers in database for analysis",
+        "Test volatility-based sizing on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-003",
+      "title": "Implement drawdown-based position scaling",
+      "description": "As a risk manager, I need to reduce position sizes during drawdowns to protect capital and allow recovery.",
+      "acceptanceCriteria": [
+        "Implement calculate_drawdown() method from equity curve",
+        "Implement adjust_for_drawdown() method",
+        "Reduce risk by 50% when drawdown > 10%",
+        "Reduce risk by 75% when drawdown > 15%",
+        "Stop trading entirely when drawdown > 20% (circuit breaker)",
+        "Gradually restore risk as drawdown recovers",
+        "Log all drawdown-based adjustments",
+        "Test drawdown-based scaling on historical drawdown periods"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-004",
+      "title": "Implement correlation-based risk adjustment",
+      "description": "As a risk manager, I need to reduce total risk when multiple positions in highly correlated symbols are open.",
+      "acceptanceCriteria": [
+        "Implement calculate_portfolio_correlation() method",
+        "Fetch all open positions and symbols",
+        "Calculate correlation matrix between symbols (last 100 bars)",
+        "Count positions in highly correlated pairs (correlation > 0.7)",
+        "Reduce position size by 20% for each correlated position beyond first",
+        "Example: Long V10 + V25 + V50 = 3 correlated positions, reduce new position by 40%",
+        "Log correlation analysis and adjustments",
+        "Test correlation-based adjustments"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-005",
+      "title": "Implement time-based risk adjustment",
+      "description": "As a risk manager, I need to adjust risk based on time of day and trading session patterns.",
+      "acceptanceCriteria": [
+        "Implement calculate_session_risk_multiplier() method",
+        "Define risk multipliers by hour (stored in configuration)",
+        "Example: Lower risk (0.5x) during low-volatility hours",
+        "Example: Higher risk (1.2x) during high-opportunity hours",
+        "Allow configuration of hour-by-hour multipliers",
+        "Apply session adjustments to position sizing",
+        "Log all time-based adjustments",
+        "Test time-based adjustments on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-006",
+      "title": "Implement dynamic stop loss adjustment",
+      "description": "As a risk manager, I need to adjust stop loss distances based on current volatility, not fixed multiples.",
+      "acceptanceCriteria": [
+        "Implement calculate_dynamic_stop() method",
+        "Base stop on ATR: stop = entry ± (ATR * multiplier)",
+        "Adjust ATR multiplier based on volatility regime",
+        "Use 1.5x ATR in low volatility (tighter stops)",
+        "Use 3x ATR in high volatility (wider stops to avoid noise)",
+        "Implement minimum stop distance (0.5% of price)",
+        "Implement maximum stop distance (2% of price)",
+        "Log all stop loss calculations and adjustments",
+        "Test dynamic stops on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-007",
+      "title": "Implement profit target optimization",
+      "description": "As a risk manager, I need to optimize take profit levels based on current market conditions and recent performance.",
+      "acceptanceCriteria": [
+        "Implement calculate_optimal_tp() method",
+        "Base TP on ATR: TP = entry ± (ATR * multiplier)",
+        "Adjust TP multiplier based on win rate (higher win rate = tighter TP)",
+        "Use 2x ATR when win rate > 60%",
+        "Use 3x ATR when win rate < 60% (give trades room)",
+        "Implement minimum TP distance (1x ATR)",
+        "Implement maximum TP distance (5x ATR)",
+        "Track TP hit rate in database",
+        "Optimize TP multipliers based on historical performance",
+        "Test TP optimization on historical data"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-008",
+      "title": "Implement maximum daily loss limit",
+      "description": "As a risk manager, I need to stop trading when daily loss exceeds threshold to prevent catastrophic losses.",
+      "acceptanceCriteria": [
+        "Implement calculate_daily_pnl() method",
+        "Track all realized P&L for current day",
+        "Implement daily_loss_limit check (configurable, default 5%)",
+        "Stop opening new positions when daily loss > limit",
+        "Allow closing existing positions to manage risk",
+        "Reset daily limit at midnight",
+        "Log when daily limit is hit",
+        "Send alert when daily limit is hit",
+        "Test daily loss limit on historical data"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-009",
+      "title": "Implement consecutive loss protection",
+      "description": "As a risk manager, I need to reduce risk or pause trading after consecutive losses to prevent tilting.",
+      "acceptanceCriteria": [
+        "Implement track_consecutive_losses() method",
+        "Count consecutive losing trades",
+        "Reduce position size by 25% after 3 consecutive losses",
+        "Reduce position size by 50% after 5 consecutive losses",
+        "Pause trading after 7 consecutive losses (circuit breaker)",
+        "Reset counter after winning trade",
+        "Log all consecutive loss events and adjustments",
+        "Test consecutive loss protection on historical data"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "US-010",
+      "title": "Implement risk heat indicator",
+      "description": "As a trader, I need a visual indicator showing current risk level to make informed decisions.",
+      "acceptanceCriteria": [
+        "Create RiskHeatIndicator class",
+        "Calculate overall risk score (0-100)",
+        "Factors: open position risk, correlation risk, daily loss, consecutive losses",
+        "Display risk level: LOW (0-30), MEDIUM (30-60), HIGH (60-80), CRITICAL (80-100)",
+        "Expose risk score via REST API endpoint",
+        "Stream risk score via WebSocket",
+        "Log risk level changes",
+        "Test risk indicator with various scenarios"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false
+    },
+    {
+      "id": "US-011",
+      "title": "Implement risk parameter optimization",
+      "description": "As a system, I need to optimize risk parameters over time to find the best settings.",
+      "acceptanceCriteria": [
+        "Implement backtest_risk_parameters() method",
+        "Test different base risk levels (1%, 1.5%, 2%, 2.5%)",
+        "Test different ATR multipliers for stops",
+        "Test different TP multipliers",
+        "Calculate Sharpe ratio for each combination",
+        "Find optimal parameters for each symbol and regime",
+        "Store optimal parameters in database",
+        "Update system to use optimized parameters",
+        "Re-optimize weekly",
+        "Test optimization on historical data (6+ months)"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false
+    }
+  ],
+  "functionalRequirements": [
+    "FR-1: Risk management must adapt to recent performance",
+    "FR-2: Risk management must account for market volatility",
+    "FR-3: Risk management must reduce size during drawdowns",
+    "FR-4: Risk management must account for correlation between positions",
+    "FR-5: Risk management must adjust stops and TPs dynamically",
+    "FR-6: Risk management must have daily loss limits",
+    "FR-7: Risk management must protect against consecutive losses",
+    "FR-8: Risk management must provide visibility via risk indicator"
+  ],
+  "nonGoals": [
+    "No machine learning for risk prediction (keep it simple and rule-based)",
+    "No complex portfolio optimization (Modern Portfolio Theory is overkill)",
+    "No hedging strategies (too complex for this stage)"
+  ],
+  "technicalConsiderations": [
+    "All risk calculations must be fast (< 10ms)",
+    "Risk adjustments must be logged for audit trail",
+    "Risk parameters must be stored in database for analysis",
+    "Risk limits must be configurable via environment variables",
+    "Risk system must never allow position > 3% of account",
+    "Risk system must have circuit breakers to prevent cascade failures",
+    "Risk adjustments must be explainable (not black box)",
+    "Risk system must work in real-time without blocking trading loop"
+  ],
+  "successMetrics": [
+    "System adjusts risk based on performance",
+    "System reduces risk during high volatility",
+    "System stops trading at daily loss limit",
+    "System pauses after consecutive losses",
+    "Risk indicator accurately reflects risk level",
+    "Risk parameters optimize Sharpe ratio",
+    "System survives losing streaks that would wipe out static-risk system"
+  ],
+  "techStack": {
+    "language": "Python 3.11+",
+    "math": "numpy",
+    "data": "pandas",
+    "storage": "SQLite",
+    "logging": "loguru"
+  }
+}

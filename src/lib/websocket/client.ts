@@ -794,8 +794,30 @@ export class WSClient {
  * URL will be configured from environment variable or default value
  */
 const createDefaultClient = (): WSClient => {
+  // Check if WebSocket is disabled (for frontend-only testing)
+  const wsDisabled = process.env.NEXT_PUBLIC_WS_DISABLED === 'true';
+
+  if (wsDisabled) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[WS] WebSocket is disabled via NEXT_PUBLIC_WS_DISABLED=true');
+    }
+
+    // Create client with invalid URL to prevent connection attempts
+    return new WSClient({
+      url: 'ws://disabled',
+      connectionTimeout: 1000,
+      reconnectOnClose: false,
+      enableAutoReconnect: false, // Disable auto-reconnect when WS is disabled
+      maxReconnectAttempts: 0,
+      initialReconnectDelay: 1000,
+      maxReconnectDelay: 30000,
+      pingInterval: 30000,
+      pongTimeout: 60000,
+    });
+  }
+
   // Default to localhost for development, configurable via env var
-  const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001';
+  const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws';
 
   return new WSClient({
     url: wsUrl,

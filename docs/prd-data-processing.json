@@ -1,0 +1,333 @@
+{
+  "project": "EURABAY Living System v5.0",
+  "branchName": "backend/data-processing-pipeline",
+  "description": "Data Processing Pipeline - Market data ingestion from MT5, feature engineering, technical indicators calculation, and data storage for volatility indices trading (V10, V25, V50, V75, V100)",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Set up data ingestion service foundation",
+      "description": "As a system, I need to set up a data ingestion service foundation to continuously fetch market data from MT5 for all volatility indices.",
+      "acceptanceCriteria": [
+        "Create backend/services/data_ingestion.py module",
+        "Implement DataIngestionService class with async architecture",
+        "Set up async data fetching loop for all 5 volatility indices (V10, V25, V50, V75, V100)",
+        "Configure data fetch interval (every 1 second for real-time, every 1 minute for OHLCV)",
+        "Implement graceful shutdown handling",
+        "Add data ingestion status monitoring",
+        "Create unit tests for data ingestion service",
+        "Add integration tests with MT5 connection"
+      ],
+      "mavenSteps": [1, 7],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Foundation for all data processing work"
+    },
+    {
+      "id": "US-002",
+      "title": "Implement tick data collection and storage",
+      "description": "As a system, I need to collect and store tick-level data from MT5 for high-frequency analysis.",
+      "acceptanceCriteria": [
+        "Implement fetch_tick_data() method for each symbol",
+        "Store tick data in SQLite (recent 7 days)",
+        "Implement tick data deduplication logic",
+        "Add data quality checks (price validation, timestamp validation)",
+        "Create tick data schema: symbol, bid, ask, volume, timestamp",
+        "Implement data retention policy (automatic cleanup after 7 days)",
+        "Add monitoring for data quality issues",
+        "Test tick data collection for all 5 symbols"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Essential for high-frequency analysis and real-time monitoring"
+    },
+    {
+      "id": "US-003",
+      "title": "Implement OHLCV data collection and storage",
+      "description": "As a system, I need to collect and store OHLCV (Open, High, Low, Close, Volume) data in Parquet format for efficient time-series analysis.",
+      "acceptanceCriteria": [
+        "Implement fetch_ohlcv_data() method for multiple timeframes (M1, M5, M15, H1, H4, D1)",
+        "Store OHLCV data in Parquet format (backend/data/parquet/)",
+        "Organize Parquet files by symbol and timeframe (e.g., V10_M1.parquet)",
+        "Implement data compression (snappy compression)",
+        "Add data validation (OHLC relationships, volume validation)",
+        "Implement data deduplication based on timestamp",
+        "Create data retention policy (90 days for detailed data, 1 year for daily)",
+        "Add monitoring for data gaps and missing candles",
+        "Test OHLCV collection for all timeframes and symbols"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Parquet format provides efficient storage and fast querying for time-series data"
+    },
+    {
+      "id": "US-004",
+      "title": "Implement historical data backfill",
+      "description": "As a system, I need to backfill historical data when starting up or detecting gaps in the dataset.",
+      "acceptanceCriteria": [
+        "Implement backfill_historical_data() method",
+        "Detect data gaps in existing datasets",
+        "Fetch missing historical data from MT5 (up to 1 year)",
+        "Implement chunked backfill to avoid memory issues",
+        "Add progress tracking for backfill operations",
+        "Implement backfill priority (recent data first)",
+        "Add logging for backfill operations",
+        "Handle MT5 rate limits during backfill",
+        "Test backfill on fresh installation",
+        "Test backfill after detecting data gaps"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Ensures complete historical dataset for training and analysis"
+    },
+    {
+      "id": "US-005",
+      "title": "Set up feature engineering module foundation",
+      "description": "As an AI system, I need to set up a feature engineering module to transform raw market data into meaningful features for ML predictions.",
+      "acceptanceCriteria": [
+        "Create backend/services/feature_engineering.py module",
+        "Implement FeatureEngineering class",
+        "Set up feature caching mechanism (Redis or in-memory)",
+        "Implement feature schema definition",
+        "Add feature validation and quality checks",
+        "Implement missing data handling strategies",
+        "Add feature computation performance monitoring",
+        "Create unit tests for feature calculations",
+        "Document all calculated features"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Foundation for all ML feature engineering work"
+    },
+    {
+      "id": "US-006",
+      "title": "Implement price-based features",
+      "description": "As an AI system, I need to calculate price-based features including returns, log returns, and price changes.",
+      "acceptanceCriteria": [
+        "Implement simple returns calculation: (price_t - price_t-1) / price_t-1",
+        "Implement log returns calculation: log(price_t / price_t-1)",
+        "Implement price change: price_t - price_t-1",
+        "Implement percentage change over multiple periods (1, 5, 10, 20)",
+        "Implement price relative to moving average",
+        "Implement price momentum (rate of change)",
+        "Handle missing data and edge cases",
+        "Add feature caching",
+        "Test features on historical data",
+        "Validate feature distributions"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Basic features that all ML models will use"
+    },
+    {
+      "id": "US-007",
+      "title": "Implement volatility features",
+      "description": "As an AI system, I need to calculate volatility features including ATR, standard deviation, and Parkinson estimator.",
+      "acceptanceCriteria": [
+        "Implement Average True Range (ATR) with configurable period (default 14)",
+        "Implement rolling standard deviation (periods: 5, 10, 20, 50)",
+        "Implement Parkinson volatility estimator (high-low based)",
+        "Implement Garman-Klass volatility estimator",
+        "Implement historical volatility (annualized)",
+        "Implement volatility z-score (current vol relative to mean)",
+        "Implement volatility regime classification (low/medium/high)",
+        "Add feature caching",
+        "Test features on historical data",
+        "Validate feature calculations against known values"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Critical for volatility indices trading"
+    },
+    {
+      "id": "US-008",
+      "title": "Implement momentum indicators",
+      "description": "As an AI system, I need to calculate momentum indicators including RSI, MACD, and Stochastic oscillator.",
+      "acceptanceCriteria": [
+        "Implement Relative Strength Index (RSI) with configurable period (default 14)",
+        "Implement MACD (12, 26, 9 parameters)",
+        "Implement MACD histogram and signal line",
+        "Implement Stochastic oscillator (%K and %D)",
+        "Implement Williams %R",
+        "Implement Rate of Change (ROC)",
+        "Implement Money Flow Index (MFI)",
+        "Add indicator divergence detection (price vs indicator)",
+        "Add feature caching",
+        "Test indicators on historical data",
+        "Validate against ta-lib or pandas-ta"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Standard technical analysis indicators"
+    },
+    {
+      "id": "US-009",
+      "title": "Implement trend indicators",
+      "description": "As an AI system, I need to calculate trend indicators including SMA, EMA, and ADX.",
+      "acceptanceCriteria": [
+        "Implement Simple Moving Average (SMA) for periods: 5, 10, 20, 50, 200",
+        "Implement Exponential Moving Average (EMA) for periods: 5, 10, 20, 50, 200",
+        "Implement Weighted Moving Average (WMA)",
+        "Implement Average Directional Index (ADX) with +DI and -DI",
+        "Implement Ichimoku Cloud components (Tenkan, Kijun, Senkou)",
+        "Implement Parabolic SAR",
+        "Implement trend strength classification (strong/weak/no trend)",
+        "Add feature caching",
+        "Test indicators on historical data",
+        "Validate trend detection accuracy"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Essential for determining market direction"
+    },
+    {
+      "id": "US-010",
+      "title": "Implement lag features and rolling statistics",
+      "description": "As an AI system, I need to create lag features and rolling statistics to capture temporal patterns.",
+      "acceptanceCriteria": [
+        "Implement lag features for returns (1, 2, 3, 5, 10 periods)",
+        "Implement lag features for price (1, 2, 3, 5, 10 periods)",
+        "Implement rolling mean for multiple windows (5, 10, 20, 50)",
+        "Implement rolling standard deviation for multiple windows",
+        "Implement rolling min/max for multiple windows",
+        "Implement rolling skewness and kurtosis",
+        "Implement rolling correlation (price vs volume)",
+        "Implement percentile ranks (current value relative to history)",
+        "Add feature caching",
+        "Test features on historical data",
+        "Validate feature distributions"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Lag features help models learn temporal dependencies"
+    },
+    {
+      "id": "US-011",
+      "title": "Implement Bollinger Bands and z-score features",
+      "description": "As an AI system, I need to calculate Bollinger Bands and z-score features for mean reversion strategies.",
+      "acceptanceCriteria": [
+        "Implement Bollinger Bands (20-period, 2 standard deviations)",
+        "Implement Bollinger Band width (volatility measure)",
+        "Implement Bollinger Band %B (position within bands)",
+        "Implement z-score of price relative to moving mean",
+        "Implement z-score of returns",
+        "Implement mean reversion signal (z-score > 2 or < -2)",
+        "Implement custom band parameters (configurable period and std dev)",
+        "Add feature caching",
+        "Test features on historical data",
+        "Validate mean reversion signals"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Useful for volatility indices which often exhibit mean reversion"
+    },
+    {
+      "id": "US-012",
+      "title": "Implement feature selection and importance analysis",
+      "description": "As an AI system, I need to analyze feature importance and select the most predictive features for model training.",
+      "acceptanceCriteria": [
+        "Implement feature importance calculation using mutual information",
+        "Implement feature importance using random forest baseline",
+        "Implement correlation analysis (remove highly correlated features)",
+        "Implement feature stability analysis (importance over time)",
+        "Implement feature selection based on importance threshold",
+        "Create feature importance reports and visualizations",
+        "Implement feature elimination (recursive feature elimination)",
+        "Store selected feature set configuration",
+        "Test feature selection on historical data",
+        "Document final feature set"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Helps reduce overfitting and improve model performance"
+    }
+  ],
+  "functionalRequirements": [
+    "FR-1: System must continuously ingest data from MT5 for 5 volatility indices",
+    "FR-2: System must store tick data in SQLite for recent data",
+    "FR-3: System must store OHLCV data in Parquet format for efficiency",
+    "FR-4: System must implement 50+ technical features for ML models",
+    "FR-5: System must implement feature caching to avoid recomputation",
+    "FR-6: System must handle missing data gracefully",
+    "FR-7: System must validate data quality at all stages",
+    "FR-8: System must backfill historical data on startup",
+    "FR-9: System must detect and fill data gaps",
+    "FR-10: System must implement data retention policies"
+  ],
+  "nonGoals": [
+    "No real-time news data ingestion in this phase",
+    "No alternative data sources (social media, sentiment) in this phase",
+    "No order book data or Level 2 data",
+    "No fundamental analysis features",
+    "No cross-asset correlation features"
+  ],
+  "technicalConsiderations": [
+    "Use async/await for data fetching to avoid blocking",
+    "Parquet format provides columnar storage and compression",
+    "Feature caching essential for performance (avoid recalculating)",
+    "Use ta-lib or pandas-ta for technical indicators (battle-tested)",
+    "Implement proper error handling for MT5 connection issues",
+    "Data validation critical at every stage (garbage in, garbage out)",
+    "Monitor data quality metrics continuously",
+    "Consider memory usage when loading large datasets",
+    "Use chunking for backfill operations",
+    "Feature engineering is the most important part of ML pipeline"
+  ],
+  "successMetrics": [
+    "Data ingestion successfully collects data for all 5 symbols",
+    "Data quality metrics show >99% valid data",
+    "No data gaps > 5 minutes in OHLCV data",
+    "Feature calculation completes in < 100ms per symbol",
+    "Feature cache hit rate > 90%",
+    "All technical indicators validated against ta-lib",
+    "Historical backfill completes in < 1 hour for 1 year of data",
+    "System can handle 5 symbols simultaneously without performance degradation",
+    "Feature importance analysis completed and documented",
+    "Selected feature set contains 20-30 most predictive features"
+  ],
+  "techStack": {
+    "dataCollection": "MetaTrader5 Python library",
+    "storage": "SQLite (tick data), Parquet files (OHLCV)",
+    "dataProcessing": "pandas, numpy",
+    "technicalIndicators": "ta-lib, pandas-ta",
+    "featureEngineering": "scikit-learn, custom feature functions",
+    "caching": "Redis or in-memory (functools.lru_cache)",
+    "asyncRuntime": "asyncio, aiofiles",
+    "dataValidation": "pandas validation, custom checks"
+  },
+  "architecture": {
+    "dataFlow": "MT5 → Data Ingestion Service → SQLite/Parquet → Feature Engineering → Cached Features → ML Models",
+    "storageStrategy": "Hot data in SQLite (7 days), Cold data in Parquet (90 days)",
+    "computation": "On-demand feature calculation with caching",
+    "parallelProcessing": "Async data fetching for all 5 symbols"
+  },
+  "timeline": {
+    "phase1": "Foundation (Days 1-3): Data ingestion service setup, MT5 connection",
+    "phase2": "Data Collection (Days 4-7): Tick/OHLCV collection, backfill implementation",
+    "phase3": "Feature Engineering (Days 8-12): Price/volatility features, technical indicators",
+    "phase4": "Advanced Features (Days 13-15): Momentum/trend indicators, lag features",
+    "phase5": "Optimization (Days 16-17): Feature selection, importance analysis, caching"
+  }
+}

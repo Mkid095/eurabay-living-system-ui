@@ -1,0 +1,403 @@
+{
+  "project": "EURABAY Living System v5.0",
+  "branchName": "backend/observability-testing",
+  "description": "Observability & Testing - Comprehensive logging, monitoring, metrics collection, paper trading mode, backtesting framework, and testing infrastructure for production-ready trading system",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Set up structured logging system",
+      "description": "As a system operator, I need a structured logging system to track all operations and debug issues.",
+      "acceptanceCriteria": [
+        "Create backend/core/logging.py module",
+        "Implement structured logging with loguru",
+        "Set up log levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+        "Implement log format with context (timestamp, level, module, message)",
+        "Set up log rotation (daily, keep 30 days)",
+        "Implement log file separation by module (trading, mt5, model, risk)",
+        "Implement log filtering and search",
+        "Add log performance monitoring",
+        "Create unit tests for logging system",
+        "Document logging standards and conventions"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Logging is essential for debugging and audit trails"
+    },
+    {
+      "id": "US-002",
+      "title": "Implement trading operation logging",
+      "description": "As a system operator, I need detailed logging of all trading operations for audit trails.",
+      "acceptanceCriteria": [
+        "Implement trade execution logging (entry, exit, P&L, duration)",
+        "Implement signal generation logging (symbol, direction, confidence, reasons)",
+        "Implement risk decision logging (position size, SL/TP, why rejected)",
+        "Implement order modification logging (SL/TP changes, partial closes)",
+        "Implement position monitoring logging (trailing stop updates)",
+        "Implement performance metrics logging (win rate, drawdown, Sharpe)",
+        "Add structured log format for easy parsing",
+        "Implement log export (CSV, JSON)",
+        "Test logging covers all trading operations",
+        "Validate log completeness"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Trading logs are critical for compliance and analysis"
+    },
+    {
+      "id": "US-003",
+      "title": "Implement error and exception logging",
+      "description": "As a system operator, I need comprehensive error logging to debug issues and track failures.",
+      "acceptanceCriteria": [
+        "Implement error logging with stack traces",
+        "Implement error context logging (variables, state)",
+        "Implement error frequency tracking (errors per hour)",
+        "Implement error alerting (send notification on critical errors)",
+        "Implement error categorization (MT5, database, model, risk)",
+        "Implement error trend analysis (increasing errors)",
+        "Add error log export (for analysis)",
+        "Test error logging with various error scenarios",
+        "Validate error logs contain sufficient context",
+        "Create error log dashboard"
+      ],
+      "mavenSteps": [1, 10],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Error logs essential for debugging"
+    },
+    {
+      "id": "US-004",
+      "title": "Set up system monitoring and metrics",
+      "description": "As a system operator, I need monitoring and metrics to track system health and performance.",
+      "acceptanceCriteria": [
+        "Create backend/core/monitoring.py module",
+        "Implement system metrics collection (CPU, memory, disk, network)",
+        "Implement trading metrics collection (win rate, profit factor, drawdown)",
+        "Implement performance metrics (loop execution time, API latency)",
+        "Implement service health metrics (MT5 status, database status, model status)",
+        "Implement metrics storage in database",
+        "Implement metrics aggregation (per minute, per hour, per day)",
+        "Implement metrics API endpoint",
+        "Stream metrics via WebSocket",
+        "Test metrics collection accuracy"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Metrics enable data-driven decisions"
+    },
+    {
+      "id": "US-005",
+      "title": "Implement performance monitoring and profiling",
+      "description": "As a developer, I need performance monitoring to identify bottlenecks and optimize the system.",
+      "acceptanceCriteria": [
+        "Implement trading loop execution time tracking",
+        "Implement service-level timing (data fetch, features, prediction, risk, execution)",
+        "Implement API endpoint response time tracking",
+        "Implement database query performance tracking",
+        "Implement memory usage tracking (detect leaks)",
+        "Implement performance profiling (cProfile integration)",
+        "Implement performance regression detection",
+        "Generate performance reports",
+        "Add performance alerting (slowdown > 20%)",
+        "Test performance monitoring with various loads"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Performance monitoring identifies bottlenecks"
+    },
+    {
+      "id": "US-006",
+      "title": "Implement alerting and notifications",
+      "description": "As a system operator, I need alerting and notifications for critical events.",
+      "acceptanceCriteria": [
+        "Implement alert rules (critical errors, risk limit breaches, system failures)",
+        "Implement alert channels (log, email, webhook - future)",
+        "Implement alert severity levels (info, warning, critical)",
+        "Implement alert rate limiting (prevent spam)",
+        "Implement alert history and tracking",
+        "Implement alert acknowledgment and resolution",
+        "Add alert configuration (customize rules)",
+        "Test alerting with various scenarios",
+        "Validate alerts are sent promptly",
+        "Document alert procedures"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Alerts enable rapid response to issues"
+    },
+    {
+      "id": "US-007",
+      "title": "Set up paper trading mode foundation",
+      "description": "As a tester, I need a paper trading mode to validate the system without risking real money.",
+      "acceptanceCriteria": [
+        "Create backend/services/paper_trading.py module",
+        "Implement PaperTrader class",
+        "Set up virtual account (virtual balance, equity, margin)",
+        "Implement virtual position tracking",
+        "Implement virtual order execution (no real trades)",
+        "Implement paper trading mode configuration",
+        "Add paper trading indicator (visible in UI)",
+        "Implement paper trading performance tracking",
+        "Create unit tests for paper trading",
+        "Document paper trading procedures"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 1,
+      "passes": false,
+      "notes": "Paper trading required before live trading"
+    },
+    {
+      "id": "US-008",
+      "title": "Implement paper trading simulation",
+      "description": "As a tester, I need realistic paper trading simulation to validate the system.",
+      "acceptanceCriteria": [
+        "Simulate MT5 connection (no real terminal needed)",
+        "Simulate order execution with realistic slippage (1-2 ticks)",
+        "Simulate spread (use current market spread)",
+        "Track virtual positions and P&L",
+        "Implement paper trading vs live trading comparison",
+        "Implement paper trading performance metrics",
+        "Add paper trading logging",
+        "Implement paper trading mode API endpoint",
+        "Test paper trading for 2+ weeks",
+        "Validate paper trading results match backtests"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Paper trading validates system before live trading"
+    },
+    {
+      "id": "US-009",
+      "title": "Set up backtesting framework foundation",
+      "description": "As a developer, I need a backtesting framework to validate strategies on historical data.",
+      "acceptanceCriteria": [
+        "Create backend/services/backtesting.py module",
+        "Implement Backtester class",
+        "Set up historical data loading (from Parquet files)",
+        "Implement backtesting configuration (dates, symbols, parameters)",
+        "Implement backtesting state management (virtual account, positions)",
+        "Set up backtesting metrics calculation",
+        "Add backtesting logging",
+        "Create unit tests for backtesting",
+        "Document backtesting procedures"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Backtesting essential for strategy validation"
+    },
+    {
+      "id": "US-010",
+      "title": "Implement backtesting simulation engine",
+      "description": "As a developer, I need a realistic backtesting simulation engine to validate strategies.",
+      "acceptanceCriteria": [
+        "Implement historical signal generation (apply model to historical data)",
+        "Implement realistic order execution (slippage, spread)",
+        "Implement position sizing (backtest with risk management)",
+        "Implement trade lifecycle (entry, SL/TP updates, exit)",
+        "Calculate backtesting metrics (returns, Sharpe, drawdown, win rate)",
+        "Generate equity curve",
+        "Generate trade-by-trade analysis",
+        "Implement parameter optimization (grid search on backtest)",
+        "Test backtesting on 90+ days of data",
+        "Validate backtesting accuracy"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Realistic backtesting prevents overfitting"
+    },
+    {
+      "id": "US-011",
+      "title": "Implement backtesting reports and visualization",
+      "description": "As a developer, I need comprehensive backtesting reports and visualizations to analyze results.",
+      "acceptanceCriteria": [
+        "Generate backtesting summary report (HTML/PDF)",
+        "Create equity curve visualization",
+        "Create drawdown visualization",
+        "Create trade distribution chart",
+        "Create monthly returns heatmap",
+        "Create trade-by-trade analysis table",
+        "Implement parameter optimization results",
+        "Implement backtesting comparison (compare multiple runs)",
+        "Add backtesting API endpoint",
+        "Test report generation on various backtests"
+      ],
+      "mavenSteps": [1, 5],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Visualizations help understand backtesting results"
+    },
+    {
+      "id": "US-012",
+      "title": "Set up testing infrastructure foundation",
+      "description": "As a developer, I need comprehensive testing infrastructure to ensure code quality.",
+      "acceptanceCriteria": [
+        "Create backend/tests/ directory with proper structure",
+        "Set up pytest configuration",
+        "Implement test fixtures (mock MT5, mock database, test data)",
+        "Implement test utilities (helper functions, assertions)",
+        "Set up test coverage reporting (pytest-cov)",
+        "Implement test data generation (synthetic market data)",
+        "Add unit test framework",
+        "Add integration test framework",
+        "Document testing standards and conventions"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Testing infrastructure essential for quality"
+    },
+    {
+      "id": "US-013",
+      "title": "Implement unit tests for core services",
+      "description": "As a developer, I need unit tests for all core services to ensure correctness.",
+      "acceptanceCriteria": [
+        "Implement unit tests for data ingestion service",
+        "Implement unit tests for feature engineering",
+        "Implement unit tests for model training and inference",
+        "Implement unit tests for risk management",
+        "Implement unit tests for order execution",
+        "Implement unit tests for trading loop",
+        "Implement unit tests for error handling",
+        "Achieve > 80% code coverage",
+        "Run unit tests in CI/CD",
+        "Document test coverage report"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 2,
+      "passes": false,
+      "notes": "Unit tests catch bugs early"
+    },
+    {
+      "id": "US-014",
+      "title": "Implement integration tests for workflows",
+      "description": "As a developer, I need integration tests to validate end-to-end workflows.",
+      "acceptanceCriteria": [
+        "Implement integration test for trading loop (full workflow)",
+        "Implement integration test for MT5 integration",
+        "Implement integration test for database operations",
+        "Implement integration test for model pipeline",
+        "Implement integration test for API endpoints",
+        "Implement integration test for WebSocket streaming",
+        "Use test database (separate from production)",
+        "Use mock MT5 for testing",
+        "Run integration tests in CI/CD",
+        "Document integration test scenarios"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Integration tests validate system integration"
+    },
+    {
+      "id": "US-015",
+      "title": "Implement system validation and smoke tests",
+      "description": "As a QA engineer, I need smoke tests to validate the system before deployment.",
+      "acceptanceCriteria": [
+        "Implement smoke test for MT5 connection",
+        "Implement smoke test for database connectivity",
+        "Implement smoke test for model loading",
+        "Implement smoke test for API endpoints",
+        "Implement smoke test for WebSocket connection",
+        "Implement smoke test for trading loop startup",
+        "Implement pre-deployment validation script",
+        "Implement post-deployment smoke test",
+        "Add smoke test reporting",
+        "Document smoke test procedures"
+      ],
+      "mavenSteps": [1],
+      "mcpTools": {},
+      "priority": 3,
+      "passes": false,
+      "notes": "Smoke tests prevent bad deployments"
+    }
+  ],
+  "functionalRequirements": [
+    "FR-1: System must log all trading operations for audit trail",
+    "FR-2: System must log all errors with stack traces and context",
+    "FR-3: System must monitor system health and performance metrics",
+    "FR-4: System must implement paper trading mode for validation",
+    "FR-5: System must implement backtesting framework for strategy validation",
+    "FR-6: System must achieve > 80% test coverage",
+    "FR-7: System must send alerts for critical events",
+    "FR-8: System must generate backtesting reports with visualizations",
+    "FR-9: System must implement log rotation and retention",
+    "FR-10: System must validate system health before deployment"
+  ],
+  "nonGoals": [
+    "No distributed logging (ELK stack) in this phase (local files only)",
+    "No APM tools (Datadog, New Relic) in this phase",
+    "No chaos engineering in this phase",
+    "No load testing beyond basic validation",
+    "No security penetration testing in this phase",
+    "No compliance auditing tools in this phase"
+  ],
+  "technicalConsiderations": [
+    "Structured logging essential for query and analysis",
+    "Log rotation prevents disk space issues",
+    "Metrics storage in database enables historical analysis",
+    "Paper trading must match live trading as closely as possible",
+    "Backtesting must be realistic (include slippage and spread)",
+    "Test coverage > 80% ensures code quality",
+    "Integration tests validate system integration",
+    "Smoke tests prevent bad deployments",
+    "Performance monitoring identifies bottlenecks",
+    "Alerting enables rapid response to issues"
+  ],
+  "successMetrics": [
+    "All trading operations logged with complete context",
+    "All errors logged with stack traces and variables",
+    "System metrics collected with < 5% overhead",
+    "Alerts sent within 10 seconds of critical event",
+    "Paper trading runs for 2+ weeks without issues",
+    "Paper trading results match backtests within 10%",
+    "Backtesting completes 90 days in < 10 minutes",
+    "Backtesting reports generated with all visualizations",
+    "Unit test coverage > 80%",
+    "All smoke tests pass before deployment"
+  ],
+  "techStack": {
+    "logging": "loguru for structured logging",
+    "monitoring": "psutil for system metrics, custom metrics collection",
+    "alerting": "Custom alerting framework (email future)",
+    "paperTrading": "Custom paper trading simulation",
+    "backtesting": "pandas, numpy for backtesting engine",
+    "testing": "pytest, pytest-cov, pytest-asyncio",
+    "mocking": "unittest.mock for mocking MT5 and database",
+    "visualization": "matplotlib, plotly for charts and reports"
+  },
+  "architecture": {
+    "loggingFlow": "Operation → Log Entry → Rotate → Compress → Retain (30 days)",
+    "monitoringFlow": "Collect Metrics → Store in Database → Aggregate → Alert → Visualize",
+    "paperTradingFlow": "Signal → Virtual Execution → Track P&L → Compare to Live",
+    "backtestingFlow": "Historical Data → Signal Generation → Simulate Execution → Calculate Metrics → Generate Report",
+    "testingFlow": "Unit Tests → Integration Tests → Smoke Tests → Deploy"
+  },
+  "timeline": {
+    "phase1": "Foundation (Days 1-4): Logging setup, monitoring foundation",
+    "phase2": "Logging (Days 5-7): Trading logs, error logs, alerting",
+    "phase3": "Paper Trading (Days 8-11): Paper trading setup, simulation, validation",
+    "phase4": "Backtesting (Days 12-15): Backtesting framework, simulation engine, reports",
+    "phase5": "Testing (Days 16-20): Unit tests, integration tests, smoke tests"
+  }
+}
