@@ -30,7 +30,12 @@ from .scale_out_manager import (
     ScaleOutUpdate,
     ScaleOutLevel,
 )
-from .trade_state import TradeState, TradeStateMachine, TradeStateTransition
+from .trade_state import (
+    TradeState,
+    TradeStateMachine,
+    TradeStateTransition,
+    TradeStateTracker,
+)
 from .trade_position import TradePosition
 from .trailing_stop_manager import (
     TrailingStopManager,
@@ -70,6 +75,7 @@ __all__ = [
     "TradeState",
     "TradeStateMachine",
     "TradeStateTransition",
+    "TradeStateTracker",
     "TradePosition",
     "TrailingStopManager",
     "TrailingStopConfig",

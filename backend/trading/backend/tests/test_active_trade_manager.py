@@ -379,7 +379,10 @@ class TestTradeStateMachine:
     def test_invalid_transitions(self):
         """Test that invalid state transitions are rejected."""
         assert not TradeStateMachine.can_transition(TradeState.CLOSED, TradeState.OPEN)
-        assert not TradeStateMachine.can_transition(TradeState.PENDING, TradeState.CLOSED)
+        # PENDING -> CLOSED is valid (for cancelled/rejected orders)
+        # Test some other invalid transitions instead
+        assert not TradeStateMachine.can_transition(TradeState.CLOSED, TradeState.BREAKEVEN)
+        assert not TradeStateMachine.can_transition(TradeState.OPEN, TradeState.PENDING)
 
     def test_validate_transition_success(self):
         """Test that valid transitions pass validation."""
