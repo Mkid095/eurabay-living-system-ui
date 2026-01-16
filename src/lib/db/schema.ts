@@ -3,6 +3,7 @@ import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
 /**
  * Users table schema
  * Stores user account information with authentication data
+ * Extended with Better Auth required fields (emailVerified, image)
  */
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -10,6 +11,8 @@ export const users = sqliteTable('users', {
   passwordHash: text('passwordHash').notNull(),
   name: text('name').notNull(),
   role: text('role', { enum: ['admin', 'trader', 'viewer'] }).notNull().default('viewer'),
+  emailVerified: integer('emailVerified', { mode: 'boolean' }).notNull().default(false),
+  image: text('image'),
   createdAt: integer('createdAt', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull(),
 });
@@ -69,3 +72,50 @@ export const evolutionGenerations = sqliteTable('evolution_generations', {
  */
 export type EvolutionGeneration = typeof evolutionGenerations.$inferSelect;
 export type NewEvolutionGeneration = typeof evolutionGenerations.$inferInsert;
+
+/**
+ * Sessions table schema for Better Auth
+ * Stores user session data for authentication
+ */
+export const sessions = sqliteTable('sessions', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id),
+  token: text('token').notNull(),
+  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+/**
+ * Type definitions for sessions table
+ */
+export type Session = typeof sessions.$inferSelect;
+export type NewSession = typeof sessions.$inferInsert;
+
+/**
+ * Accounts table schema for Better Auth
+ * Stores account information for OAuth providers and email/password auth
+ */
+export const accounts = sqliteTable('accounts', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id),
+  accountId: text('account_id').notNull(),
+  providerId: text('provider_id').notNull(),
+  accessToken: text('access_token'),
+  refreshToken: text('refresh_token'),
+  accessTokenExpiresAt: integer('access_token_expires_at', { mode: 'timestamp' }),
+  refreshTokenExpiresAt: integer('refresh_token_expires_at', { mode: 'timestamp' }),
+  scope: text('scope'),
+  idToken: text('id_token'),
+  password: text('password'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+/**
+ * Type definitions for accounts table
+ */
+export type Account = typeof accounts.$inferSelect;
+export type NewAccount = typeof accounts.$inferInsert;

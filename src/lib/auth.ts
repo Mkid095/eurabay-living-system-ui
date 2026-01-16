@@ -18,13 +18,29 @@ export const auth = betterAuth({
   baseURL: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   apiURL: process.env.NEXT_PUBLIC_API_URL || '/api/auth',
 
+  // Configure user model to match our database schema
+  user: {
+    modelName: 'users',
+    fields: {
+      emailVerified: 'emailVerified',
+    },
+    additionalFields: {
+      role: {
+        type: ['admin', 'trader', 'viewer'],
+        required: false,
+        defaultValue: 'viewer',
+        input: false,
+      },
+    },
+  },
+
   // Database adapter using existing Drizzle setup
   database: drizzleAdapter(db, {
     provider: 'sqlite',
     schema: {
       user: schema.users,
-      session: null, // Will be added in US-002
-      account: null, // Will be added in US-002
+      session: schema.sessions,
+      account: schema.accounts,
     },
   }),
 
@@ -79,16 +95,7 @@ export type Session = typeof auth.$Infer.Session;
 
 /**
  * Extended session type with role field
+ * This extends the inferred Session type from Better Auth
+ * which includes the custom 'role' additional field
  */
-export interface ExtendedSession extends Session {
-  user: {
-    id: string;
-    createdAt: Date;
-    updatedAt: Date;
-    email: string;
-    emailVerified: boolean;
-    name: string;
-    image?: string | null;
-    role?: 'admin' | 'trader' | 'viewer';
-  };
-}
+export type ExtendedSession = Session;
