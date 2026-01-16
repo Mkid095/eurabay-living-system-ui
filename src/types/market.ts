@@ -107,3 +107,62 @@ export interface MarketCardProps {
  */
 export const VOLATILITY_INDICES = ['V10', 'V25', 'V50', 'V75', 'V100'] as const;
 export type VolatilityIndex = typeof VOLATILITY_INDICES[number];
+
+/**
+ * Market detail data structure
+ * Detailed information for a single market
+ */
+export interface MarketDetailData {
+  /** Market symbol (e.g., "V10", "V25") */
+  symbol: string;
+  /** Display name for the market */
+  displayName: string;
+  /** Current market price */
+  price: number;
+  /** Absolute price change (positive or negative) */
+  priceChange: number;
+  /** Percentage price change (positive or negative) */
+  priceChangePercentage: number;
+  /** 24-hour open price */
+  open24h: number;
+  /** 24-hour high price */
+  high24h: number;
+  /** 24-hour low price */
+  low24h: number;
+  /** 24-hour close price (previous close) */
+  close24h: number;
+  /** Current market trend */
+  trend: MarketTrend;
+  /** Market spread (ask - bid) */
+  spread: number;
+  /** Volatility index value */
+  volatilityIndex: number;
+  /** Recent price updates (last 10) */
+  recentUpdates: PriceUpdate[];
+  /** Market status */
+  status: MarketStatus;
+  /** Last update timestamp (ISO 8601 string) */
+  timestamp: string;
+}
+
+/**
+ * Price update entry
+ */
+export interface PriceUpdate {
+  /** Price value */
+  price: number;
+  /** Update timestamp (ISO 8601 string) */
+  timestamp: string;
+  /** Price change from previous update */
+  change: number;
+}
+
+/**
+ * Market detail API response
+ */
+export interface MarketDetailResponse {
+  /** Market detail data */
+  market: MarketDetailData;
+  /** Response timestamp */
+  timestamp: string;
+}

@@ -8,6 +8,7 @@ import { fetchMarketsOverview } from "@/lib/api/markets";
 import type { MarketOverviewData, FlashState } from "@/types/market";
 import { wsClient } from "@/lib/websocket/client";
 import type { MarketUpdateEvent } from "@/types/market";
+import { MarketDetailModal } from "@/components/dashboard/MarketDetailModal";
 
 // Refresh interval for polling (3 seconds as per requirements)
 const POLL_INTERVAL = 3000;
@@ -56,8 +57,24 @@ export function MarketOverview() {
   const [flashStates, setFlashStates] = useState<Record<string, FlashState>>({});
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
+  // Modal state
+  const [selectedMarket, setSelectedMarket] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   // Track previous prices to determine flash direction
   const previousPricesRef = useRef<Record<string, number>>({});
+
+  // Handle market card click to open detail modal
+  const handleMarketClick = useCallback((symbol: string) => {
+    setSelectedMarket(symbol);
+    setIsModalOpen(true);
+  }, []);
+
+  // Handle modal close
+  const handleModalClose = useCallback(() => {
+    setIsModalOpen(false);
+    setSelectedMarket(null);
+  }, []);
 
   // Fetch markets data
   const fetchMarkets = useCallback(async () => {
@@ -249,6 +266,7 @@ export function MarketOverview() {
           return (
             <div
               key={market.symbol}
+              onClick={() => handleMarketClick(market.symbol)}
               className={cn(
                 "flex items-center justify-between p-3 bg-muted/50 border border-border rounded-lg hover:border-primary/50 transition-all cursor-pointer",
                 flashState === 'up' && "bg-green-500/10",
@@ -294,6 +312,15 @@ export function MarketOverview() {
           );
         })}
       </div>
+
+      {/* Market Detail Modal */}
+      {selectedMarket && (
+        <MarketDetailModal
+          symbol={selectedMarket}
+          open={isModalOpen}
+          onOpenChange={setIsModalOpen}
+        />
+      )}
     </Card>
   );
 }

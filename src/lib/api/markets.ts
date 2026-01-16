@@ -5,7 +5,7 @@
  */
 
 import { get } from './client';
-import type { MarketsOverviewResponse } from '@/types/market';
+import type { MarketsOverviewResponse, MarketDetailResponse } from '@/types/market';
 
 /**
  * Fetch market overview data
@@ -26,6 +26,26 @@ export async function fetchMarketsOverview(): Promise<MarketsOverviewResponse> {
 }
 
 /**
+ * Fetch market detail data
+ * GET /markets/{symbol}
+ *
+ * Returns detailed information for a single market including:
+ * - Current price and changes
+ * - 24-hour statistics (open, high, low, close)
+ * - Market trend and spread
+ * - Volatility index value
+ * - Recent price updates (last 10)
+ *
+ * @param symbol - Market symbol (e.g., "V10", "V25")
+ * @returns Promise with market detail response
+ */
+export async function fetchMarketDetail(symbol: string): Promise<MarketDetailResponse> {
+  const response = await get<MarketDetailResponse>(`/markets/${symbol}`);
+
+  return response.data;
+}
+
+/**
  * Re-export market types for convenience
  */
-export type { MarketsOverviewResponse } from '@/types/market';
+export type { MarketsOverviewResponse, MarketDetailResponse } from '@/types/market';
