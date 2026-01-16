@@ -27,8 +27,8 @@
       "mavenSteps": [3, 6],
       "mcpTools": {},
       "priority": 1,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented - MarketOverview now fetches from GET /markets/overview, displays all 5 volatility indices with real-time prices via WebSocket and 3-second polling, includes flash effects, loading skeleton, error state with retry, 24h high/low, and market status indicators"
     },
     {
       "id": "US-002",
