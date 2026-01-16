@@ -28,6 +28,10 @@ from .schemas import (
     AlertsListResponse,
     AlertPriority,
     AlertType,
+    RiskScoreResponse,
+    RiskScoreHistoryResponse,
+    RiskScoreBreakdownResponse,
+    RiskLevelChangeEventResponse,
 )
 
 # Configure logging
@@ -648,3 +652,159 @@ async def websocket_alerts(websocket: WebSocket):
     except Exception as e:
         logger.error(f"Alerts WebSocket error: {e}")
         trade_manager.remove_websocket_client(websocket)
+
+
+# =============================================================================
+# Risk Indicator Endpoints
+# =============================================================================
+
+class RiskIndicatorManager:
+    """
+    Mock risk indicator manager for API demonstration.
+
+    In production, this would integrate with:
+    - RiskHeatIndicator for risk score calculation
+    - AdaptiveRiskManager for risk data
+    """
+
+    def __init__(self):
+        """Initialize with mock data."""
+        self._websocket_clients: list[WebSocket] = []
+
+    async def get_risk_summary(self) -> dict:
+        """Get current risk summary."""
+        return {
+            "risk_level": "MEDIUM",
+            "risk_score": 45.5,
+            "breakdown": {
+                "position_risk_score": 30.0,
+                "correlation_risk_score": 40.0,
+                "daily_loss_score": 60.0,
+                "consecutive_losses_score": 50.0,
+                "overall_score": 45.5,
+                "risk_level": "MEDIUM",
+                "calculated_at": datetime.now().isoformat(),
+            },
+            "is_trading_halted": False,
+            "halt_reason": None,
+        }
+
+    async def get_risk_history(self, limit: int = 100) -> dict:
+        """Get risk level change history."""
+        return {
+            "events": [],
+            "total_count": 0,
+        }
+
+    def add_websocket_client(self, websocket: WebSocket):
+        """Add WebSocket client."""
+        self._websocket_clients.append(websocket)
+
+    def remove_websocket_client(self, websocket: WebSocket):
+        """Remove WebSocket client."""
+        if websocket in self._websocket_clients:
+            self._websocket_clients.remove(websocket)
+
+
+# Global risk indicator manager instance
+risk_indicator_manager = RiskIndicatorManager()
+
+
+@router.get("/risk/score", response_model=RiskScoreResponse)
+async def get_risk_score():
+    """
+    Get current risk score and level.
+
+    Returns the current risk heat indicator score (0-100) and risk level
+    (LOW, MEDIUM, HIGH, CRITICAL) based on multiple risk factors.
+
+    Risk factors considered:
+    - Open position risk (30% weight)
+    - Correlation risk (20% weight)
+    - Daily loss (25% weight)
+    - Consecutive losses (25% weight)
+
+    Returns:
+        RiskScoreResponse with current risk level, score, and breakdown
+    """
+    try:
+        summary = await risk_indicator_manager.get_risk_summary()
+        return RiskScoreResponse(**summary)
+    except Exception as e:
+        logger.error(f"Error fetching risk score: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch risk score",
+        )
+
+
+@router.get("/risk/history", response_model=RiskScoreHistoryResponse)
+async def get_risk_history(limit: int = 100):
+    """
+    Get risk level change event history.
+
+    Returns a list of historical risk level changes with timestamps,
+    old/new levels, and trigger factors.
+
+    Args:
+        limit: Maximum number of events to return (default: 100)
+
+    Returns:
+        RiskScoreHistoryResponse with list of risk level change events
+    """
+    try:
+        if limit < 1 or limit > 1000:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Limit must be between 1 and 1000",
+            )
+
+        history = await risk_indicator_manager.get_risk_history(limit=limit)
+        return RiskScoreHistoryResponse(**history)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching risk history: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch risk history",
+        )
+
+
+@router.websocket("/ws/risk")
+async def websocket_risk(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time risk score updates.
+
+    Clients connect to this endpoint to receive real-time updates
+    when the risk score or risk level changes.
+
+    Messages sent:
+    - risk_level_changed: When risk level changes (LOW/MEDIUM/HIGH/CRITICAL)
+    - risk_score_updated: When risk score is recalculated
+    - risk_connected: Initial connection confirmation
+    """
+    await websocket.accept()
+    risk_indicator_manager.add_websocket_client(websocket)
+    logger.info("Risk WebSocket client connected")
+
+    try:
+        # Send initial connection confirmation
+        await websocket.send_json({
+            "event_type": "risk_connected",
+            "timestamp": datetime.now().isoformat(),
+            "message": "Connected to risk score stream",
+        })
+
+        # Keep connection alive and handle incoming messages
+        while True:
+            data = await websocket.receive_text()
+            # Echo back or process client messages if needed
+            logger.debug(f"Received risk WebSocket message: {data}")
+
+    except WebSocketDisconnect:
+        logger.info("Risk WebSocket client disconnected")
+        risk_indicator_manager.remove_websocket_client(websocket)
+    except Exception as e:
+        logger.error(f"Risk WebSocket error: {e}")
+        risk_indicator_manager.remove_websocket_client(websocket)

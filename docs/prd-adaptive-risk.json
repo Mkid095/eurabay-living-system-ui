@@ -198,7 +198,8 @@
       "mavenSteps": [1, 7],
       "mcpTools": {},
       "priority": 3,
-      "passes": false
+      "passes": true,
+      "notes": "Implemented comprehensive RiskHeatIndicator class with all acceptance criteria. Created RiskHeatIndicator class in risk_heat_indicator.py that calculates overall risk score (0-100) based on four risk factors: open position risk (30% weight), correlation risk (20% weight), daily loss (25% weight), and consecutive losses (25% weight). Risk levels are classified as LOW (0-30), MEDIUM (30-60), HIGH (60-80), CRITICAL (80-100). Exposed risk score via REST API endpoint GET /api/trades/risk/score which returns current risk level, score, breakdown of all factors, trading halt status, and halt reason. Added GET /api/trades/risk/history endpoint for retrieving risk level change event history. Implemented WebSocket endpoint ws://api/trades/ws/risk for real-time risk score updates. All risk level changes are automatically logged with timestamp, old/new levels, scores, trigger factor, and reason to SQLite database. Created comprehensive test suite with 30 tests covering all functionality including risk level classification, score calculation with various scenarios, position/correlation/consecutive losses/daily loss scoring, risk level change detection and logging, event history retrieval, risk summary generation, database persistence, and edge cases. All tests pass. Typecheck passes."
     },
     {
       "id": "US-011",

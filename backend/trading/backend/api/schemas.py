@@ -201,3 +201,53 @@ class AlertsListResponse(BaseModel):
     alerts: list[AlertResponse]
     total_count: int
     filtered: bool = False
+
+
+class RiskLevel(str, Enum):
+    """Risk level enumeration."""
+
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
+class RiskScoreBreakdownResponse(BaseModel):
+    """Risk score breakdown response model."""
+
+    position_risk_score: float
+    correlation_risk_score: float
+    daily_loss_score: float
+    consecutive_losses_score: float
+    overall_score: float
+    risk_level: str
+    calculated_at: datetime
+
+
+class RiskLevelChangeEventResponse(BaseModel):
+    """Risk level change event response model."""
+
+    timestamp: datetime
+    old_level: str
+    new_level: str
+    old_score: float
+    new_score: float
+    trigger_factor: str
+    reason: str
+
+
+class RiskScoreResponse(BaseModel):
+    """Risk score response model."""
+
+    risk_level: str
+    risk_score: float
+    breakdown: RiskScoreBreakdownResponse
+    is_trading_halted: bool
+    halt_reason: Optional[str]
+
+
+class RiskScoreHistoryResponse(BaseModel):
+    """Risk score history response model."""
+
+    events: list[RiskLevelChangeEventResponse]
+    total_count: int

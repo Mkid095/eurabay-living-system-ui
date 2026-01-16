@@ -68,6 +68,12 @@ from .adaptive_risk_manager import (
     RiskAdjustment,
     ConsecutiveLossAdjustment,
 )
+from .risk_heat_indicator import (
+    RiskHeatIndicator,
+    RiskLevel,
+    RiskLevelChangeEvent,
+    RiskScoreBreakdown,
+)
 
 __all__ = [
     "ActiveTradeManager",
@@ -117,4 +123,8 @@ __all__ = [
     "AdaptiveRiskManager",
     "RiskAdjustment",
     "ConsecutiveLossAdjustment",
+    "RiskHeatIndicator",
+    "RiskLevel",
+    "RiskLevelChangeEvent",
+    "RiskScoreBreakdown",
 ]
