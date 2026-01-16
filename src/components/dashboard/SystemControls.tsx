@@ -5,15 +5,22 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { 
-  Power, 
-  Pause, 
-  Play, 
+import { AdminGuard } from "@/components/auth/RoleGuard";
+import {
+  Power,
+  Pause,
+  Play,
   AlertTriangle,
-  Settings2
+  Settings2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/**
+ * SystemControls component - system control panel (admin only)
+ *
+ * This component is restricted to admin users only via the AdminGuard.
+ * Admins can start/stop the system and configure trading settings.
+ */
 export function SystemControls() {
   const [isSystemActive, setIsSystemActive] = useState(true);
   const [autoTrading, setAutoTrading] = useState(true);
@@ -21,11 +28,12 @@ export function SystemControls() {
   const [riskManagement, setRiskManagement] = useState(true);
 
   return (
-    <Card className="p-4 sm:p-6">
-      <div className="flex items-center gap-2 mb-6">
-        <Settings2 className="w-5 h-5 text-primary" />
-        <h2 className="text-xl font-bold">System Controls</h2>
-      </div>
+    <AdminGuard>
+      <Card className="p-4 sm:p-6">
+        <div className="flex items-center gap-2 mb-6">
+          <Settings2 className="w-5 h-5 text-primary" />
+          <h2 className="text-xl font-bold">System Controls</h2>
+        </div>
 
       {/* System Status */}
       <div className="mb-6">
@@ -138,5 +146,6 @@ export function SystemControls() {
         </div>
       )}
     </Card>
+    </AdminGuard>
   );
 }

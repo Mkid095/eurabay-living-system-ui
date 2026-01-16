@@ -40,6 +40,7 @@ import { usePendingSignals } from "@/hooks/usePendingSignals";
 import type { PendingSignal, SignalType } from "@/types/evolution";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { TraderGuard } from "@/components/auth/RoleGuard";
 
 type FilterSymbol = "all" | string;
 type SortBy = "confidence" | "time";
@@ -241,51 +242,53 @@ export function PendingSignals() {
         </div>
 
         {signals.length > 1 && (
-          <div className="flex gap-2 ml-auto">
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button size="sm" className="bg-profit hover:bg-profit/90 text-white">
-                  Approve All
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Approve All Signals?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will approve all {signals.length} pending signals and execute trades for each.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleApproveAll} className="bg-profit hover:bg-profit/90">
+          <TraderGuard>
+            <div className="flex gap-2 ml-auto">
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" className="bg-profit hover:bg-profit/90 text-white">
                     Approve All
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Approve All Signals?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will approve all {signals.length} pending signals and execute trades for each.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleApproveAll} className="bg-profit hover:bg-profit/90">
+                      Approve All
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
 
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button size="sm" variant="outline" className="border-loss text-loss hover:bg-loss/10">
-                  Reject All
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Reject All Signals?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will reject all {signals.length} pending signals.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleRejectAll} className="bg-loss hover:bg-loss/90">
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" variant="outline" className="border-loss text-loss hover:bg-loss/10">
                     Reject All
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Reject All Signals?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will reject all {signals.length} pending signals.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleRejectAll} className="bg-loss hover:bg-loss/90">
+                      Reject All
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </TraderGuard>
         )}
       </div>
 
@@ -346,25 +349,27 @@ export function PendingSignals() {
                   </div>
                 )}
 
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    className="flex-1 bg-profit hover:bg-profit/90 text-white"
-                    onClick={() => handleApprove(signal)}
-                  >
-                    <Check className="w-4 h-4 mr-1" />
-                    Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1 border-loss text-loss hover:bg-loss/10"
-                    onClick={() => handleReject(signal)}
-                  >
-                    <X className="w-4 h-4 mr-1" />
-                    Reject
-                  </Button>
-                </div>
+                <TraderGuard>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="flex-1 bg-profit hover:bg-profit/90 text-white"
+                      onClick={() => handleApprove(signal)}
+                    >
+                      <Check className="w-4 h-4 mr-1" />
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 border-loss text-loss hover:bg-loss/10"
+                      onClick={() => handleReject(signal)}
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Reject
+                    </Button>
+                  </div>
+                </TraderGuard>
               </div>
             );
           })

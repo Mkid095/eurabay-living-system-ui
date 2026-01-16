@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Shield, Save, RotateCcw, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { post, put } from "@/lib/api/client";
-import { RoleGuard } from "@/components/auth/RoleGuard";
+import { AdminGuard } from "@/components/auth/RoleGuard";
 
 interface RiskParametersResponse {
   maxPositionSize: number;
@@ -119,7 +119,7 @@ export function RiskParameterControls() {
   };
 
   return (
-    <RoleGuard allowedRoles={["admin"]}>
+    <AdminGuard>
       <Card className="p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
@@ -301,6 +301,6 @@ export function RiskParameterControls() {
           </div>
         )}
       </Card>
-    </RoleGuard>
+    </AdminGuard>
   );
 }

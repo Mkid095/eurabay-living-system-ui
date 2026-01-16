@@ -1,5 +1,7 @@
 import { headers } from 'next/headers';
 import type { User } from '@/lib/db/schema';
+// Re-export RBAC types for convenience
+export type { UserRole } from './rbac';
 
 /**
  * Type definition for the authenticated user with role
