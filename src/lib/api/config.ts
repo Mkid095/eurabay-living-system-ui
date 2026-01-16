@@ -51,6 +51,13 @@ export const API_ENDPOINTS = {
     stop: '/system/stop',
   },
 
+  // Evolution control endpoints (for manual triggers)
+  evolutionControl: {
+    forceEvolution: '/evolution/force',
+    forceAggressive: '/evolution/force-aggressive',
+    resetToGeneration: '/evolution/reset-generation',
+  },
+
   // WebSocket endpoint
   websocket: '/ws',
 } as const;

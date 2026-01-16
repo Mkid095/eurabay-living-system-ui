@@ -31,6 +31,7 @@ import { ControllerDecisionTimeline } from "@/components/dashboard/ControllerDec
 import { EvolutionLogViewer } from "@/components/dashboard/EvolutionLogViewer";
 import { EnhancedActiveTradesTable } from "@/components/dashboard/EnhancedActiveTradesTable";
 import { EvolutionParameterControls } from "@/components/dashboard/EvolutionParameterControls";
+import { ManualEvolutionTrigger } from "@/components/dashboard/ManualEvolutionTrigger";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useEvolutionData } from "@/hooks/useEvolutionData";
 
@@ -306,6 +307,10 @@ export default function Home() {
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <EvolutionParameterControls />
+                <ManualEvolutionTrigger />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <EvolutionParameters />
               </div>
 

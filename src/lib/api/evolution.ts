@@ -118,6 +118,32 @@ export async function updateEvolutionParameters(params: {
 }
 
 /**
+ * Force evolution cycle
+ * POST /evolution/force
+ */
+export async function forceEvolution(): Promise<void> {
+  await apiClient.post(API_ENDPOINTS.evolutionControl.forceEvolution);
+}
+
+/**
+ * Force aggressive evolution
+ * POST /evolution/force-aggressive
+ */
+export async function forceAggressiveEvolution(): Promise<void> {
+  await apiClient.post(API_ENDPOINTS.evolutionControl.forceAggressive);
+}
+
+/**
+ * Reset to generation 1
+ * POST /evolution/reset-generation
+ *
+ * @param generation - Target generation number (default: 1)
+ */
+export async function resetToGeneration(generation: number = 1): Promise<void> {
+  await apiClient.post(API_ENDPOINTS.evolutionControl.resetToGeneration, { generation });
+}
+
+/**
  * Export evolution service object
  */
 export const evolutionApi = {
@@ -128,6 +154,9 @@ export const evolutionApi = {
   fetchControllerHistory,
   fetchEvolutionLogs,
   updateEvolutionParameters,
+  forceEvolution,
+  forceAggressiveEvolution,
+  resetToGeneration,
 } as const;
 
 /**
