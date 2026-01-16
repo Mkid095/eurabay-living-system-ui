@@ -15,6 +15,7 @@ from backend.core.adaptive_risk_manager import (
     AdaptiveRiskManager,
     RiskAdjustment,
     VolatilityAdjustment,
+    DrawdownAdjustment,
 )
 from backend.core.performance_comparator import (
     PerformanceComparator,
@@ -933,6 +934,376 @@ def test_integration_with_historical_data():
             pass
 
 
+class TestDrawdownBasedRiskScaling:
+    """Test suite for drawdown-based position scaling (US-003)."""
+
+    def test_calculate_drawdown_no_drawdown(self, risk_manager):
+        """Test drawdown calculation when equity is at peak."""
+        initial_balance = 10000.0
+        current_equity = 10000.0  # No change
+
+        drawdown, peak, equity = risk_manager.calculate_drawdown(current_equity)
+
+        assert drawdown == 0.0
+        assert peak == initial_balance
+        assert equity == current_equity
+
+    def test_calculate_drawdown_with_decline(self, risk_manager):
+        """Test drawdown calculation when equity has declined."""
+        initial_balance = 10000.0
+        current_equity = 9000.0  # 10% decline
+
+        drawdown, peak, equity = risk_manager.calculate_drawdown(current_equity)
+
+        assert drawdown == 10.0
+        assert peak == initial_balance
+        assert equity == current_equity
+
+    def test_calculate_drawdown_new_peak(self, risk_manager):
+        """Test drawdown calculation when equity reaches new peak."""
+        initial_balance = 10000.0
+        current_equity = 11000.0  # New high
+
+        drawdown, peak, equity = risk_manager.calculate_drawdown(current_equity)
+
+        assert drawdown == 0.0
+        assert peak == 11000.0  # Peak updated
+        assert equity == current_equity
+
+    def test_drawdown_threshold_1_reduction(self, risk_manager):
+        """Test 50% risk reduction when drawdown exceeds 10%."""
+        base_risk = 2.0
+        risk_manager._base_risk_percent = base_risk
+
+        # Simulate 12% drawdown (above first threshold of 10%)
+        current_equity = 8800.0  # 12% decline from 10000
+        new_risk, trading_allowed = risk_manager.adjust_for_drawdown(current_equity)
+
+        # Should reduce risk by 50%
+        assert new_risk == base_risk * 0.5
+        assert trading_allowed is True  # Trading still allowed
+
+        # Verify adjustment was recorded
+        adjustments = risk_manager.get_drawdown_adjustments()
+        assert len(adjustments) > 0
+        assert adjustments[-1].current_drawdown >= 10.0
+
+    def test_drawdown_threshold_2_reduction(self, risk_manager):
+        """Test 75% risk reduction when drawdown exceeds 15%."""
+        base_risk = 2.0
+        risk_manager._base_risk_percent = base_risk
+
+        # Simulate 17% drawdown (above second threshold of 15%)
+        current_equity = 8300.0  # 17% decline from 10000
+        new_risk, trading_allowed = risk_manager.adjust_for_drawdown(current_equity)
+
+        # Should reduce risk by 75%
+        assert new_risk == base_risk * 0.25
+        assert trading_allowed is True  # Trading still allowed
+
+        # Verify adjustment was recorded
+        adjustments = risk_manager.get_drawdown_adjustments()
+        assert len(adjustments) > 0
+        assert adjustments[-1].current_drawdown >= 15.0
+
+    def test_drawdown_threshold_3_circuit_breaker(self, risk_manager):
+        """Test circuit breaker when drawdown exceeds 20%."""
+        base_risk = 2.0
+        risk_manager._base_risk_percent = base_risk
+
+        # Simulate 22% drawdown (above circuit breaker threshold of 20%)
+        current_equity = 7800.0  # 22% decline from 10000
+        new_risk, trading_allowed = risk_manager.adjust_for_drawdown(current_equity)
+
+        # Should halt trading
+        assert new_risk == 0.0
+        assert trading_allowed is False
+        assert risk_manager.is_trading_allowed() is False
+
+        # Verify adjustment was recorded
+        adjustments = risk_manager.get_drawdown_adjustments()
+        assert len(adjustments) > 0
+        assert "CIRCUIT BREAKER" in adjustments[-1].reason
+
+    def test_drawdown_gradual_recovery(self, risk_manager):
+        """Test gradual risk restoration as drawdown recovers."""
+        base_risk = 2.0
+        risk_manager._base_risk_percent = base_risk
+
+        # First, create a drawdown scenario
+        current_equity = 8800.0  # 12% drawdown
+        new_risk, _ = risk_manager.adjust_for_drawdown(current_equity)
+        assert new_risk == base_risk * 0.5  # 50% reduction
+
+        # Now simulate partial recovery (8% drawdown)
+        current_equity = 9200.0  # 8% drawdown
+        new_risk, trading_allowed = risk_manager.adjust_for_drawdown(current_equity)
+
+        # Should have gradual risk restoration (between 50% and 100%)
+        # At 8% drawdown (80% of threshold), risk should be: 0.5 + 0.5 * (1 - 0.8) = 0.6
+        expected_risk = base_risk * 0.6
+        assert abs(new_risk - expected_risk) < 0.1
+        assert trading_allowed is True
+
+    def test_drawdown_full_recovery(self, risk_manager):
+        """Test full risk restoration after complete recovery."""
+        base_risk = 2.0
+        risk_manager._base_risk_percent = base_risk
+
+        # First, create a drawdown scenario
+        current_equity = 8800.0  # 12% drawdown
+        risk_manager.adjust_for_drawdown(current_equity)
+
+        # Now simulate full recovery (0% drawdown, new peak)
+        current_equity = 10500.0  # New peak
+        new_risk, trading_allowed = risk_manager.adjust_for_drawdown(current_equity)
+
+        # Should restore to base risk (100%)
+        assert new_risk == base_risk
+        assert trading_allowed is True
+
+    def test_circuit_breaker_persistence(self, risk_manager):
+        """Test that circuit breaker persists until recovery threshold is met."""
+        base_risk = 2.0
+        risk_manager._base_risk_percent = base_risk
+
+        # Trigger circuit breaker
+        current_equity = 7800.0  # 22% drawdown
+        new_risk, trading_allowed = risk_manager.adjust_for_drawdown(current_equity)
+        assert trading_allowed is False
+
+        # Try to trade while still in circuit breaker (18% drawdown)
+        current_equity = 8200.0  # 18% drawdown (still above 15% recovery threshold)
+        new_risk, trading_allowed = risk_manager.adjust_for_drawdown(current_equity)
+        assert trading_allowed is False  # Still halted
+        assert new_risk == 0.0
+
+        # Recover below threshold (14% drawdown)
+        current_equity = 8600.0  # 14% drawdown (below 15% recovery threshold)
+        new_risk, trading_allowed = risk_manager.adjust_for_drawdown(current_equity)
+
+        # Trading should resume with reduced risk
+        assert trading_allowed is True
+        assert new_risk == base_risk * 0.5  # Start with 50% of base risk
+
+    def test_drawdown_database_persistence(self, risk_manager, temp_database):
+        """Test that drawdown adjustments are persisted to database."""
+        # Create a drawdown scenario
+        current_equity = 8800.0  # 12% drawdown
+        risk_manager.adjust_for_drawdown(current_equity)
+
+        # Verify data was stored in database
+        conn = sqlite3.connect(temp_database)
+        cursor = conn.cursor()
+
+        # Check drawdown_adjustments table
+        cursor.execute("SELECT COUNT(*) FROM drawdown_adjustments")
+        adjustment_count = cursor.fetchone()[0]
+        assert adjustment_count > 0
+
+        # Verify adjustment details
+        cursor.execute(
+            "SELECT current_drawdown, new_risk_percent "
+            "FROM drawdown_adjustments ORDER BY id DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        assert row[0] >= 10.0  # Current drawdown
+        assert row[1] == 1.0  # New risk (50% of 2.0%)
+
+        conn.close()
+
+    def test_drawdown_minimum_risk_cap(self, risk_manager):
+        """Test that drawdown adjustments respect minimum risk cap."""
+        # Set very low base risk to test minimum cap
+        risk_manager._base_risk_percent = 0.4  # Below minimum of 0.5%
+
+        # Trigger 75% reduction
+        current_equity = 8300.0  # 17% drawdown
+        new_risk, _ = risk_manager.adjust_for_drawdown(current_equity)
+
+        # Should be capped at minimum
+        assert new_risk >= risk_manager._min_risk_percent
+
+    def test_manual_circuit_breaker_reset(self, risk_manager):
+        """Test manual circuit breaker reset functionality."""
+        # Trigger circuit breaker
+        current_equity = 7800.0  # 22% drawdown
+        risk_manager.adjust_for_drawdown(current_equity)
+        assert risk_manager.is_trading_allowed() is False
+
+        # Manually reset circuit breaker
+        risk_manager.reset_circuit_breaker()
+
+        # Trading should be allowed with reduced risk
+        assert risk_manager.is_trading_allowed() is True
+        assert risk_manager._current_risk_percent == risk_manager._base_risk_percent * 0.5
+
+    def test_drawdown_adjustment_history(self, risk_manager):
+        """Test retrieving drawdown adjustment history."""
+        # Create multiple drawdown scenarios (only those >= 10% trigger adjustments)
+        equity_values = [9500.0, 9000.0, 8500.0, 8000.0]  # 5%, 10%, 15%, 20% drawdowns
+
+        for equity in equity_values:
+            risk_manager.adjust_for_drawdown(equity)
+
+        # Get adjustment history
+        history = risk_manager.get_drawdown_adjustments(limit=10)
+
+        # Should have recorded 3 adjustments (10%, 15%, 20% trigger adjustments)
+        # 5% drawdown doesn't trigger an adjustment
+        assert len(history) >= 3
+
+        # Verify data structure
+        for adjustment in history:
+            assert isinstance(adjustment, DrawdownAdjustment)
+            assert adjustment.current_drawdown >= 0
+            assert adjustment.peak_equity > 0
+            assert adjustment.current_equity > 0
+
+    def test_drawdown_with_initial_balance_param(self, temp_database, performance_comparator):
+        """Test drawdown calculation with custom initial balance."""
+        custom_initial_balance = 50000.0
+
+        risk_manager = AdaptiveRiskManager(
+            performance_comparator=performance_comparator,
+            database_path=temp_database,
+            initial_account_balance=custom_initial_balance,
+        )
+
+        # Verify initial peak is set correctly
+        assert risk_manager._peak_equity == custom_initial_balance
+
+        # Test drawdown from custom initial
+        current_equity = 45000.0  # 10% decline
+        drawdown, peak, equity = risk_manager.calculate_drawdown(current_equity)
+
+        assert drawdown == 10.0
+        assert peak == custom_initial_balance
+
+    def test_position_size_with_drawdown_adjustment(self, risk_manager):
+        """Test that position sizes are adjusted based on drawdown."""
+        account_balance = 10000.0
+        entry_price = 1.0850
+        stop_loss = 1.0800
+
+        # Get base position size (no drawdown)
+        base_position_size = risk_manager.calculate_position_size(
+            account_balance, entry_price, stop_loss, "BUY"
+        )
+
+        # Apply drawdown reduction (12% drawdown)
+        current_equity = 8800.0
+        new_risk, _ = risk_manager.adjust_for_drawdown(current_equity)
+
+        # Calculate position size with drawdown adjustment
+        adjusted_position_size = risk_manager.calculate_position_size(
+            account_balance, entry_price, stop_loss, "BUY"
+        )
+
+        # Adjusted position size should be 50% of base
+        assert abs(adjusted_position_size - base_position_size * 0.5) < 0.01
+
+
+def test_drawdown_integration_scenario():
+    """
+    Integration test simulating realistic drawdown scenario.
+
+    This test simulates a complete drawdown and recovery cycle to verify
+    that the drawdown-based risk scaling works correctly in a realistic
+    trading scenario.
+    """
+    import tempfile
+    import os
+
+    temp_dir = tempfile.mkdtemp()
+    perf_db = os.path.join(temp_dir, "test_perf_drawdown.db")
+    risk_db = os.path.join(temp_dir, "test_risk_drawdown.db")
+
+    try:
+        # Create components
+        comparator = PerformanceComparator(database_path=perf_db)
+        risk_manager = AdaptiveRiskManager(
+            performance_comparator=comparator,
+            database_path=risk_db,
+            base_risk_percent=2.0,
+            initial_account_balance=10000.0,
+        )
+
+        # Simulate trading journey with drawdown and recovery
+        scenarios = [
+            # (equity, expected_risk_range, expected_trading_allowed, description)
+            (10000.0, (1.8, 2.2), True, "Initial state - no drawdown"),
+            (9200.0, (1.8, 2.2), True, "8% drawdown - below threshold, maintain base risk"),
+            (8800.0, (0.9, 1.1), True, "12% drawdown - 50% risk reduction"),
+            (8300.0, (0.4, 0.6), True, "17% drawdown - 75% risk reduction"),
+            (7800.0, (0.0, 0.1), False, "22% drawdown - circuit breaker triggered"),
+            (8200.0, (0.0, 0.1), False, "18% drawdown - still in circuit breaker"),
+            (8600.0, (0.9, 1.1), True, "14% drawdown - circuit breaker lifted"),
+            (9200.0, (1.1, 1.3), True, "8% drawdown - gradual recovery"),
+            (10000.0, (1.8, 2.2), True, "Full recovery - base risk restored"),
+            (10500.0, (1.8, 2.2), True, "New peak - base risk maintained"),
+        ]
+
+        logger.info("Drawdown integration test scenario:")
+        logger.info("=" * 80)
+
+        risk_history = []
+
+        for equity, expected_risk_range, expected_trading, description in scenarios:
+            new_risk, trading_allowed = risk_manager.adjust_for_drawdown(equity)
+
+            risk_history.append({
+                "description": description,
+                "equity": equity,
+                "risk": new_risk,
+                "trading_allowed": trading_allowed,
+            })
+
+            # Verify risk is in expected range
+            assert expected_risk_range[0] <= new_risk <= expected_risk_range[1], \
+                f"Risk {new_risk}% not in expected range {expected_risk_range} for: {description}"
+
+            # Verify trading status
+            assert trading_allowed == expected_trading, \
+                f"Trading allowed {trading_allowed} != expected {expected_trading} for: {description}"
+
+            logger.info(
+                f"{description:40s} | Equity: ${equity:8.0f} | "
+                f"Risk: {new_risk:5.2f}% | Trading: {trading_allowed}"
+            )
+
+        logger.info("=" * 80)
+        logger.info("Drawdown integration test passed!")
+
+        # Verify adjustments were recorded
+        adjustments = risk_manager.get_drawdown_adjustments()
+        logger.info(f"Total drawdown adjustments recorded: {len(adjustments)}")
+
+        # Verify database persistence
+        conn = sqlite3.connect(risk_db)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM drawdown_adjustments")
+        db_count = cursor.fetchone()[0]
+        conn.close()
+
+        logger.info(f"Drawdown adjustments in database: {db_count}")
+        assert db_count > 0, "No adjustments found in database"
+
+    finally:
+        # Cleanup
+        comparator.close()
+        risk_manager.close()
+        import time
+        time.sleep(0.1)
+        try:
+            import shutil
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            pass
+
+
 if __name__ == "__main__":
-    # Run the integration test
+    # Run the integration tests
     test_integration_with_historical_data()
+    test_drawdown_integration_scenario()
+    logger.info("All integration tests passed!")

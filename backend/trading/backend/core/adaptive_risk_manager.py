@@ -92,6 +92,42 @@ class VolatilityAdjustment:
         }
 
 
+@dataclass
+class DrawdownAdjustment:
+    """
+    Record of a drawdown-based risk adjustment.
+
+    Attributes:
+        timestamp: When the adjustment occurred
+        old_risk_percent: Previous risk percentage
+        new_risk_percent: New risk percentage
+        current_drawdown: Current drawdown percentage
+        peak_equity: Peak equity value
+        current_equity: Current equity value
+        reason: Explanation for the adjustment
+    """
+
+    timestamp: datetime
+    old_risk_percent: float
+    new_risk_percent: float
+    current_drawdown: float
+    peak_equity: float
+    current_equity: float
+    reason: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for storage."""
+        return {
+            "timestamp": self.timestamp.isoformat(),
+            "old_risk_percent": round(self.old_risk_percent, 2),
+            "new_risk_percent": round(self.new_risk_percent, 2),
+            "current_drawdown": round(self.current_drawdown, 2),
+            "peak_equity": round(self.peak_equity, 2),
+            "current_equity": round(self.current_equity, 2),
+            "reason": self.reason,
+        }
+
+
 class AdaptiveRiskManager:
     """
     Manages adaptive risk based on recent trading performance and market volatility.
@@ -148,6 +184,10 @@ class AdaptiveRiskManager:
         min_volatility_multiplier: float = 0.3,
         max_volatility_multiplier: float = 1.5,
         enable_volatility_adjustment: bool = True,
+        drawdown_threshold_1: float = 10.0,
+        drawdown_threshold_2: float = 15.0,
+        drawdown_threshold_3: float = 20.0,
+        initial_account_balance: float = 10000.0,
     ):
         """
         Initialize the AdaptiveRiskManager.
@@ -164,6 +204,10 @@ class AdaptiveRiskManager:
             min_volatility_multiplier: Minimum volatility multiplier for high volatility (default: 0.3)
             max_volatility_multiplier: Maximum volatility multiplier for low volatility (default: 1.5)
             enable_volatility_adjustment: Whether to enable volatility-based position sizing (default: True)
+            drawdown_threshold_1: First drawdown threshold for risk reduction (default: 10.0%)
+            drawdown_threshold_2: Second drawdown threshold for risk reduction (default: 15.0%)
+            drawdown_threshold_3: Circuit breaker drawdown threshold (default: 20.0%)
+            initial_account_balance: Starting account balance for equity curve tracking (default: 10000.0)
         """
         self._performance_comparator = performance_comparator
         self._database_path = database_path
@@ -176,11 +220,18 @@ class AdaptiveRiskManager:
         self._min_volatility_multiplier = min_volatility_multiplier
         self._max_volatility_multiplier = max_volatility_multiplier
         self._enable_volatility_adjustment = enable_volatility_adjustment
+        self._drawdown_threshold_1 = drawdown_threshold_1
+        self._drawdown_threshold_2 = drawdown_threshold_2
+        self._drawdown_threshold_3 = drawdown_threshold_3
         self._connection: Optional[sqlite3.Connection] = None
         self._adjustment_history: list[RiskAdjustment] = []
         self._volatility_adjustments: list[VolatilityAdjustment] = []
+        self._drawdown_adjustments: list[DrawdownAdjustment] = []
         self._current_risk_percent = base_risk_percent
         self._price_data_cache: dict[str, pd.DataFrame] = {}
+        self._initial_account_balance = initial_account_balance
+        self._peak_equity = initial_account_balance
+        self._trading_halted = False
 
         # Initialize database
         self._initialize_database()
@@ -192,7 +243,8 @@ class AdaptiveRiskManager:
             f"AdaptiveRiskManager initialized: base_risk={base_risk_percent}%, "
             f"min_risk={min_risk_percent}%, max_risk={max_risk_percent}%, "
             f"window={performance_window} trades, "
-            f"volatility_adjustment={enable_volatility_adjustment}"
+            f"volatility_adjustment={enable_volatility_adjustment}, "
+            f"drawdown_thresholds=[{drawdown_threshold_1}%, {drawdown_threshold_2}%, {drawdown_threshold_3}%]"
         )
 
     def _initialize_database(self) -> None:
@@ -203,6 +255,7 @@ class AdaptiveRiskManager:
         - risk_adjustments: Risk adjustment history
         - risk_settings: Current risk settings snapshots
         - volatility_adjustments: Volatility-based position sizing history
+        - drawdown_adjustments: Drawdown-based risk adjustment history
         """
         try:
             self._connection = sqlite3.connect(self._database_path)
@@ -251,6 +304,21 @@ class AdaptiveRiskManager:
                 )
             """)
 
+            # Create drawdown_adjustments table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS drawdown_adjustments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    old_risk_percent REAL NOT NULL,
+                    new_risk_percent REAL NOT NULL,
+                    current_drawdown REAL NOT NULL,
+                    peak_equity REAL NOT NULL,
+                    current_equity REAL NOT NULL,
+                    reason TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Create indexes
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_adjustments_timestamp
@@ -270,6 +338,11 @@ class AdaptiveRiskManager:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_volatility_symbol
                 ON volatility_adjustments(symbol)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_drawdown_timestamp
+                ON drawdown_adjustments(timestamp DESC)
             """)
 
             self._connection.commit()
@@ -818,6 +891,274 @@ class AdaptiveRiskManager:
         if symbol is None:
             return self._volatility_adjustments[-limit:]
         return [v for v in self._volatility_adjustments if v.symbol == symbol][-limit:]
+
+    def calculate_drawdown(self, current_equity: float) -> tuple[float, float, float]:
+        """
+        Calculate current drawdown from equity curve.
+
+        Drawdown is calculated as the percentage decline from the peak equity.
+        This method tracks the peak equity and calculates the current drawdown
+        based on the provided current equity value.
+
+        Formula:
+            drawdown_percent = ((peak_equity - current_equity) / peak_equity) * 100
+
+        Args:
+            current_equity: Current account equity value
+
+        Returns:
+            Tuple of (drawdown_percent, peak_equity, current_equity)
+        """
+        # Update peak equity if current equity is higher
+        if current_equity > self._peak_equity:
+            self._peak_equity = current_equity
+            logger.info(f"New peak equity established: {self._peak_equity:.2f}")
+
+        # Calculate drawdown percentage
+        if self._peak_equity > 0:
+            drawdown_percent = ((self._peak_equity - current_equity) / self._peak_equity) * 100
+        else:
+            drawdown_percent = 0.0
+
+        # Log drawdown if significant
+        if drawdown_percent > 5.0:
+            logger.warning(
+                f"Current drawdown: {drawdown_percent:.2f}% | "
+                f"Peak: {self._peak_equity:.2f} | Current: {current_equity:.2f}"
+            )
+
+        return drawdown_percent, self._peak_equity, current_equity
+
+    def adjust_for_drawdown(self, current_equity: float) -> tuple[float, bool]:
+        """
+        Adjust risk based on current drawdown from equity peak.
+
+        Drawdown-based risk reduction rules:
+        - Reduce risk by 50% when drawdown > 10% (threshold_1)
+        - Reduce risk by 75% when drawdown > 15% (threshold_2)
+        - Stop trading entirely when drawdown > 20% (threshold_3) - circuit breaker
+        - Gradually restore risk as drawdown recovers
+
+        This method implements a circuit breaker pattern to protect capital
+        during significant drawdowns and allows for gradual risk recovery
+        as the account equity recovers.
+
+        Args:
+            current_equity: Current account equity value
+
+        Returns:
+            Tuple of (adjusted_risk_percent, trading_allowed)
+            - adjusted_risk_percent: New risk percentage (or 0 if trading halted)
+            - trading_allowed: False if circuit breaker triggered, True otherwise
+        """
+        # Calculate current drawdown
+        drawdown_percent, peak_equity, equity = self.calculate_drawdown(current_equity)
+
+        old_risk = self._current_risk_percent
+        new_risk = old_risk
+        trading_allowed = True
+        reason = ""
+
+        # Check if trading should be halted (circuit breaker)
+        if drawdown_percent >= self._drawdown_threshold_3:
+            # Circuit breaker: stop trading entirely
+            new_risk = 0.0
+            trading_allowed = False
+            self._trading_halted = True
+            reason = (
+                f"CIRCUIT BREAKER TRIGGERED: Drawdown ({drawdown_percent:.2f}%) exceeds "
+                f"maximum threshold ({self._drawdown_threshold_3:.1f}%). "
+                f"Trading halted to protect remaining capital. "
+                f"Peak equity: {peak_equity:.2f}, Current equity: {equity:.2f}."
+            )
+            logger.critical(reason)
+
+        # Check if trading is already halted
+        elif self._trading_halted:
+            # Trading is halted - check if drawdown has recovered enough to resume
+            recovery_threshold = self._drawdown_threshold_2  # Resume trading when below 15%
+            if drawdown_percent < recovery_threshold:
+                # Resume trading with reduced risk
+                self._trading_halted = False
+                new_risk = self._base_risk_percent * 0.5  # Start with 50% of base risk
+                reason = (
+                    f"CIRCUIT BREAKER LIFTED: Drawdown recovered to {drawdown_percent:.2f}% "
+                    f"(below recovery threshold of {recovery_threshold:.1f}%). "
+                    f"Resuming trading with reduced risk ({new_risk:.2f}%). "
+                    f"Peak equity: {peak_equity:.2f}, Current equity: {equity:.2f}."
+                )
+                logger.info(reason)
+            else:
+                # Still in circuit breaker mode
+                new_risk = 0.0
+                trading_allowed = False
+                reason = (
+                    f"Still in circuit breaker mode: Drawdown ({drawdown_percent:.2f}%) "
+                    f"has not recovered below recovery threshold ({recovery_threshold:.1f}%). "
+                    f"Trading remains halted."
+                )
+                logger.warning(reason)
+
+        # Check for second level drawdown reduction (75% reduction)
+        elif drawdown_percent >= self._drawdown_threshold_2:
+            # Reduce risk by 75%
+            new_risk = self._base_risk_percent * 0.25
+            new_risk = max(new_risk, self._min_risk_percent)
+            reason = (
+                f"SEVERE DRAWDOWN: Drawdown ({drawdown_percent:.2f}%) exceeds "
+                f"threshold 2 ({self._drawdown_threshold_2:.1f}%). "
+                f"Reducing risk by 75% to {new_risk:.2f}% to preserve capital. "
+                f"Peak equity: {peak_equity:.2f}, Current equity: {equity:.2f}."
+            )
+            logger.warning(reason)
+
+        # Check for first level drawdown reduction (50% reduction)
+        elif drawdown_percent >= self._drawdown_threshold_1:
+            # Reduce risk by 50%
+            new_risk = self._base_risk_percent * 0.5
+            new_risk = max(new_risk, self._min_risk_percent)
+            reason = (
+                f"MODERATE DRAWDOWN: Drawdown ({drawdown_percent:.2f}%) exceeds "
+                f"threshold 1 ({self._drawdown_threshold_1:.1f}%). "
+                f"Reducing risk by 50% to {new_risk:.2f}%. "
+                f"Peak equity: {peak_equity:.2f}, Current equity: {equity:.2f}."
+            )
+            logger.warning(reason)
+
+        # Gradual risk restoration as drawdown recovers
+        else:
+            # Drawdown is below first threshold
+            # Gradually restore risk based on recovery progress
+            recovery_ratio = drawdown_percent / self._drawdown_threshold_1
+            # Risk scales from 50% at 10% DD to 100% at 0% DD
+            risk_multiplier = 0.5 + (0.5 * (1.0 - recovery_ratio))
+            new_risk = self._base_risk_percent * risk_multiplier
+
+            # Only log if risk is being restored
+            if new_risk > old_risk:
+                reason = (
+                    f"DRAWDOWN RECOVERY: Drawdown ({drawdown_percent:.2f}%) recovering. "
+                    f"Gradually restoring risk to {new_risk:.2f}% "
+                    f"({risk_multiplier*100:.1f}% of base risk). "
+                    f"Peak equity: {peak_equity:.2f}, Current equity: {equity:.2f}."
+                )
+                logger.info(reason)
+            else:
+                # No adjustment needed - use current risk
+                new_risk = old_risk
+                reason = (
+                    f"DRAWDOWN NORMAL: Drawdown ({drawdown_percent:.2f}%) is within acceptable range. "
+                    f"Maintaining current risk level of {new_risk:.2f}%. "
+                    f"Peak equity: {peak_equity:.2f}, Current equity: {equity:.2f}."
+                )
+
+        # Create adjustment record if risk changed
+        if abs(new_risk - old_risk) > 0.01:  # Only record significant changes
+            adjustment = DrawdownAdjustment(
+                timestamp=datetime.utcnow(),
+                old_risk_percent=old_risk,
+                new_risk_percent=new_risk,
+                current_drawdown=drawdown_percent,
+                peak_equity=peak_equity,
+                current_equity=equity,
+                reason=reason,
+            )
+
+            # Store adjustment in history
+            self._drawdown_adjustments.append(adjustment)
+
+            # Store in database
+            self._store_drawdown_adjustment(adjustment)
+
+            # Update current risk
+            self._current_risk_percent = new_risk
+
+            # Store risk settings
+            self._store_risk_settings()
+
+            # Log the adjustment
+            logger.info(
+                f"Drawdown-based risk adjustment: {old_risk:.2f}% -> {new_risk:.2f}% | "
+                f"Drawdown: {drawdown_percent:.2f}% | Trading allowed: {trading_allowed}"
+            )
+
+        return new_risk, trading_allowed
+
+    def is_trading_allowed(self) -> bool:
+        """
+        Check if trading is currently allowed (circuit breaker status).
+
+        Returns:
+            True if trading is allowed, False if circuit breaker is triggered
+        """
+        return not self._trading_halted
+
+    def reset_circuit_breaker(self) -> None:
+        """
+        Manually reset the circuit breaker and allow trading.
+
+        This should only be used in exceptional circumstances and with
+        proper risk assessment. Use with caution.
+        """
+        was_halted = self._trading_halted
+        self._trading_halted = False
+        self._current_risk_percent = self._base_risk_percent * 0.5  # Start with 50% risk
+
+        if was_halted:
+            logger.warning(
+                f"Circuit breaker manually reset. Trading resumed with reduced risk: "
+                f"{self._current_risk_percent:.2f}%"
+            )
+        else:
+            logger.info("Circuit breaker was not active. No reset needed.")
+
+    def get_drawdown_adjustments(self, limit: int = 100) -> list[DrawdownAdjustment]:
+        """
+        Get drawdown adjustment history.
+
+        Args:
+            limit: Maximum number of adjustments to return
+
+        Returns:
+            List of DrawdownAdjustment records
+        """
+        return self._drawdown_adjustments[-limit:]
+
+    def _store_drawdown_adjustment(self, adjustment: DrawdownAdjustment) -> None:
+        """
+        Store a drawdown adjustment in the database.
+
+        Args:
+            adjustment: DrawdownAdjustment to store
+        """
+        if self._connection is None:
+            logger.warning("Database connection not available, adjustment not stored")
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            cursor.execute("""
+                INSERT INTO drawdown_adjustments (
+                    timestamp, old_risk_percent, new_risk_percent,
+                    current_drawdown, peak_equity, current_equity, reason
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                adjustment.timestamp.isoformat(),
+                adjustment.old_risk_percent,
+                adjustment.new_risk_percent,
+                adjustment.current_drawdown,
+                adjustment.peak_equity,
+                adjustment.current_equity,
+                adjustment.reason,
+            ))
+
+            self._connection.commit()
+
+            logger.debug(f"Drawdown adjustment stored in database at {adjustment.timestamp}")
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to store drawdown adjustment in database: {e}")
 
     def _store_risk_adjustment(self, adjustment: RiskAdjustment) -> None:
         """
