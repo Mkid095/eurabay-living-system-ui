@@ -316,8 +316,8 @@
       ],
       "mcpTools": {},
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "COMPLETED: Created TradeRepository class with all required methods (createTrade, getTradeBySystemTicket, getTradeByMT5Ticket, getActiveTrades, getRecentTrades, updateTrade, closeTrade, getTradesBySymbol, getTradesByDateRange, getTradesByUser), plus bonus methods (getTradesByStatus, getTradesByEvolutionGeneration). Used Drizzle ORM with eq, and, gte, lte, desc operators. Exported singleton instance tradeRepository. TypeScript types inferred from schema."
     },
     {
       "id": "US-016",
@@ -337,8 +337,8 @@
       ],
       "mcpTools": {},
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "COMPLETED: Created EvolutionRepository with all required methods (createGeneration, getLatestGeneration, getGenerationsInRange, createFeature, getFeatureById, getTopFeatures, updateFeatureStats, createMutation, getMutationsByGeneration). Added bonus methods: getGenerationByNumber, getGenerationById, getFeaturesByMinSuccessRate, recordFeatureResult, getAllFeatures, getMutationsByFeature, getSuccessfulMutations, getFailedMutations, getMutationStatsForGeneration, getEvolutionStats, getFeaturePerformanceRanking. Includes feature success rate queries and mutation analysis. Exported singleton instance evolutionRepository. TypeScript types inferred from schema. Typecheck passes."
     },
     {
       "id": "US-017",
