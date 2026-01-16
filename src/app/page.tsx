@@ -53,7 +53,6 @@ export default function Home() {
     featureSuccess,
     mutationSuccess,
     generationHistory,
-    evolutionLogs,
     evolvedTrades,
     loading,
     error,
@@ -284,7 +283,7 @@ export default function Home() {
               {/* Controller Timeline & Evolution Logs */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <ControllerDecisionTimeline />
-                <EvolutionLogViewer logs={evolutionLogs} />
+                <EvolutionLogViewer />
               </div>
 
               {/* Enhanced Active Trades */}
