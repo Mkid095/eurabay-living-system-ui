@@ -83,8 +83,8 @@
       "mavenSteps": [3, 5, 6],
       "mcpTools": {},
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented ManualOverride component with all acceptance criteria met. Added toggle for manual override with status display. Added action buttons for Pause Evolution, Force Trade Approval, Cancel All Pending Signals, and Close All Positions. Added confirmation dialogs for dangerous actions. Added warning banner when override is enabled. Added RoleGuard for admin restriction. Uses shadcn/ui Switch, Button, Alert, Badge components. Typecheck passes with no errors in ManualOverride component."
     }
   ]
 }
