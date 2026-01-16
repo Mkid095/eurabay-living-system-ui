@@ -37,9 +37,10 @@ export const API_ENDPOINTS = {
 
   // Trading endpoints
   trading: {
-    activeTrades: '/trading/active',
-    tradesHistory: '/trading/history',
-    pendingSignals: '/trading/signals/pending',
+    activeTrades: '/trades/active',
+    tradesHistory: '/trades/recent',
+    pendingSignals: '/trades/pending-signals',
+    executionLog: '/trades/execution-log',
   },
 
   // System endpoints

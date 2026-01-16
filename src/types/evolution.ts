@@ -56,11 +56,14 @@ export interface EvolvedTrade {
   entryPrice: number;
   currentPrice: number;
   pnl: number;
+  pnlPercent?: number;
   stopLoss?: number;
   takeProfit?: number;
   entryTime: string;
+  duration?: string;
   htfContext: string;
   ltfContext: string;
   featuresUsed: string[];
   confidence: number;
+  generation?: number;
 }
