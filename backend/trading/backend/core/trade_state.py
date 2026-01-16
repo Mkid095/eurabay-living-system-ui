@@ -16,6 +16,7 @@ class TradeState(Enum):
     PENDING = "pending"
     OPEN = "open"
     PARTIAL = "partial"
+    SCALED_OUT = "scaled_out"
     CLOSED = "closed"
 
 
@@ -76,8 +77,9 @@ class TradeStateMachine:
     # Valid state transitions: from_state -> [valid_to_states]
     VALID_TRANSITIONS: dict[TradeState, list[TradeState]] = {
         TradeState.PENDING: [TradeState.OPEN, TradeState.CLOSED],
-        TradeState.OPEN: [TradeState.PARTIAL, TradeState.CLOSED],
-        TradeState.PARTIAL: [TradeState.PARTIAL, TradeState.CLOSED],
+        TradeState.OPEN: [TradeState.PARTIAL, TradeState.SCALED_OUT, TradeState.CLOSED],
+        TradeState.PARTIAL: [TradeState.PARTIAL, TradeState.SCALED_OUT, TradeState.CLOSED],
+        TradeState.SCALED_OUT: [TradeState.SCALED_OUT, TradeState.CLOSED],
         TradeState.CLOSED: [],  # Terminal state
     }
 

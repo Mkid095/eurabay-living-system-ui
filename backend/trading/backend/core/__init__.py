@@ -24,6 +24,12 @@ from .scale_in_manager import (
     ScaleInOperation,
     ScaleInPerformance,
 )
+from .scale_out_manager import (
+    ScaleOutManager,
+    ScaleOutConfig,
+    ScaleOutUpdate,
+    ScaleOutLevel,
+)
 from .trade_state import TradeState, TradeStateMachine, TradeStateTransition
 from .trade_position import TradePosition
 from .trailing_stop_manager import (
@@ -50,6 +56,10 @@ __all__ = [
     "ScaleInConfig",
     "ScaleInOperation",
     "ScaleInPerformance",
+    "ScaleOutManager",
+    "ScaleOutConfig",
+    "ScaleOutUpdate",
+    "ScaleOutLevel",
     "TradeState",
     "TradeStateMachine",
     "TradeStateTransition",
