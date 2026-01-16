@@ -9,7 +9,22 @@ from pydantic import BaseModel
 from app.core.config import settings
 from app.core.logging import logger
 
-api_router = APIRouter(tags=["REST API"])
+# Create separate routers for different domains
+auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
+trading_router = APIRouter(prefix="/trading", tags=["Trading"])
+account_router = APIRouter(prefix="/account", tags=["Account"])
+performance_router = APIRouter(prefix="/performance", tags=["Performance"])
+config_router = APIRouter(prefix="/config", tags=["Configuration"])
+
+# Main API router - all routes will be prefixed with /api/v1/
+api_router = APIRouter(prefix="/v1", tags=["REST API"])
+
+# Include domain-specific routers
+api_router.include_router(auth_router)
+api_router.include_router(trading_router)
+api_router.include_router(account_router)
+api_router.include_router(performance_router)
+api_router.include_router(config_router)
 
 
 # Pydantic models for request/response
@@ -85,7 +100,8 @@ class Config(BaseModel):
 
 # Endpoints
 
-@api_router.get("/health", response_model=HealthResponse)
+# Health check (keep on main API router)
+@api_router.get("/health", response_model=HealthResponse, tags=["Health"])
 async def get_health() -> HealthResponse:
     """
     Health check endpoint for monitoring.
@@ -100,7 +116,8 @@ async def get_health() -> HealthResponse:
     )
 
 
-@api_router.get("/account", response_model=AccountInfo)
+# Account endpoints
+@account_router.get("", response_model=AccountInfo)
 async def get_account() -> AccountInfo:
     """
     Get account information including balance, equity, and margin.
@@ -118,7 +135,7 @@ async def get_account() -> AccountInfo:
     )
 
 
-@api_router.get("/positions")
+@account_router.get("/positions")
 async def get_positions() -> List[Position]:
     """
     Get all open trading positions.
@@ -129,7 +146,7 @@ async def get_positions() -> List[Position]:
     return []
 
 
-@api_router.get("/trades")
+@account_router.get("/trades")
 async def get_trades(limit: int = 100) -> List[Trade]:
     """
     Get trade history.
@@ -140,7 +157,8 @@ async def get_trades(limit: int = 100) -> List[Trade]:
     return []
 
 
-@api_router.get("/performance")
+# Performance endpoints
+@performance_router.get("")
 async def get_performance() -> dict:
     """
     Get performance metrics including win rate, profit factor, and drawdown.
@@ -162,7 +180,8 @@ async def get_performance() -> dict:
     }
 
 
-@api_router.get("/signals")
+# Trading endpoints
+@trading_router.get("/signals")
 async def get_signals(limit: int = 50) -> List[Signal]:
     """
     Get recent trading signals.
@@ -173,18 +192,7 @@ async def get_signals(limit: int = 50) -> List[Signal]:
     return []
 
 
-@api_router.get("/models")
-async def get_models() -> List[ModelInfo]:
-    """
-    Get information about trained ML models.
-
-    Note: Returns empty list until model training is complete.
-    """
-    # Placeholder - will be replaced with model data
-    return []
-
-
-@api_router.post("/start")
+@trading_router.post("/start")
 async def start_trading() -> dict:
     """
     Start the autonomous trading loop.
@@ -199,7 +207,7 @@ async def start_trading() -> dict:
     }
 
 
-@api_router.post("/stop")
+@trading_router.post("/stop")
 async def stop_trading() -> dict:
     """
     Stop the autonomous trading loop.
@@ -214,7 +222,7 @@ async def stop_trading() -> dict:
     }
 
 
-@api_router.post("/pause")
+@trading_router.post("/pause")
 async def pause_trading() -> dict:
     """
     Pause the autonomous trading loop.
@@ -229,7 +237,19 @@ async def pause_trading() -> dict:
     }
 
 
-@api_router.get("/config", response_model=Config)
+@trading_router.get("/models")
+async def get_models() -> List[ModelInfo]:
+    """
+    Get information about trained ML models.
+
+    Note: Returns empty list until model training is complete.
+    """
+    # Placeholder - will be replaced with model data
+    return []
+
+
+# Configuration endpoints
+@config_router.get("", response_model=Config)
 async def get_config() -> Config:
     """
     Get current system configuration.
@@ -243,7 +263,7 @@ async def get_config() -> Config:
     )
 
 
-@api_router.put("/config")
+@config_router.put("")
 async def update_config(config: Config) -> dict:
     """
     Update system configuration.

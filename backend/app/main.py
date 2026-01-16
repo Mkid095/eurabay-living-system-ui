@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 import sys
 import os
+import uuid
 
 # Add backend directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -30,6 +31,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     logger.info("Starting EURABAY Living System backend...")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Debug mode: {settings.DEBUG}")
+
+    # Validate configuration
+    try:
+        settings.validate_configuration()
+        logger.info("Configuration validation passed")
+    except ValueError as e:
+        logger.error(f"Configuration validation failed: {e}")
+        raise
 
     yield
 
@@ -57,6 +66,37 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Middleware for request size limiting
+@app.middleware("http")
+async def limit_request_size(request: Request, call_next):
+    """Limit request size to MAX_REQUEST_SIZE."""
+    content_length = request.headers.get("content-length")
+    if content_length:
+        content_length = int(content_length)
+        if content_length > settings.MAX_REQUEST_SIZE:
+            return JSONResponse(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                content={
+                    "success": False,
+                    "error": "Request too large",
+                    "detail": f"Request size {content_length} exceeds maximum {settings.MAX_REQUEST_SIZE}"
+                }
+            )
+    return await call_next(request)
+
+
+# Middleware for request ID tracking
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    """Add unique request ID for tracking and logging."""
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    request.state.request_id = request_id
+
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 # Global exception handler
@@ -110,5 +150,8 @@ if __name__ == "__main__":
         host=settings.HOST,
         port=settings.PORT,
         reload=settings.DEBUG,
-        log_level="info"
+        log_level="info",
+        timeout_keep_alive=settings.CONNECTION_TIMEOUT,
+        timeout_graceful_shutdown=settings.READ_TIMEOUT,
+        limit_max_request_size=settings.MAX_REQUEST_SIZE,
     )

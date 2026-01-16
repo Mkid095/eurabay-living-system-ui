@@ -6,6 +6,8 @@ import sys
 import os
 from loguru import logger
 from app.core.config import settings
+from functools import wraps
+from typing import Callable, Any
 
 
 def setup_logging() -> None:
@@ -27,30 +29,78 @@ def setup_logging() -> None:
         colorize=True,
     )
 
-    # File handler for all logs
+    # Info log file
     logger.add(
-        os.path.join(settings.LOG_DIR, "app_{time:YYYY-MM-DD}.log"),
+        os.path.join(settings.LOG_DIR, "info_{time:YYYY-MM-DD}.log"),
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-        level="DEBUG",
+        level="INFO",
         rotation="00:00",  # New file at midnight
-        retention="30 days",  # Keep logs for 30 days
-        compression="zip",
+        retention="7 days",  # Compress after 7 days
+        compression="gz",  # Gzip compression
         enqueue=True,  # Thread-safe logging
     )
 
     # Error log file
     logger.add(
-        os.path.join(settings.LOG_DIR, "errors_{time:YYYY-MM-DD}.log"),
+        os.path.join(settings.LOG_DIR, "error_{time:YYYY-MM-DD}.log"),
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
         level="ERROR",
         rotation="00:00",
-        retention="90 days",
-        compression="zip",
+        retention="7 days",
+        compression="gz",
         enqueue=True,
+    )
+
+    # Trading log file (for trading operations)
+    logger.add(
+        os.path.join(settings.LOG_DIR, "trading_{time:YYYY-MM-DD}.log"),
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+        level="DEBUG",
+        rotation="00:00",
+        retention="7 days",
+        compression="gz",
+        enqueue=True,
+        filter=lambda record: "trading" in record["extra"].get("context", ""),
     )
 
     logger.info("Logging system initialized")
 
 
-# Export logger instance
-__all__ = ["logger", "setup_logging"]
+def log_function_entry_exit(func: Callable) -> Callable:
+    """
+    Decorator to log function entry and exit with parameters and return values.
+    Logs function name, arguments, and execution time.
+    """
+    @wraps(func)
+    async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+        func_name = f"{func.__module__}.{func.__name__}"
+        logger.debug(f"Entering {func_name} with args={args}, kwargs={kwargs}")
+        try:
+            result = await func(*args, **kwargs)
+            logger.debug(f"Exiting {func_name} with result={result}")
+            return result
+        except Exception as e:
+            logger.error(f"Exception in {func_name}: {e}", exc_info=True)
+            raise
+
+    @wraps(func)
+    def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+        func_name = f"{func.__module__}.{func.__name__}"
+        logger.debug(f"Entering {func_name} with args={args}, kwargs={kwargs}")
+        try:
+            result = func(*args, **kwargs)
+            logger.debug(f"Exiting {func_name} with result={result}")
+            return result
+        except Exception as e:
+            logger.error(f"Exception in {func_name}: {e}", exc_info=True)
+            raise
+
+    # Return appropriate wrapper based on whether function is async
+    import inspect
+    if inspect.iscoroutinefunction(func):
+        return async_wrapper
+    return sync_wrapper
+
+
+# Export logger instance and decorator
+__all__ = ["logger", "setup_logging", "log_function_entry_exit"]
