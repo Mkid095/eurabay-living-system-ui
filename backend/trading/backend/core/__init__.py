@@ -6,6 +6,12 @@ from .breakeven_manager import (
     BreakevenConfig,
     BreakevenUpdate,
 )
+from .partial_profit_manager import (
+    PartialProfitManager,
+    PartialProfitConfig,
+    PartialProfitUpdate,
+    PartialProfitLevel,
+)
 from .trade_state import TradeState, TradeStateMachine, TradeStateTransition
 from .trade_position import TradePosition
 from .trailing_stop_manager import (
@@ -20,6 +26,10 @@ __all__ = [
     "BreakevenManager",
     "BreakevenConfig",
     "BreakevenUpdate",
+    "PartialProfitManager",
+    "PartialProfitConfig",
+    "PartialProfitUpdate",
+    "PartialProfitLevel",
     "TradeState",
     "TradeStateMachine",
     "TradeStateTransition",
