@@ -141,3 +141,23 @@ export const features = sqliteTable('features', {
  */
 export type Feature = typeof features.$inferSelect;
 export type NewFeature = typeof features.$inferInsert;
+
+/**
+ * Mutations table schema
+ * Tracks mutation history with evolution and feature relationships
+ */
+export const mutations = sqliteTable('mutations', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  mutationType: text('mutation_type').notNull(),
+  generationId: integer('generation_id').notNull().references(() => evolutionGenerations.id),
+  targetFeatureId: text('target_feature_id').notNull().references(() => features.featureId),
+  success: integer('success', { mode: 'boolean' }).notNull(),
+  fitnessImprovement: real('fitness_improvement').notNull(),
+  timestamp: integer('timestamp', { mode: 'timestamp' }).notNull(),
+});
+
+/**
+ * Type definitions for mutations table
+ */
+export type Mutation = typeof mutations.$inferSelect;
+export type NewMutation = typeof mutations.$inferInsert;
