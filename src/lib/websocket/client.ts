@@ -60,6 +60,9 @@ export class WSClient {
   private currentToken: string | null = null;
   private tokenRefreshInProgress: boolean = false;
   private eventHandlers: Map<string, Set<WSEventHandler>> = new Map();
+  private lastPingTime: number = 0;
+  private currentLatency: number | null = null;
+  private latencyChangeCallbacks: Set<(latency: number | null) => void> = new Set();
 
   constructor(config: WSClientConfig) {
     this.config = {
@@ -113,6 +116,21 @@ export class WSClient {
   onAuthFailure(callback: () => void): () => void {
     this.authFailureCallbacks.add(callback);
     return () => this.authFailureCallbacks.delete(callback);
+  }
+
+  /**
+   * Subscribe to latency changes
+   */
+  onLatencyChange(callback: (latency: number | null) => void): () => void {
+    this.latencyChangeCallbacks.add(callback);
+    return () => this.latencyChangeCallbacks.delete(callback);
+  }
+
+  /**
+   * Get current latency in milliseconds
+   */
+  getLatency(): number | null {
+    return this.currentLatency;
   }
 
   /**
@@ -315,6 +333,7 @@ export class WSClient {
         this.reconnectAttemptCount = 0; // Reset reconnect count on successful connection
         this.startPingInterval();
         this.setState('connected');
+        this.setLatency(null); // Reset latency on new connection
       };
 
       // Connection closed
@@ -595,7 +614,8 @@ export class WSClient {
    * Send ping message to server
    */
   private sendPing(): void {
-    const pingMessage = JSON.stringify({ type: 'ping', timestamp: Date.now() });
+    this.lastPingTime = Date.now();
+    const pingMessage = JSON.stringify({ type: 'ping', timestamp: this.lastPingTime });
 
     try {
       this.ws?.send(pingMessage);
@@ -647,8 +667,30 @@ export class WSClient {
   private handlePong(): void {
     this.clearPongTimeout();
 
+    // Calculate latency
+    if (this.lastPingTime > 0) {
+      const newLatency = Date.now() - this.lastPingTime;
+      this.setLatency(newLatency);
+    }
+
     if (process.env.NODE_ENV === 'development') {
       console.log('[WS] Pong received');
+    }
+  }
+
+  /**
+   * Update latency and notify listeners
+   */
+  private setLatency(latency: number | null): void {
+    if (this.currentLatency !== latency) {
+      this.currentLatency = latency;
+      this.latencyChangeCallbacks.forEach(callback => {
+        try {
+          callback(latency);
+        } catch (error) {
+          console.error('[WS] Error in latency change callback:', error);
+        }
+      });
     }
   }
 
@@ -671,6 +713,7 @@ export class WSClient {
     this.clearPongTimeout();
     this.stateChangeCallbacks.clear();
     this.eventHandlers.clear();
+    this.latencyChangeCallbacks.clear();
   }
 
   /**
