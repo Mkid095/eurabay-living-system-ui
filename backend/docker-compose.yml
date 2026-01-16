@@ -1,0 +1,29 @@
+# EURABAY Living System - Docker Compose Configuration
+# For development and local testing
+
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: eurabay-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend
+      - ./backend/data:/app/backend/data
+      - ./backend/logs:/app/backend/logs
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - HOST=0.0.0.0
+      - PORT=8000
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s

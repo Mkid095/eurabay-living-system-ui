@@ -22,7 +22,7 @@
       "mavenSteps": [1, 2],
       "mcpTools": {},
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "Foundation for all backend work"
     },
     {
