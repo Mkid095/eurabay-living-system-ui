@@ -119,3 +119,25 @@ export const accounts = sqliteTable('accounts', {
  */
 export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
+
+/**
+ * Features table schema
+ * Stores evolved trading features and their performance metrics
+ */
+export const features = sqliteTable('features', {
+  featureId: text('feature_id').primaryKey(),
+  featureName: text('feature_name').notNull(),
+  successRate: real('success_rate').notNull(),
+  totalUses: integer('total_uses').notNull().default(0),
+  wins: integer('wins').notNull().default(0),
+  losses: integer('losses').notNull().default(0),
+  avgPnl: real('avg_pnl').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+/**
+ * Type definitions for features table
+ */
+export type Feature = typeof features.$inferSelect;
+export type NewFeature = typeof features.$inferInsert;
