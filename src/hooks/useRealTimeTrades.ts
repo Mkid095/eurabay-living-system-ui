@@ -8,10 +8,10 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { toast } from 'sonner';
 import { wsClient } from '@/lib/websocket/client';
 import type { TradeUpdateEvent, TradeStatus } from '@/lib/websocket/events';
 import type { EvolvedTrade, ClosedTrade } from '@/types/evolution';
+import { showTradeClosedToast, showPnLChangeToast } from '@/lib/toast/notifications';
 
 export interface UseRealTimeTradesOptions {
   /**
@@ -169,13 +169,8 @@ export function useRealTimeTrades(
         toastShownRef.current.delete(toastKey);
       }, 5000);
 
-      const isProfit = currentPnL >= 0;
-      const title = isProfit ? 'Profit Increase' : 'Loss Increase';
-
-      toast.success(title, {
-        description: `${trade.symbol}: ${currentPnL >= 0 ? '+' : ''}${currentPnL.toFixed(2)} (${pnlChangePercent.toFixed(1)}% change)`,
-        id: toastKey,
-      });
+      // Show toast with View button (optional - can be extended)
+      showPnLChangeToast(trade as EvolvedTrade, pnlChangePercent, undefined, toastKey);
     }
   }, [enableToasts, pnlChangeThreshold]);
 
@@ -218,6 +213,18 @@ export function useRealTimeTrades(
 
         return prevActive;
       });
+
+      // Show toast for closed trade with View button
+      if (enableToasts) {
+        // Find the closed trade in recent trades to show toast
+        setRecentTrades((prevRecent) => {
+          const closedTrade = prevRecent.find(t => t.ticket === tradeId);
+          if (closedTrade) {
+            showTradeClosedToast(closedTrade, undefined, `trade-closed-${tradeId}`);
+          }
+          return prevRecent;
+        });
+      }
 
       // Clean up references for closed trades
       previousPnLRef.current.delete(tradeId);

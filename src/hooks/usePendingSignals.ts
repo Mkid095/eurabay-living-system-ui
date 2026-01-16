@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { get, post } from '@/lib/api/client';
 import { wsClient } from '@/lib/websocket/client';
 import type { PendingSignal, SignalType } from '@/types/evolution';
-import { toast } from 'sonner';
+import { showNewSignalToast } from '@/lib/toast/notifications';
 
 export interface UsePendingSignalsReturn {
   signals: PendingSignal[];
@@ -180,7 +180,7 @@ export function usePendingSignals(): UsePendingSignalsReturn {
 
   /**
    * Handle new signal from WebSocket
-   * Adds new signal to top of list and shows toast notification
+   * Adds new signal to top of list and shows toast notification with Approve/Reject buttons
    */
   const handleNewSignal = useCallback((data: NewSignalData) => {
     if (!isMounted.current) return;
@@ -197,18 +197,34 @@ export function usePendingSignals(): UsePendingSignalsReturn {
       return [newSignal, ...prevSignals];
     });
 
-    // Show toast notification for new signal
-    toast.success(`New ${newSignal.signalType} signal for ${newSignal.symbol}`, {
-      description: `Confidence: ${(newSignal.confidence * 100).toFixed(0)}%`,
-      action: {
-        label: 'View',
-        onClick: () => {
-          // Scroll to signals section or highlight the new signal
-          console.log('View signal:', newSignal.id);
-        },
+    // Show toast notification for new signal with Approve/Reject buttons
+    showNewSignalToast(
+      newSignal,
+      // Approve callback
+      async () => {
+        try {
+          await approveSignal(newSignal.id);
+        } catch {
+          // Error handled by approveSignal
+        }
       },
-    });
-  }, []);
+      // Reject callback
+      async () => {
+        try {
+          await rejectSignal(newSignal.id);
+        } catch {
+          // Error handled by rejectSignal
+        }
+      },
+      // View callback (optional - scroll to signal)
+      () => {
+        // Could trigger scrolling to signals section or highlighting
+        if (process.env.NODE_ENV === 'development') {
+          console.log('View signal:', newSignal.id);
+        }
+      }
+    );
+  }, [approveSignal, rejectSignal]);
 
   /**
    * Subscribe to new_signal WebSocket events
