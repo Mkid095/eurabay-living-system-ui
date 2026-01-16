@@ -165,3 +165,22 @@ export interface ExecutionLogFilters {
   symbol?: string;
   ticket?: string;
 }
+
+/**
+ * Trade Statistics Types
+ */
+export interface TradeStatistics {
+  totalTrades: number;
+  winRate: number;
+  totalProfitLoss: number;
+  averageWin: number;
+  averageLoss: number;
+  profitFactor: number;
+  largestWinningTrade: number;
+  largestLosingTrade: number;
+  averageTradeDuration: string;
+  bestPerformingSymbol: string;
+  worstPerformingSymbol: string;
+}
+
+export type StatisticsDateRange = 'today' | 'week' | 'month' | 'all';
