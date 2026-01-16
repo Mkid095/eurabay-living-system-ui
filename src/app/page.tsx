@@ -14,7 +14,7 @@ import { ActiveTradesTable } from "@/components/dashboard/ActiveTradesTable";
 import { PendingSignals } from "@/components/dashboard/PendingSignals";
 import { RecentTrades } from "@/components/dashboard/RecentTrades";
 import { ExecutionLog } from "@/components/dashboard/ExecutionLog";
-import { EquityChart } from "@/components/dashboard/EquityChart";
+import { EquityCurve } from "@/components/dashboard/EquityChart";
 import { PnLChart } from "@/components/dashboard/PnLChart";
 import { PerformanceMetrics } from "@/components/dashboard/PerformanceMetrics";
 import { SystemControls } from "@/components/dashboard/SystemControls";
@@ -137,7 +137,7 @@ export default function Home() {
 
               {/* Charts Row */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <EquityChart data={equityChart} />
+                <EquityCurve />
                 <PnLChart data={pnlChart} />
               </div>
 
@@ -211,7 +211,7 @@ export default function Home() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <EquityChart data={equityChart} />
+                <EquityCurve />
                 <PnLChart data={pnlChart} />
               </div>
 
