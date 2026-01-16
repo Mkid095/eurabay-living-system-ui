@@ -16,18 +16,22 @@
  * - Loading skeleton
  * - Error state with retry
  * - Auto-refresh every 30 seconds
+ * - Export performance report as PDF
  * - Uses Card and MetricCard components
  */
 
 "use client";
 
+import { useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { CompactErrorState } from "@/components/ui/error-state";
-import { Award, Clock } from "lucide-react";
+import { Award, Clock, Download, FileText } from "lucide-react";
 import { usePerformanceMetrics } from "@/hooks/usePerformanceMetrics";
 import type { DateRange } from "@/types/performance";
+import { generatePerformanceReportPDF } from "@/lib/export/performance";
+import { toast } from "sonner";
 
 /**
  * Loading skeleton for PerformanceMetrics
@@ -126,6 +130,9 @@ function DateRangeSelector({ value, onChange }: DateRangeSelectorProps) {
  * PerformanceMetrics component
  */
 export function PerformanceMetrics() {
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+
   const {
     metrics,
     isLoading,
@@ -134,6 +141,44 @@ export function PerformanceMetrics() {
     setDateRange,
     retry,
   } = usePerformanceMetrics('all', 30000);
+
+  /**
+   * Handle PDF export with progress indicator
+   */
+  const handleExportPDF = async () => {
+    setIsExporting(true);
+    setExportProgress(0);
+
+    // Show progress toast
+    const progressToast = toast.loading('Generating performance report...', {
+      description: `${exportProgress}% complete`,
+    });
+
+    try {
+      await generatePerformanceReportPDF(dateRange, (progress) => {
+        setExportProgress(progress);
+        // Update toast description with progress
+        toast.loading(`Generating performance report... ${progress}%`, {
+          id: progressToast,
+        });
+      });
+
+      // Show success toast
+      toast.success('Performance report generated successfully', {
+        id: progressToast,
+        description: 'The PDF has been downloaded',
+      });
+    } catch (err) {
+      // Show error toast
+      toast.error('Failed to generate performance report', {
+        id: progressToast,
+        description: err instanceof Error ? err.message : 'Unknown error occurred',
+      });
+    } finally {
+      setIsExporting(false);
+      setExportProgress(0);
+    }
+  };
 
   // Show loading skeleton
   if (isLoading && !metrics) {
@@ -178,12 +223,33 @@ export function PerformanceMetrics() {
   return (
     <Card className="p-4 sm:p-6">
       <CardHeader className="p-0 mb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <CardTitle className="flex items-center gap-2">
             <Award className="w-5 h-5 text-primary" />
             <span className="text-xl">Performance Metrics</span>
           </CardTitle>
-          <DateRangeSelector value={dateRange} onChange={setDateRange} />
+          <div className="flex items-center gap-2">
+            <DateRangeSelector value={dateRange} onChange={setDateRange} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportPDF}
+              disabled={isExporting}
+              className="h-7 gap-1"
+            >
+              {isExporting ? (
+                <>
+                  <FileText className="w-3 h-3 animate-pulse" />
+                  <span className="text-xs">{exportProgress}%</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3 h-3" />
+                  <span className="text-xs">Export</span>
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </CardHeader>
 

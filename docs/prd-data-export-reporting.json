@@ -56,8 +56,8 @@
       "mavenSteps": [1, 7],
       "mcpTools": {},
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented performance PDF export with jsPDF. Created src/lib/export/performance.ts with generatePerformanceReportPDF() function that fetches performance metrics, equity history, and P&L history from API endpoints. Generates professional PDF with title, date range, metrics summary, equity curve chart placeholder, P&L chart placeholder, trade statistics table, and top/bottom performing trades. Added export button to PerformanceMetrics component with progress indicator and toast notifications using sonner. Uses dark theme colors matching application design. Typecheck passes with no errors."
     },
     {
       "id": "US-003",
