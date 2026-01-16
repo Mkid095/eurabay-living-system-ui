@@ -21,6 +21,8 @@ from backend.core.adaptive_risk_manager import (
     SessionRiskAdjustment,
     DynamicStopAdjustment,
     ProfitTargetAdjustment,
+    DailyLossTracking,
+    DailyLimitAlert,
 )
 from backend.core.performance_comparator import (
     PerformanceComparator,
@@ -65,6 +67,7 @@ def risk_manager(performance_comparator, temp_database):
         max_volatility_multiplier=1.5,
         enable_volatility_adjustment=False,  # Disabled for backward compatibility with existing tests
         enable_session_adjustment=False,  # Disabled for backward compatibility with existing tests
+        enable_daily_loss_limit=False,  # Disabled for backward compatibility with existing tests
     )
 
 
@@ -3609,6 +3612,359 @@ def test_tp_integration_with_performance_data():
     finally:
         comparator.close()
         risk_manager.close()
+        import time
+        time.sleep(0.1)
+        try:
+            import shutil
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            pass
+
+
+# ============================================================================
+# Daily Loss Limit Tests
+# ============================================================================
+
+
+@pytest.fixture
+def risk_manager_with_daily_limit(performance_comparator, temp_database):
+    """Create an AdaptiveRiskManager with daily loss limit enabled."""
+    return AdaptiveRiskManager(
+        performance_comparator=performance_comparator,
+        database_path=temp_database,
+        base_risk_percent=2.0,
+        min_risk_percent=0.5,
+        max_risk_percent=3.0,
+        performance_window=20,
+        enable_volatility_adjustment=False,
+        enable_session_adjustment=False,
+        daily_loss_limit_percent=5.0,
+        enable_daily_loss_limit=True,
+        initial_account_balance=10000.0,
+    )
+
+
+class TestDailyLossLimit:
+    """Test suite for daily loss limit functionality."""
+
+    def test_daily_loss_limit_initialization(self, risk_manager_with_daily_limit):
+        """Test that daily loss limit parameters are initialized correctly."""
+        rm = risk_manager_with_daily_limit
+
+        assert rm._daily_loss_limit_percent == 5.0
+        assert rm._enable_daily_loss_limit is True
+        assert rm._current_account_balance == 10000.0
+        assert len(rm._daily_loss_tracking) == 0
+        assert len(rm._daily_limit_alerts) == 0
+
+        logger.info("Daily loss limit initialization test passed")
+
+    def test_update_daily_loss_tracking_profit(self, risk_manager_with_daily_limit):
+        """Test updating daily loss tracking with a profitable trade."""
+        rm = risk_manager_with_daily_limit
+        date = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # Add a profitable trade
+        tracking = rm.update_daily_loss_tracking(pnl=100.0, date=date)
+
+        assert tracking is not None
+        assert tracking.daily_pnl == 100.0
+        assert tracking.trades_count == 1
+        assert tracking.limit_hit is False
+        assert tracking.alert_sent is False
+
+        logger.info("Daily loss tracking profit test passed")
+
+    def test_update_daily_loss_tracking_loss(self, risk_manager_with_daily_limit):
+        """Test updating daily loss tracking with a losing trade."""
+        rm = risk_manager_with_daily_limit
+        date = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # Add a losing trade
+        tracking = rm.update_daily_loss_tracking(pnl=-50.0, date=date)
+
+        assert tracking is not None
+        assert tracking.daily_pnl == -50.0
+        assert tracking.trades_count == 1
+        assert tracking.limit_hit is False
+
+        logger.info("Daily loss tracking loss test passed")
+
+    def test_daily_loss_limit_hit(self, risk_manager_with_daily_limit):
+        """Test that daily loss limit is triggered correctly."""
+        rm = risk_manager_with_daily_limit
+        date = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # Loss limit is 5% of $10,000 = $500
+        # Add trades that approach but don't exceed the limit
+        tracking = rm.update_daily_loss_tracking(pnl=-200.0, date=date)
+        assert tracking.limit_hit is False
+
+        tracking = rm.update_daily_loss_tracking(pnl=-200.0, date=date)
+        assert tracking.limit_hit is False
+
+        # This trade should NOT trigger the limit yet (-200 - 200 - 50 = -450)
+        tracking = rm.update_daily_loss_tracking(pnl=-50.0, date=date)
+        assert tracking.limit_hit is False
+
+        # This trade should trigger the limit (-450 - 100 = -550)
+        tracking = rm.update_daily_loss_tracking(pnl=-100.0, date=date)
+        assert tracking.limit_hit is True
+        assert tracking.limit_hit_time is not None
+        assert tracking.alert_sent is True
+
+        # Verify alert was created
+        alerts = rm.get_daily_limit_alerts(date=date)
+        assert len(alerts) == 1
+        assert alerts[0].alert_type == "critical"
+
+        logger.info("Daily loss limit hit test passed")
+
+    def test_is_daily_loss_limit_hit(self, risk_manager_with_daily_limit):
+        """Test the is_daily_loss_limit_hit method."""
+        rm = risk_manager_with_daily_limit
+        date = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # Before any trades
+        assert rm.is_daily_loss_limit_hit(date) is False
+
+        # Add some losses but not exceeding limit
+        rm.update_daily_loss_tracking(pnl=-200.0, date=date)
+        assert rm.is_daily_loss_limit_hit(date) is False
+
+        # Add more losses exceeding limit
+        rm.update_daily_loss_tracking(pnl=-400.0, date=date)
+        assert rm.is_daily_loss_limit_hit(date) is True
+
+        logger.info("is_daily_loss_limit_hit test passed")
+
+    def test_is_trading_allowed_daily_limit(self, risk_manager_with_daily_limit):
+        """Test the is_trading_allowed_daily_limit method."""
+        rm = risk_manager_with_daily_limit
+        date = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # Initially trading should be allowed
+        assert rm.is_trading_allowed_daily_limit(date) is True
+
+        # Add losses exceeding limit
+        rm.update_daily_loss_tracking(pnl=-600.0, date=date)
+
+        # Now trading should not be allowed
+        assert rm.is_trading_allowed_daily_limit(date) is False
+
+        logger.info("is_trading_allowed_daily_limit test passed")
+
+    def test_reset_daily_limit(self, risk_manager_with_daily_limit):
+        """Test resetting the daily limit."""
+        rm = risk_manager_with_daily_limit
+        date = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # Hit the limit
+        rm.update_daily_loss_tracking(pnl=-600.0, date=date)
+        assert rm.is_daily_loss_limit_hit(date) is True
+
+        # Reset the limit
+        rm.reset_daily_limit(date=date)
+
+        # Check that limit is reset
+        tracking = rm.get_daily_loss_tracking(date=date)
+        assert tracking is not None
+        assert tracking.daily_pnl == 0.0
+        assert tracking.trades_count == 0
+        assert tracking.limit_hit is False
+        assert tracking.alert_sent is False
+
+        logger.info("Reset daily limit test passed")
+
+    def test_set_account_balance(self, risk_manager_with_daily_limit):
+        """Test updating account balance."""
+        rm = risk_manager_with_daily_limit
+
+        assert rm._current_account_balance == 10000.0
+
+        rm.set_account_balance(12000.0)
+        assert rm._current_account_balance == 12000.0
+
+        # Loss limit should now be 5% of $12,000 = $600
+        date = datetime.utcnow().strftime("%Y-%m-%d")
+        rm.update_daily_loss_tracking(pnl=-550.0, date=date)
+        assert rm.is_daily_loss_limit_hit(date) is False
+
+        rm.update_daily_loss_tracking(pnl=-100.0, date=date)
+        assert rm.is_daily_loss_limit_hit(date) is True
+
+        logger.info("Set account balance test passed")
+
+    def test_get_daily_loss_tracking(self, risk_manager_with_daily_limit):
+        """Test getting daily loss tracking records."""
+        rm = risk_manager_with_daily_limit
+        date = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # Initially no tracking
+        tracking = rm.get_daily_loss_tracking(date=date)
+        assert tracking is None
+
+        # Add a trade
+        rm.update_daily_loss_tracking(pnl=100.0, date=date)
+
+        # Now should have tracking
+        tracking = rm.get_daily_loss_tracking(date=date)
+        assert tracking is not None
+        assert tracking.daily_pnl == 100.0
+
+        logger.info("Get daily loss tracking test passed")
+
+    def test_multiple_dates_tracking(self, risk_manager_with_daily_limit):
+        """Test tracking across multiple dates."""
+        rm = risk_manager_with_daily_limit
+
+        date1 = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
+        date2 = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # Add trades for different dates
+        rm.update_daily_loss_tracking(pnl=-600.0, date=date1)  # Hit limit on day 1
+        rm.update_daily_loss_tracking(pnl=100.0, date=date2)  # Profit on day 2
+
+        # Check day 1
+        tracking1 = rm.get_daily_loss_tracking(date=date1)
+        assert tracking1.limit_hit is True
+
+        # Check day 2
+        tracking2 = rm.get_daily_loss_tracking(date=date2)
+        assert tracking2.limit_hit is False
+        assert tracking2.daily_pnl == 100.0
+
+        logger.info("Multiple dates tracking test passed")
+
+    def test_daily_loss_limit_disabled(self, risk_manager):
+        """Test that daily loss limit works when disabled."""
+        # risk_manager fixture has daily loss limit disabled
+        date = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # Even with large loss, should return False when disabled
+        assert risk_manager.is_daily_loss_limit_hit(date) is False
+
+        # Update should return None when disabled
+        tracking = risk_manager.update_daily_loss_tracking(pnl=-1000.0, date=date)
+        assert tracking is None
+
+        # Limit check should still return False
+        assert risk_manager.is_daily_loss_limit_hit(date) is False
+
+        logger.info("Daily loss limit disabled test passed")
+
+    def test_cumulative_pnl_calculation(self, risk_manager_with_daily_limit):
+        """Test that P&L accumulates correctly across multiple trades."""
+        rm = risk_manager_with_daily_limit
+        date = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # Add multiple trades
+        pnls = [100, -50, 75, -25, 50]
+        expected_pnl = sum(pnls)
+
+        for pnl in pnls:
+            rm.update_daily_loss_tracking(pnl=pnl, date=date)
+
+        tracking = rm.get_daily_loss_tracking(date=date)
+        assert tracking.daily_pnl == expected_pnl
+        assert tracking.trades_count == len(pnls)
+
+        logger.info("Cumulative P&L calculation test passed")
+
+
+def test_daily_loss_limit_historical_simulation():
+    """
+    Integration test simulating daily loss limit on historical data.
+
+    This test simulates a trading day with multiple trades to verify
+    that the daily loss limit correctly prevents catastrophic losses.
+    """
+    temp_dir = tempfile.mkdtemp()
+    temp_db = Path(temp_dir) / "test_daily_loss.db"
+
+    try:
+        comparator = PerformanceComparator(database_path=str(temp_db))
+        rm = AdaptiveRiskManager(
+            performance_comparator=comparator,
+            database_path=str(temp_db),
+            base_risk_percent=2.0,
+            daily_loss_limit_percent=5.0,
+            enable_daily_loss_limit=True,
+            initial_account_balance=10000.0,
+            enable_volatility_adjustment=False,
+            enable_session_adjustment=False,
+        )
+
+        date = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # Simulate a trading day with various outcomes
+        # Loss limit is 5% of $10,000 = $500
+        trades = [
+            {"pnl": 150, "note": "Winning trade 1"},
+            {"pnl": -100, "note": "Losing trade 1"},
+            {"pnl": 200, "note": "Winning trade 2"},
+            {"pnl": -75, "note": "Losing trade 2"},
+            {"pnl": -100, "note": "Losing trade 3"},
+            {"pnl": -150, "note": "Losing trade 4"},
+            {"pnl": -250, "note": "Losing trade 5"},
+            {"pnl": -300, "note": "Losing trade 6 - should hit limit"},
+        ]
+
+        total_pnl = 0
+        limit_hit = False
+
+        for i, trade in enumerate(trades):
+            pnl = trade["pnl"]
+            total_pnl += pnl
+
+            tracking = rm.update_daily_loss_tracking(pnl=pnl, date=date)
+
+            logger.info(
+                f"Trade {i + 1}: P&L=${pnl:.2f}, Total=${total_pnl:.2f}, "
+                f"Trades={tracking.trades_count}, LimitHit={tracking.limit_hit}"
+            )
+
+            if tracking.limit_hit and not limit_hit:
+                limit_hit = True
+                logger.warning(
+                    f"Daily loss limit hit after {i + 1} trades! "
+                    f"Total P&L: ${total_pnl:.2f}"
+                )
+
+                # Verify trading is now blocked
+                assert rm.is_trading_allowed_daily_limit(date) is False
+
+        # Verify final state
+        tracking = rm.get_daily_loss_tracking(date=date)
+
+        logger.info(f"Final daily P&L: ${tracking.daily_pnl:.2f}")
+        logger.info(f"Total trades: {tracking.trades_count}")
+        logger.info(f"Limit hit: {tracking.limit_hit}")
+        logger.info(f"Alert sent: {tracking.alert_sent}")
+
+        # The limit should have been hit (total loss > $500)
+        # Sum: 150 - 100 + 200 - 75 - 100 - 150 - 250 - 300 = -525
+        # Calculation:
+        # 150 - 100 = 50
+        # 50 + 200 = 250
+        # 250 - 75 = 175
+        # 175 - 100 = 75
+        # 75 - 150 = -75
+        # -75 - 250 = -325
+        # -325 - 300 = -625 (exceeds -500 limit)
+        assert tracking.limit_hit is True
+        assert tracking.alert_sent is True
+
+        # Verify alert was stored
+        alerts = rm.get_daily_limit_alerts(date=date)
+        assert len(alerts) == 1
+        assert "Daily loss limit hit" in alerts[0].message
+
+        logger.info("Daily loss limit historical simulation test passed")
+
+    finally:
+        comparator.close()
+        rm.close()
         import time
         time.sleep(0.1)
         try:

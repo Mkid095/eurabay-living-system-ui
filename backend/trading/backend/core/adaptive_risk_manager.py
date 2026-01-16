@@ -281,6 +281,84 @@ class ProfitTargetAdjustment:
         }
 
 
+@dataclass
+class DailyLossTracking:
+    """
+    Record of daily loss tracking and limit status.
+
+    Attributes:
+        date: Date for this tracking record (YYYY-MM-DD)
+        daily_pnl: Total realized P&L for the day
+        daily_loss_limit: Daily loss limit as percentage of account balance
+        account_balance: Account balance used for limit calculation
+        limit_hit: Whether the daily loss limit was hit
+        limit_hit_time: Timestamp when limit was hit (None if not hit)
+        trades_count: Number of trades executed this day
+        alert_sent: Whether alert was sent when limit was hit
+        reason: Explanation for the daily loss status
+    """
+
+    date: str
+    daily_pnl: float
+    daily_loss_limit: float
+    account_balance: float
+    limit_hit: bool
+    limit_hit_time: Optional[str]
+    trades_count: int
+    alert_sent: bool
+    reason: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for storage."""
+        return {
+            "date": self.date,
+            "daily_pnl": round(self.daily_pnl, 2),
+            "daily_loss_limit": round(self.daily_loss_limit, 2),
+            "account_balance": round(self.account_balance, 2),
+            "limit_hit": self.limit_hit,
+            "limit_hit_time": self.limit_hit_time,
+            "trades_count": self.trades_count,
+            "alert_sent": self.alert_sent,
+            "reason": self.reason,
+        }
+
+
+@dataclass
+class DailyLimitAlert:
+    """
+    Record of a daily loss limit alert.
+
+    Attributes:
+        timestamp: When the alert was sent
+        date: Date for which the alert was triggered
+        daily_pnl: Total P&L when alert was triggered
+        daily_loss_limit: The loss limit that was exceeded
+        account_balance: Account balance at time of alert
+        alert_type: Type of alert (warning, critical)
+        message: Alert message
+    """
+
+    timestamp: str
+    date: str
+    daily_pnl: float
+    daily_loss_limit: float
+    account_balance: float
+    alert_type: str
+    message: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for storage."""
+        return {
+            "timestamp": self.timestamp,
+            "date": self.date,
+            "daily_pnl": round(self.daily_pnl, 2),
+            "daily_loss_limit": round(self.daily_loss_limit, 2),
+            "account_balance": round(self.account_balance, 2),
+            "alert_type": self.alert_type,
+            "message": self.message,
+        }
+
+
 class AdaptiveRiskManager:
     """
     Manages adaptive risk based on recent trading performance and market volatility.
@@ -352,6 +430,8 @@ class AdaptiveRiskManager:
         high_win_rate_tp_multiplier: float = 2.0,
         low_win_rate_tp_multiplier: float = 3.0,
         win_rate_threshold: float = 60.0,
+        daily_loss_limit_percent: float = 5.0,
+        enable_daily_loss_limit: bool = True,
     ):
         """
         Initialize the AdaptiveRiskManager.
@@ -383,6 +463,8 @@ class AdaptiveRiskManager:
             high_win_rate_tp_multiplier: TP multiplier when win rate > threshold (default: 2.0)
             low_win_rate_tp_multiplier: TP multiplier when win rate <= threshold (default: 3.0)
             win_rate_threshold: Win rate threshold for TP adjustment (default: 60.0%)
+            daily_loss_limit_percent: Daily loss limit as percentage of account balance (default: 5.0%)
+            enable_daily_loss_limit: Whether to enable daily loss limit (default: True)
         """
         self._performance_comparator = performance_comparator
         self._database_path = database_path
@@ -431,6 +513,13 @@ class AdaptiveRiskManager:
         self._low_win_rate_tp_multiplier = low_win_rate_tp_multiplier
         self._win_rate_threshold = win_rate_threshold
         self._profit_target_adjustments: list[ProfitTargetAdjustment] = []
+
+        # Daily loss limit parameters
+        self._daily_loss_limit_percent = daily_loss_limit_percent
+        self._enable_daily_loss_limit = enable_daily_loss_limit
+        self._daily_loss_tracking: dict[str, DailyLossTracking] = {}
+        self._daily_limit_alerts: list[DailyLimitAlert] = []
+        self._current_account_balance: float = initial_account_balance
 
         # Initialize database
         self._initialize_database()
@@ -598,6 +687,39 @@ class AdaptiveRiskManager:
                 )
             """)
 
+            # Create daily_loss_tracking table for daily P&L tracking
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS daily_loss_tracking (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL UNIQUE,
+                    daily_pnl REAL NOT NULL,
+                    daily_loss_limit REAL NOT NULL,
+                    account_balance REAL NOT NULL,
+                    limit_hit BOOLEAN NOT NULL,
+                    limit_hit_time TEXT,
+                    trades_count INTEGER NOT NULL,
+                    alert_sent BOOLEAN NOT NULL,
+                    reason TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # Create daily_limit_alerts table for alert history
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS daily_limit_alerts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    daily_pnl REAL NOT NULL,
+                    daily_loss_limit REAL NOT NULL,
+                    account_balance REAL NOT NULL,
+                    alert_type TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Create indexes
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_adjustments_timestamp
@@ -672,6 +794,26 @@ class AdaptiveRiskManager:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_tp_hit_symbol
                 ON tp_hit_tracking(symbol)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_daily_loss_date
+                ON daily_loss_tracking(date DESC)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_daily_loss_limit_hit
+                ON daily_loss_tracking(limit_hit)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_daily_alerts_timestamp
+                ON daily_limit_alerts(timestamp DESC)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_daily_alerts_date
+                ON daily_limit_alerts(date)
             """)
 
             self._connection.commit()
@@ -2698,3 +2840,446 @@ class AdaptiveRiskManager:
 
         except sqlite3.Error as e:
             logger.error(f"Failed to store TP hit tracking in database: {e}")
+
+    def calculate_daily_pnl(self, date: Optional[str] = None) -> float:
+        """
+        Calculate the total realized P&L for a specific date.
+
+        This method sums up all realized P&L from closed trades for the given date.
+        If no date is provided, it uses the current date.
+
+        Args:
+            date: Date string in YYYY-MM-DD format. If None, uses current date.
+
+        Returns:
+            Total realized P&L for the date (positive for profit, negative for loss)
+        """
+        try:
+            if date is None:
+                date = datetime.utcnow().strftime("%Y-%m-%d")
+
+            if self._connection is None:
+                logger.warning("Database connection not available for daily P&L calculation")
+                return 0.0
+
+            cursor = self._connection.cursor()
+
+            # Query closed trades for the specific date
+            cursor.execute("""
+                SELECT pnl
+                FROM trades
+                WHERE DATE(closeTime) = ?
+                  AND status = 'closed'
+                  AND pnl IS NOT NULL
+            """, (date,))
+
+            rows = cursor.fetchall()
+
+            daily_pnl = sum(row[0] for row in rows) if rows else 0.0
+
+            logger.info(f"Daily P&L for {date}: ${daily_pnl:.2f}")
+
+            return daily_pnl
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to calculate daily P&L: {e}")
+            return 0.0
+
+    def is_daily_loss_limit_hit(self, date: Optional[str] = None) -> bool:
+        """
+        Check if the daily loss limit has been hit for a specific date.
+
+        Args:
+            date: Date string in YYYY-MM-DD format. If None, uses current date.
+
+        Returns:
+            True if daily loss limit has been hit, False otherwise
+        """
+        if not self._enable_daily_loss_limit:
+            return False
+
+        try:
+            if date is None:
+                date = datetime.utcnow().strftime("%Y-%m-%d")
+
+            # Check in-memory tracking first (most up-to-date)
+            if date in self._daily_loss_tracking:
+                return self._daily_loss_tracking[date].limit_hit
+
+            # Fall back to database query
+            tracking = self._load_daily_tracking(date)
+            if tracking is not None:
+                # Cache in memory
+                self._daily_loss_tracking[date] = tracking
+                return tracking.limit_hit
+
+            # If no tracking exists, limit is not hit
+            return False
+
+        except Exception as e:
+            logger.error(f"Failed to check daily loss limit: {e}")
+            return False
+
+    def is_trading_allowed_daily_limit(self, date: Optional[str] = None) -> bool:
+        """
+        Check if trading is allowed based on daily loss limit.
+
+        This is a convenience method that combines the daily loss limit check
+        with the existing circuit breaker logic.
+
+        Args:
+            date: Date string in YYYY-MM-DD format. If None, uses current date.
+
+        Returns:
+            True if trading is allowed (daily loss limit not hit), False otherwise
+        """
+        # Check existing circuit breaker
+        if not self.is_trading_allowed():
+            return False
+
+        # Check daily loss limit
+        if self.is_daily_loss_limit_hit(date):
+            logger.warning("Trading not allowed: Daily loss limit has been hit")
+            return False
+
+        return True
+
+    def update_daily_loss_tracking(
+        self,
+        pnl: float,
+        date: Optional[str] = None,
+        account_balance: Optional[float] = None,
+    ) -> Optional[DailyLossTracking]:
+        """
+        Update daily loss tracking with a new trade's P&L.
+
+        This method should be called whenever a trade is closed to track
+        cumulative daily P&L and check if the loss limit has been hit.
+
+        Args:
+            pnl: P&L from the closed trade (positive for profit, negative for loss)
+            date: Date string in YYYY-MM-DD format. If None, uses current date.
+            account_balance: Current account balance. If None, uses stored balance.
+
+        Returns:
+            DailyLossTracking object with current daily status, or None if feature is disabled
+        """
+        # If feature is disabled, return None
+        if not self._enable_daily_loss_limit:
+            return None
+
+        try:
+            if date is None:
+                date = datetime.utcnow().strftime("%Y-%m-%d")
+
+            if account_balance is not None:
+                self._current_account_balance = account_balance
+
+            # Get or create daily tracking record
+            if date in self._daily_loss_tracking:
+                tracking = self._daily_loss_tracking[date]
+                tracking.daily_pnl += pnl
+                tracking.trades_count += 1
+            else:
+                # Load from database or create new
+                tracking = self._load_daily_tracking(date)
+                if tracking is None:
+                    tracking = DailyLossTracking(
+                        date=date,
+                        daily_pnl=pnl,
+                        daily_loss_limit=self._daily_loss_limit_percent,
+                        account_balance=self._current_account_balance,
+                        limit_hit=False,
+                        limit_hit_time=None,
+                        trades_count=1,
+                        alert_sent=False,
+                        reason="Initial tracking record created",
+                    )
+                else:
+                    # Add to existing tracking from database
+                    tracking.daily_pnl += pnl
+                    tracking.trades_count += 1
+
+            # Check if limit is hit
+            loss_limit_abs = self._current_account_balance * (self._daily_loss_limit_percent / 100)
+
+            if not tracking.limit_hit and tracking.daily_pnl < -loss_limit_abs:
+                tracking.limit_hit = True
+                tracking.limit_hit_time = datetime.utcnow().isoformat()
+                tracking.reason = f"Daily loss limit hit: P&L=${tracking.daily_pnl:.2f}, Limit=${loss_limit_abs:.2f}"
+
+                # Send alert if not already sent
+                if not tracking.alert_sent:
+                    self._send_daily_limit_alert(tracking)
+                    tracking.alert_sent = True
+
+            # Update in-memory tracking
+            self._daily_loss_tracking[date] = tracking
+
+            # Store in database
+            self._store_daily_loss_tracking(tracking)
+
+            logger.info(
+                f"Daily loss tracking updated for {date}: "
+                f"P&L=${tracking.daily_pnl:.2f}, Trades={tracking.trades_count}, "
+                f"LimitHit={tracking.limit_hit}"
+            )
+
+            return tracking
+
+        except Exception as e:
+            logger.error(f"Failed to update daily loss tracking: {e}")
+            raise
+
+    def reset_daily_limit(self, date: Optional[str] = None) -> None:
+        """
+        Reset the daily loss limit for a new trading day.
+
+        This should be called at midnight to reset tracking for the new day.
+        If called without a date, resets the current day's tracking.
+
+        Args:
+            date: Date string in YYYY-MM-DD format. If None, uses current date.
+        """
+        try:
+            if date is None:
+                date = datetime.utcnow().strftime("%Y-%m-%d")
+
+            # Remove from in-memory tracking
+            if date in self._daily_loss_tracking:
+                del self._daily_loss_tracking[date]
+
+            # Create new tracking record for the day
+            tracking = DailyLossTracking(
+                date=date,
+                daily_pnl=0.0,
+                daily_loss_limit=self._daily_loss_limit_percent,
+                account_balance=self._current_account_balance,
+                limit_hit=False,
+                limit_hit_time=None,
+                trades_count=0,
+                alert_sent=False,
+                reason="Daily limit reset at midnight",
+            )
+
+            self._daily_loss_tracking[date] = tracking
+
+            # Store in database
+            self._store_daily_loss_tracking(tracking)
+
+            logger.info(f"Daily loss limit reset for {date}")
+
+        except Exception as e:
+            logger.error(f"Failed to reset daily limit: {e}")
+
+    def set_account_balance(self, balance: float) -> None:
+        """
+        Update the current account balance used for daily loss limit calculations.
+
+        Args:
+            balance: New account balance
+        """
+        old_balance = self._current_account_balance
+        self._current_account_balance = balance
+
+        logger.info(f"Account balance updated: ${old_balance:.2f} -> ${balance:.2f}")
+
+    def get_daily_loss_tracking(self, date: Optional[str] = None) -> Optional[DailyLossTracking]:
+        """
+        Get the daily loss tracking record for a specific date.
+
+        Args:
+            date: Date string in YYYY-MM-DD format. If None, uses current date.
+
+        Returns:
+            DailyLossTracking object if found, None otherwise
+        """
+        if date is None:
+            date = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # Return from in-memory cache if available
+        if date in self._daily_loss_tracking:
+            return self._daily_loss_tracking[date]
+
+        # Try to load from database
+        tracking = self._load_daily_tracking(date)
+        if tracking is not None:
+            self._daily_loss_tracking[date] = tracking
+
+        return tracking
+
+    def get_daily_limit_alerts(self, date: Optional[str] = None, limit: int = 100) -> list[DailyLimitAlert]:
+        """
+        Get daily limit alert history.
+
+        Args:
+            date: Optional date to filter by (YYYY-MM-DD format)
+            limit: Maximum number of alerts to return
+
+        Returns:
+            List of DailyLimitAlert records
+        """
+        if date is None:
+            return self._daily_limit_alerts[-limit:]
+        return [a for a in self._daily_limit_alerts if a.date == date][-limit:]
+
+    def _load_daily_tracking(self, date: str) -> Optional[DailyLossTracking]:
+        """
+        Load daily loss tracking from the database.
+
+        Args:
+            date: Date string in YYYY-MM-DD format
+
+        Returns:
+            DailyLossTracking object if found, None otherwise
+        """
+        if self._connection is None:
+            return None
+
+        try:
+            cursor = self._connection.cursor()
+
+            cursor.execute("""
+                SELECT date, daily_pnl, daily_loss_limit, account_balance,
+                       limit_hit, limit_hit_time, trades_count, alert_sent, reason
+                FROM daily_loss_tracking
+                WHERE date = ?
+            """, (date,))
+
+            row = cursor.fetchone()
+
+            if row is None:
+                return None
+
+            return DailyLossTracking(
+                date=row[0],
+                daily_pnl=row[1],
+                daily_loss_limit=row[2],
+                account_balance=row[3],
+                limit_hit=bool(row[4]),
+                limit_hit_time=row[5],
+                trades_count=row[6],
+                alert_sent=bool(row[7]),
+                reason=row[8],
+            )
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to load daily tracking from database: {e}")
+            return None
+
+    def _store_daily_loss_tracking(self, tracking: DailyLossTracking) -> None:
+        """
+        Store daily loss tracking in the database.
+
+        Args:
+            tracking: DailyLossTracking object to store
+        """
+        if self._connection is None:
+            logger.warning("Database connection not available, daily tracking not stored")
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            cursor.execute("""
+                INSERT OR REPLACE INTO daily_loss_tracking (
+                    date, daily_pnl, daily_loss_limit, account_balance,
+                    limit_hit, limit_hit_time, trades_count, alert_sent, reason, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                tracking.date,
+                tracking.daily_pnl,
+                tracking.daily_loss_limit,
+                tracking.account_balance,
+                int(tracking.limit_hit),
+                tracking.limit_hit_time,
+                tracking.trades_count,
+                int(tracking.alert_sent),
+                tracking.reason,
+                datetime.utcnow().isoformat(),
+            ))
+
+            self._connection.commit()
+
+            logger.debug(f"Daily loss tracking stored in database for {tracking.date}")
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to store daily loss tracking in database: {e}")
+
+    def _send_daily_limit_alert(self, tracking: DailyLossTracking) -> None:
+        """
+        Send an alert when the daily loss limit is hit.
+
+        Args:
+            tracking: DailyLossTracking object that triggered the alert
+        """
+        try:
+            # Calculate the loss amount
+            loss_amount = abs(tracking.daily_pnl)
+            loss_limit_abs = tracking.account_balance * (tracking.daily_loss_limit / 100)
+
+            # Create alert message
+            message = (
+                f"Daily loss limit hit for {tracking.date}: "
+                f"Loss=${loss_amount:.2f}, Limit=${loss_limit_abs:.2f} "
+                f"({tracking.daily_loss_limit}%), Trades={tracking.trades_count}"
+            )
+
+            # Create alert record
+            alert = DailyLimitAlert(
+                timestamp=datetime.utcnow().isoformat(),
+                date=tracking.date,
+                daily_pnl=tracking.daily_pnl,
+                daily_loss_limit=tracking.daily_loss_limit,
+                account_balance=tracking.account_balance,
+                alert_type="critical",
+                message=message,
+            )
+
+            # Add to in-memory alerts
+            self._daily_limit_alerts.append(alert)
+
+            # Store in database
+            self._store_daily_limit_alert(alert)
+
+            # Log the alert (in production, this could send email/SMS/webhook)
+            logger.critical(f"DAILY LOSS LIMIT ALERT: {message}")
+
+        except Exception as e:
+            logger.error(f"Failed to send daily limit alert: {e}")
+
+    def _store_daily_limit_alert(self, alert: DailyLimitAlert) -> None:
+        """
+        Store a daily limit alert in the database.
+
+        Args:
+            alert: DailyLimitAlert object to store
+        """
+        if self._connection is None:
+            logger.warning("Database connection not available, alert not stored")
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            cursor.execute("""
+                INSERT INTO daily_limit_alerts (
+                    timestamp, date, daily_pnl, daily_loss_limit,
+                    account_balance, alert_type, message
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                alert.timestamp,
+                alert.date,
+                alert.daily_pnl,
+                alert.daily_loss_limit,
+                alert.account_balance,
+                alert.alert_type,
+                alert.message,
+            ))
+
+            self._connection.commit()
+
+            logger.debug(f"Daily limit alert stored in database for {alert.date}")
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to store daily limit alert in database: {e}")
