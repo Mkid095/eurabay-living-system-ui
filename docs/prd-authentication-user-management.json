@@ -198,8 +198,8 @@
       "mavenSteps": [1, 7],
       "mcpTools": {},
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Created comprehensive RBAC module at src/lib/auth/rbac.ts with role definitions (admin, trader, viewer), permission matrix, protected resources mapping, and helper functions. Created src/components/auth/withRole.tsx with HOCs (withRole, withAnyRole, withMinimumRole). Updated src/components/auth/RoleGuard.tsx with useAuth hook, added AdminGuard/TraderGuard/ViewerGuard convenience components. Applied role restrictions: SystemControls (admin-only), RiskParameterControls (admin-only), PendingSignals (trader/admin for approve/reject). Updated src/lib/auth/utils.ts to re-export UserRole type. Typecheck passes."
     },
     {
       "id": "US-010",
