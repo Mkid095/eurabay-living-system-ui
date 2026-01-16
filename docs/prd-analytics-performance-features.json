@@ -83,8 +83,8 @@
       "mavenSteps": [3, 5, 6],
       "mcpTools": {},
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented P&L history API (already existed in portfolio.ts), types (already existed in portfolio.ts), created usePnlHistory hook, and updated PnLChart component with real data from GET /portfolio/pnl-history. Features include: bar chart with date on X-axis and P&L on Y-axis, color-coded bars (green=profit, red=loss), tooltips with date/P&L/trades count, cumulative P&L line overlay, breakeven reference line, date range selector, symbol filter, auto-refresh every 30s, loading skeleton, error state with retry, summary stats, and empty state handling. Maintained backward compatibility with legacy PnLChart component."
     }
   ]
 }
