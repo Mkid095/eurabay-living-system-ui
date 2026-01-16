@@ -39,7 +39,7 @@
       "mavenSteps": [1, 7],
       "mcpTools": {},
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
