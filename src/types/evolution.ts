@@ -128,3 +128,26 @@ export interface PendingSignal {
   featuresUsed: string[];
   timestamp: string;
 }
+
+/**
+ * Execution Log Types
+ */
+export type ExecutionLogLevel = 'info' | 'warning' | 'error' | 'success';
+
+export interface ExecutionLogEntry {
+  id: string;
+  timestamp: string;
+  level: ExecutionLogLevel;
+  message: string;
+  tradeTicket?: string;
+  details?: Record<string, unknown>;
+}
+
+/**
+ * Execution log filters
+ */
+export interface ExecutionLogFilters {
+  eventTypes?: ExecutionLogLevel[];
+  symbol?: string;
+  ticket?: string;
+}
