@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   TrendingUp,
   Activity,
@@ -36,6 +36,8 @@ import { MT5AccountInfo } from "@/components/dashboard/MT5AccountInfo";
 import { MT5TerminalStatus } from "@/components/dashboard/MT5TerminalStatus";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useEvolutionData } from "@/hooks/useEvolutionData";
+import { subscriptionManager, SubscriptionType } from "@/lib/websocket/subscriptions";
+import { wsClient } from "@/lib/websocket/client";
 
 export default function Home() {
   const [activeSection, setActiveSection] = useState("dashboard");
@@ -64,6 +66,53 @@ export default function Home() {
     refetchMutationTracking,
   } = useEvolutionData();
 
+  // Subscribe to data streams based on active section
+  useEffect(() => {
+    // Connect to WebSocket if not connected
+    if (wsClient.getState() === 'disconnected') {
+      wsClient.connect();
+    }
+
+    // Subscribe to all data streams when on dashboard
+    if (activeSection === 'dashboard') {
+      subscriptionManager.subscribe(SubscriptionType.TRADES);
+      subscriptionManager.subscribe(SubscriptionType.EVOLUTION);
+      subscriptionManager.subscribe(SubscriptionType.MARKETS);
+      subscriptionManager.subscribe(SubscriptionType.SYSTEM_STATUS);
+    } else if (activeSection === 'trading') {
+      subscriptionManager.subscribe(SubscriptionType.TRADES);
+      subscriptionManager.subscribe(SubscriptionType.MT5);
+      subscriptionManager.unsubscribe(SubscriptionType.EVOLUTION);
+      subscriptionManager.unsubscribe(SubscriptionType.MARKETS);
+    } else if (activeSection === 'evolution') {
+      subscriptionManager.subscribe(SubscriptionType.EVOLUTION);
+      subscriptionManager.subscribe(SubscriptionType.TRADES);
+      subscriptionManager.unsubscribe(SubscriptionType.MARKETS);
+      subscriptionManager.unsubscribe(SubscriptionType.MT5);
+    } else if (activeSection === 'mt5') {
+      subscriptionManager.subscribe(SubscriptionType.MT5);
+      subscriptionManager.unsubscribe(SubscriptionType.TRADES);
+      subscriptionManager.unsubscribe(SubscriptionType.EVOLUTION);
+      subscriptionManager.unsubscribe(SubscriptionType.MARKETS);
+    } else {
+      // For analytics, config, etc - keep minimal subscriptions
+      subscriptionManager.unsubscribe(SubscriptionType.TRADES);
+      subscriptionManager.unsubscribe(SubscriptionType.EVOLUTION);
+      subscriptionManager.unsubscribe(SubscriptionType.MARKETS);
+      subscriptionManager.unsubscribe(SubscriptionType.MT5);
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Dashboard] Active section:', activeSection);
+      console.log('[Dashboard] Active subscriptions:', subscriptionManager.getActiveSubscriptions());
+    }
+
+    // Cleanup function
+    return () => {
+      // We don't unsubscribe on section change, just manage subscriptions per section
+    };
+  }, [activeSection]);
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -84,10 +133,10 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background">
       <Sidebar activeSection={activeSection} onSectionChange={setActiveSection} />
-      
+
       <div className="lg:ml-64">
-        <Header systemHealth={systemHealth} />
-        
+        <Header initialSystemHealth={systemHealth} />
+
         <main className="p-4 sm:p-6 lg:p-8">
           {/* Dashboard Section */}
           {activeSection === "dashboard" && (
@@ -125,7 +174,7 @@ export default function Home() {
 
               {/* Evolution Status */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <EvolutionMetrics metrics={evolutionMetrics} />
+                <EvolutionMetrics initialMetrics={evolutionMetrics} />
                 <div className="lg:col-span-2">
                   <GenerationHistoryChart
                     data={generationHistory}
@@ -146,7 +195,7 @@ export default function Home() {
               {/* Active Trades & Market Overview */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2">
-                  <ActiveTradesTable trades={activeTrades.slice(0, 4)} />
+                  <ActiveTradesTable initialTrades={activeTrades.slice(0, 4)} initialRecentTrades={recentTrades} />
                 </div>
                 <DerivMarketOverview />
               </div>
@@ -254,7 +303,7 @@ export default function Home() {
 
               {/* Evolution Metrics */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <EvolutionMetrics metrics={evolutionMetrics} />
+                <EvolutionMetrics initialMetrics={evolutionMetrics} />
                 <div className="lg:col-span-2">
                   <GenerationHistoryChart
                     data={generationHistory}

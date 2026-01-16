@@ -7,6 +7,8 @@ import { CompactErrorState } from "@/components/ui/error-state";
 import { Activity, Dna, Zap, Clock, RefreshCw } from "lucide-react";
 import type { EvolutionMetrics as EvolutionMetricsType } from "@/types/evolution";
 import { useEvolutionData } from "@/hooks/useEvolutionData";
+import { useRealTimeEvolution } from "@/hooks/useRealTimeEvolution";
+import type { EvolutionLog } from "@/types/evolution";
 
 /**
  * Format uptime duration from milliseconds to HH:MM:SS
@@ -91,7 +93,8 @@ function EvolutionMetricsError({ message, onRetry }: EvolutionMetricsErrorProps)
  * EvolutionMetrics component props
  */
 interface EvolutionMetricsProps {
-  metrics?: EvolutionMetricsType | null;
+  initialMetrics?: EvolutionMetricsType | null;
+  initialEvolutionLog?: EvolutionLog[];
 }
 
 /**
@@ -106,19 +109,33 @@ interface EvolutionMetricsProps {
  * - Uptime counter
  *
  * Features:
+ * - Real-time updates via WebSocket
  * - Auto-refresh every 5 seconds
  * - Manual refresh button
  * - Loading skeleton
  * - Error state with retry
  */
-export const EvolutionMetrics = ({ metrics: propMetrics }: EvolutionMetricsProps) => {
+export const EvolutionMetrics = ({
+  initialMetrics,
+  initialEvolutionLog = []
+}: EvolutionMetricsProps) => {
+  // Use real-time hook for WebSocket updates
+  const {
+    metrics: realtimeMetrics,
+    isConnected,
+  } = useRealTimeEvolution(initialMetrics, initialEvolutionLog, {
+    enableToasts: true,
+    maxLogSize: 100,
+    enableAutoScroll: true,
+  });
+
   // Use hook if metrics are not provided as props
   const { evolutionMetrics: hookMetrics, loading, error, refetchMetrics } = useEvolutionData({
     refreshInterval: 5000,
-    enableAutoRefresh: !propMetrics,
+    enableAutoRefresh: !initialMetrics,
   });
 
-  const metrics = propMetrics || hookMetrics;
+  const metrics = realtimeMetrics || hookMetrics;
 
   // Show loading skeleton
   if (loading.metrics && !metrics) {
@@ -149,7 +166,7 @@ export const EvolutionMetrics = ({ metrics: propMetrics }: EvolutionMetricsProps
           <p className="text-sm text-muted-foreground">Living System Metrics</p>
         </div>
         <div className="flex items-center gap-2">
-          {!propMetrics && (
+          {!initialMetrics && (
             <Button
               variant="ghost"
               size="icon"

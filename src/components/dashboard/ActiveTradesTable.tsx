@@ -1,16 +1,29 @@
 "use client";
 
 import { Card } from "@/components/ui/card";
-import { Trade } from "@/hooks/useDashboardData";
 import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useRealTimeTrades } from "@/hooks/useRealTimeTrades";
+import type { EvolvedTrade } from "@/types/evolution";
 
 interface ActiveTradesTableProps {
-  trades: Trade[];
+  initialTrades?: EvolvedTrade[];
+  initialRecentTrades?: EvolvedTrade[];
 }
 
-export function ActiveTradesTable({ trades }: ActiveTradesTableProps) {
+export function ActiveTradesTable({
+  initialTrades = [],
+  initialRecentTrades = []
+}: ActiveTradesTableProps) {
+  const {
+    activeTrades,
+    isFlashing,
+  } = useRealTimeTrades(initialTrades, initialRecentTrades, {
+    enableFlash: true,
+    enableToasts: true,
+    pnlChangeThreshold: 10,
+  });
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -49,33 +62,40 @@ export function ActiveTradesTable({ trades }: ActiveTradesTableProps) {
             </tr>
           </thead>
           <tbody>
-            {trades.map((trade) => (
-              <tr key={trade.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                <td className="py-4 font-medium">{trade.pair}</td>
+            {activeTrades.map((trade) => (
+              <tr
+                key={trade.ticket}
+                className={cn(
+                  "border-b border-border/50 transition-colors",
+                  isFlashing(trade.ticket) && "bg-muted/80",
+                  !isFlashing(trade.ticket) && "hover:bg-muted/50"
+                )}
+              >
+                <td className="py-4 font-medium">{trade.symbol}</td>
                 <td className="py-4">
                   <span className={cn(
                     "px-2 py-1 rounded text-xs font-medium",
-                    trade.type === 'BUY' 
-                      ? "bg-profit/20 text-profit" 
+                    trade.action === 'BUY'
+                      ? "bg-profit/20 text-profit"
                       : "bg-loss/20 text-loss"
                   )}>
-                    {trade.type}
+                    {trade.action}
                   </span>
                 </td>
-                <td className="py-4 text-sm">{trade.entryPrice.toFixed(4)}</td>
-                <td className="py-4 text-sm">{trade.currentPrice.toFixed(4)}</td>
-                <td className="py-4 text-sm">{formatCurrency(trade.amount)}</td>
+                <td className="py-4 text-sm">{trade.entryPrice.toFixed(5)}</td>
+                <td className="py-4 text-sm">{trade.currentPrice?.toFixed(5) || '-'}</td>
+                <td className="py-4 text-sm">{formatCurrency(trade.volume)}</td>
                 <td className="py-4">
                   <div className={cn(
                     "flex items-center gap-1 font-medium",
-                    trade.pnl >= 0 ? "text-profit" : "text-loss"
+                    (trade.pnl ?? 0) >= 0 ? "text-profit" : "text-loss"
                   )}>
-                    {trade.pnl >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                    <span>{formatCurrency(trade.pnl)}</span>
-                    <span className="text-xs">({trade.pnlPercent.toFixed(2)}%)</span>
+                    {(trade.pnl ?? 0) >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                    <span>{formatCurrency(trade.pnl ?? 0)}</span>
+                    <span className="text-xs">({(trade.pnlPercent ?? 0).toFixed(2)}%)</span>
                   </div>
                 </td>
-                <td className="py-4 text-sm text-muted-foreground">{formatTime(trade.timestamp)}</td>
+                <td className="py-4 text-sm text-muted-foreground">{formatTime(new Date(trade.openTime))}</td>
               </tr>
             ))}
           </tbody>
@@ -84,51 +104,57 @@ export function ActiveTradesTable({ trades }: ActiveTradesTableProps) {
 
       {/* Mobile Cards */}
       <div className="md:hidden space-y-3">
-        {trades.map((trade) => (
-          <div key={trade.id} className="p-4 bg-card border border-border rounded-lg">
+        {activeTrades.map((trade) => (
+          <div
+            key={trade.ticket}
+            className={cn(
+              "p-4 bg-card border border-border rounded-lg transition-colors",
+              isFlashing(trade.ticket) && "bg-muted/80"
+            )}
+          >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <span className="font-bold">{trade.pair}</span>
+                <span className="font-bold">{trade.symbol}</span>
                 <span className={cn(
                   "px-2 py-0.5 rounded text-xs font-medium",
-                  trade.type === 'BUY' 
-                    ? "bg-profit/20 text-profit" 
+                  trade.action === 'BUY'
+                    ? "bg-profit/20 text-profit"
                     : "bg-loss/20 text-loss"
                 )}>
-                  {trade.type}
+                  {trade.action}
                 </span>
               </div>
               <div className={cn(
                 "font-bold",
-                trade.pnl >= 0 ? "text-profit" : "text-loss"
+                (trade.pnl ?? 0) >= 0 ? "text-profit" : "text-loss"
               )}>
-                {formatCurrency(trade.pnl)}
+                {formatCurrency(trade.pnl ?? 0)}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div>
                 <span className="text-muted-foreground">Entry:</span>
-                <span className="ml-1 font-medium">{trade.entryPrice.toFixed(4)}</span>
+                <span className="ml-1 font-medium">{trade.entryPrice.toFixed(5)}</span>
               </div>
               <div>
                 <span className="text-muted-foreground">Current:</span>
-                <span className="ml-1 font-medium">{trade.currentPrice.toFixed(4)}</span>
+                <span className="ml-1 font-medium">{trade.currentPrice?.toFixed(5) || '-'}</span>
               </div>
               <div>
                 <span className="text-muted-foreground">Amount:</span>
-                <span className="ml-1 font-medium">{formatCurrency(trade.amount)}</span>
+                <span className="ml-1 font-medium">{formatCurrency(trade.volume)}</span>
               </div>
               <div>
                 <span className="text-muted-foreground">P&L:</span>
                 <span className={cn(
                   "ml-1 font-medium",
-                  trade.pnl >= 0 ? "text-profit" : "text-loss"
+                  (trade.pnl ?? 0) >= 0 ? "text-profit" : "text-loss"
                 )}>
-                  {trade.pnlPercent.toFixed(2)}%
+                  {(trade.pnlPercent ?? 0).toFixed(2)}%
                 </span>
               </div>
             </div>
-            <div className="mt-2 text-xs text-muted-foreground">{formatTime(trade.timestamp)}</div>
+            <div className="mt-2 text-xs text-muted-foreground">{formatTime(new Date(trade.openTime))}</div>
           </div>
         ))}
       </div>
