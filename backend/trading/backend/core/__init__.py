@@ -6,6 +6,12 @@ from .breakeven_manager import (
     BreakevenConfig,
     BreakevenUpdate,
 )
+from .holding_time_optimizer import (
+    HoldingTimeOptimizer,
+    HoldingTimeConfig,
+    HoldingTimeUpdate,
+    MarketRegime,
+)
 from .partial_profit_manager import (
     PartialProfitManager,
     PartialProfitConfig,
@@ -26,6 +32,10 @@ __all__ = [
     "BreakevenManager",
     "BreakevenConfig",
     "BreakevenUpdate",
+    "HoldingTimeOptimizer",
+    "HoldingTimeConfig",
+    "HoldingTimeUpdate",
+    "MarketRegime",
     "PartialProfitManager",
     "PartialProfitConfig",
     "PartialProfitUpdate",
