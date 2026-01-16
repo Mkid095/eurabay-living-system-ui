@@ -3,7 +3,7 @@ SQLAlchemy async models for EURABAY Living System database.
 All models support async operations via aiosqlite.
 """
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any
 from sqlalchemy import (
     String, Float, Integer, Boolean, DateTime, Text, Index,
     ForeignKey, JSON, CheckConstraint
@@ -129,11 +129,40 @@ class Trade(Base):
         CheckConstraint("confidence >= 0 AND confidence <= 1", name="check_confidence_range"),
     )
 
+    signals: Mapped[list["Signal"]] = relationship(
+        "Signal",
+        back_populates="trade",
+        cascade="all, delete-orphan"
+    )
+
     def __repr__(self) -> str:
         return (
             f"<Trade(id={self.id}, symbol={self.symbol}, "
             f"direction={self.direction}, status={self.status})>"
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert model to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "mt5_ticket": self.mt5_ticket,
+            "symbol": self.symbol,
+            "direction": self.direction,
+            "entry_price": self.entry_price,
+            "entry_time": self.entry_time.isoformat() if self.entry_time else None,
+            "exit_price": self.exit_price,
+            "exit_time": self.exit_time.isoformat() if self.exit_time else None,
+            "stop_loss": self.stop_loss,
+            "take_profit": self.take_profit,
+            "lot_size": self.lot_size,
+            "confidence": self.confidence,
+            "strategy_used": self.strategy_used,
+            "profit_loss": self.profit_loss,
+            "profit_loss_pips": self.profit_loss_pips,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
 
 
 # ============================================================================
@@ -277,6 +306,32 @@ class PerformanceMetrics(Base):
             f"win_rate={self.win_rate}%, profit_factor={self.profit_factor})>"
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        """Convert model to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "period": self.period,
+            "period_start": self.period_start.isoformat() if self.period_start else None,
+            "period_end": self.period_end.isoformat() if self.period_end else None,
+            "total_trades": self.total_trades,
+            "winning_trades": self.winning_trades,
+            "losing_trades": self.losing_trades,
+            "win_rate": self.win_rate,
+            "total_profit": self.total_profit,
+            "total_loss": self.total_loss,
+            "profit_factor": self.profit_factor,
+            "average_win": self.average_win,
+            "average_loss": self.average_loss,
+            "max_drawdown": self.max_drawdown,
+            "max_drawdown_pct": self.max_drawdown_pct,
+            "sharpe_ratio": self.sharpe_ratio,
+            "sortino_ratio": self.sortino_ratio,
+            "calmar_ratio": self.calmar_ratio,
+            "equity_curve": self.equity_curve,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
 
 # ============================================================================
 # Model Metadata Model
@@ -391,6 +446,27 @@ class ModelMetadata(Base):
             f"active={self.is_active})>"
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        """Convert model to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "model_name": self.model_name,
+            "model_type": self.model_type,
+            "model_version": self.model_version,
+            "symbol": self.symbol,
+            "training_samples": self.training_samples,
+            "features_used": self.features_used,
+            "file_path": self.file_path,
+            "accuracy": self.accuracy,
+            "precision": self.precision,
+            "recall": self.recall,
+            "f1_score": self.f1_score,
+            "is_active": self.is_active,
+            "training_time": self.training_time.isoformat() if self.training_time else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
 
 # ============================================================================
 # Configuration Model
@@ -456,6 +532,19 @@ class Configuration(Base):
             f"<Configuration(id={self.id}, key={self.config_key}, "
             f"category={self.category})>"
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert model to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "config_key": self.config_key,
+            "config_value": self.config_value,
+            "description": self.description,
+            "category": self.category,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
 
 
 # ============================================================================
@@ -537,6 +626,21 @@ class MarketData(Base):
             f"timeframe={self.timeframe}, timestamp={self.timestamp})>"
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        """Convert model to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "symbol": self.symbol,
+            "timeframe": self.timeframe,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "open_price": self.open_price,
+            "high_price": self.high_price,
+            "low_price": self.low_price,
+            "close_price": self.close_price,
+            "volume": self.volume,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 
 # ============================================================================
 # Signal Model
@@ -616,8 +720,104 @@ class Signal(Base):
         CheckConstraint("confidence >= 0 AND confidence <= 1", name="check_signal_confidence"),
     )
 
+    trade: Mapped[Optional["Trade"]] = relationship(
+        "Trade",
+        back_populates="signals"
+    )
+
     def __repr__(self) -> str:
         return (
             f"<Signal(id={self.id}, symbol={self.symbol}, "
             f"direction={self.direction}, confidence={self.confidence})>"
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert model to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "symbol": self.symbol,
+            "direction": self.direction,
+            "confidence": self.confidence,
+            "price": self.price,
+            "strategy": self.strategy,
+            "reasons": self.reasons,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "executed": self.executed,
+            "trade_id": self.trade_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ============================================================================
+# System Log Model
+# ============================================================================
+
+class SystemLog(Base):
+    """
+    System log model for tracking system events and debugging.
+    Stores logs for monitoring and troubleshooting.
+    """
+    __tablename__ = "system_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        index=True,
+        comment="Log timestamp"
+    )
+    level: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        index=True,
+        comment="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL"
+    )
+    message: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="Log message"
+    )
+    context: Mapped[Optional[dict]] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Additional context data"
+    )
+    source: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
+        comment="Source of the log entry"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        comment="Record creation timestamp"
+    )
+
+    __table_args__ = (
+        Index("ix_system_logs_timestamp_level", "timestamp", "level"),
+        CheckConstraint(
+            "level IN ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')",
+            name="check_log_level"
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<SystemLog(id={self.id}, level={self.level}, "
+            f"message={self.message[:50]}..., source={self.source})>"
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert model to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "level": self.level,
+            "message": self.message,
+            "context": self.context,
+            "source": self.source,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
