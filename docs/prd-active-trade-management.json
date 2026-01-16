@@ -19,7 +19,10 @@
         "Create unit tests for trade manager foundation",
         "Test with mock positions"
       ],
-      "mavenSteps": [1, 5],
+      "mavenSteps": [
+        1,
+        5
+      ],
       "mcpTools": {},
       "priority": 1,
       "passes": true
@@ -42,7 +45,10 @@
         "Send trailing stop update to MT5",
         "Test trailing stop on historical data"
       ],
-      "mavenSteps": [1, 5],
+      "mavenSteps": [
+        1,
+        5
+      ],
       "mcpTools": {},
       "priority": 1,
       "passes": true
@@ -64,7 +70,10 @@
         "Test breakeven on historical data",
         "Breakeven should protect 90%+ of trades that reach 1.5R"
       ],
-      "mavenSteps": [1, 5],
+      "mavenSteps": [
+        1,
+        5
+      ],
       "mcpTools": {},
       "priority": 1,
       "passes": true
@@ -88,7 +97,10 @@
         "Test partial profit taking on historical data",
         "Partial profits should increase overall win rate"
       ],
-      "mavenSteps": [1, 5],
+      "mavenSteps": [
+        1,
+        5
+      ],
       "mcpTools": {},
       "priority": 1,
       "passes": true
@@ -113,7 +125,10 @@
         "Test holding time optimization on historical data",
         "Reduce average holding time by 30%"
       ],
-      "mavenSteps": [1, 5],
+      "mavenSteps": [
+        1,
+        5
+      ],
       "mcpTools": {},
       "priority": 2,
       "passes": true
@@ -138,7 +153,10 @@
         "Test scale-in on historical data",
         "Scale-in should improve profit factor on winning trades"
       ],
-      "mavenSteps": [1, 5],
+      "mavenSteps": [
+        1,
+        5
+      ],
       "mcpTools": {},
       "priority": 3,
       "passes": true
@@ -161,7 +179,10 @@
         "Track scale-out performance in database",
         "Test scale-out on historical data"
       ],
-      "mavenSteps": [1, 5],
+      "mavenSteps": [
+        1,
+        5
+      ],
       "mcpTools": {},
       "priority": 3,
       "passes": true
@@ -186,7 +207,10 @@
         "Handle MT5 errors gracefully",
         "Test monitoring loop with multiple positions"
       ],
-      "mavenSteps": [1, 5],
+      "mavenSteps": [
+        1,
+        5
+      ],
       "mcpTools": {},
       "priority": 1,
       "passes": true
@@ -211,7 +235,10 @@
         "Enforce state-based rules (e.g., can't scale out if not scaled in)",
         "Test state machine with all transitions"
       ],
-      "mavenSteps": [1, 5],
+      "mavenSteps": [
+        1,
+        5
+      ],
       "mcpTools": {},
       "priority": 2,
       "passes": true
@@ -234,7 +261,10 @@
         "Log all manual overrides with user and reason",
         "Test all manual override functions"
       ],
-      "mavenSteps": [1, 7],
+      "mavenSteps": [
+        1,
+        7
+      ],
       "mcpTools": {},
       "priority": 2,
       "passes": true
@@ -255,7 +285,10 @@
         "Stream trade updates via WebSocket",
         "Test all API endpoints"
       ],
-      "mavenSteps": [1, 7],
+      "mavenSteps": [
+        1,
+        7
+      ],
       "mcpTools": {},
       "priority": 2,
       "passes": true
@@ -277,7 +310,10 @@
         "Export lifecycle data to CSV",
         "Test lifecycle logging"
       ],
-      "mavenSteps": [1, 5],
+      "mavenSteps": [
+        1,
+        5
+      ],
       "mcpTools": {},
       "priority": 2,
       "passes": true
@@ -301,7 +337,10 @@
         "Generate performance comparison report weekly",
         "Test on historical data (backtest active vs passive)"
       ],
-      "mavenSteps": [1, 5],
+      "mavenSteps": [
+        1,
+        5
+      ],
       "mcpTools": {},
       "priority": 3,
       "passes": true
@@ -323,7 +362,10 @@
         "Test adaptive parameters on historical data",
         "Adaptive parameters should improve Sharpe ratio by 10%+"
       ],
-      "mavenSteps": [1, 5],
+      "mavenSteps": [
+        1,
+        5
+      ],
       "mcpTools": {},
       "priority": 3,
       "passes": true
@@ -345,10 +387,13 @@
         "Implement alert digest (hourly summary)",
         "Test alert system"
       ],
-      "mavenSteps": [1, 7],
+      "mavenSteps": [
+        1,
+        7
+      ],
       "mcpTools": {},
       "priority": 3,
-      "passes": false
+      "passes": true
     }
   ],
   "functionalRequirements": [

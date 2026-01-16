@@ -82,14 +82,20 @@ class TrailingStopManager:
             logger.info(f"Trailing stop updated: {update.new_stop_loss}")
     """
 
-    def __init__(self, mt5_connector: Optional["MT5Connector"] = None):
+    def __init__(
+        self,
+        mt5_connector: Optional["MT5Connector"] = None,
+        alert_system: Optional["ManagementAlertSystem"] = None,
+    ):
         """
         Initialize the TrailingStopManager.
 
         Args:
             mt5_connector: MT5 API connector instance (optional, for testing)
+            alert_system: ManagementAlertSystem instance for sending alerts
         """
         self._mt5 = mt5_connector
+        self._alert_system = alert_system
         self._update_history: list[TrailingStopUpdate] = []
 
         logger.info("TrailingStopManager initialized")
@@ -254,6 +260,23 @@ class TrailingStopManager:
 
         # Store update in history
         self._update_history.append(update)
+
+        # Send alert if alert system is configured
+        if self._alert_system is not None:
+            try:
+                import asyncio
+                asyncio.create_task(
+                    self._alert_system.alert_trailing_stop_updated(
+                        ticket=position.ticket,
+                        symbol=position.symbol,
+                        old_stop_loss=update.old_stop_loss or 0.0,
+                        new_stop_loss=update.new_stop_loss,
+                        current_price=position.current_price,
+                        profit=position.profit,
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Failed to send trailing stop alert: {e}")
 
         return update
 

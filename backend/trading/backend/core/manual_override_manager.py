@@ -148,14 +148,20 @@ class ManualOverrideManager:
         )
     """
 
-    def __init__(self, mt5_connector: Optional["MT5Connector"] = None):
+    def __init__(
+        self,
+        mt5_connector: Optional["MT5Connector"] = None,
+        alert_system: Optional["ManagementAlertSystem"] = None,
+    ):
         """
         Initialize the ManualOverrideManager.
 
         Args:
             mt5_connector: MT5 API connector instance (optional, for testing)
+            alert_system: ManagementAlertSystem instance for sending alerts
         """
         self._mt5 = mt5_connector
+        self._alert_system = alert_system
         self._override_states: dict[int, OverrideState] = {}
         self._override_history: list[OverrideRecord] = []
         self._on_override_callback: Optional[Callable[[OverrideRecord], None]] = None
@@ -255,7 +261,7 @@ class ManualOverrideManager:
                     reason=reason,
                     confirmed=confirmed,
                 )
-                self._record_override(record)
+                self._record_override(record, position.symbol)
 
                 # Update position state
                 if lots is None or closed_lots >= position.volume:
@@ -280,7 +286,7 @@ class ManualOverrideManager:
                     reason=reason,
                     confirmed=confirmed,
                 )
-                self._record_override(record)
+                self._record_override(record, position.symbol)
 
                 return OverrideResult(
                     success=True,
@@ -337,7 +343,7 @@ class ManualOverrideManager:
             reason=reason,
             confirmed=confirmed,
         )
-        self._record_override(record)
+        self._record_override(record, position.symbol)
 
         return OverrideResult(
             success=True,
@@ -385,7 +391,7 @@ class ManualOverrideManager:
             reason=reason,
             confirmed=confirmed,
         )
-        self._record_override(record)
+        self._record_override(record, position.symbol)
 
         return OverrideResult(
             success=True,
@@ -448,7 +454,7 @@ class ManualOverrideManager:
                 reason=reason,
                 confirmed=confirmed,
             )
-            self._record_override(record)
+            self._record_override(record, position.symbol)
 
             return OverrideResult(
                 success=True,
@@ -520,7 +526,7 @@ class ManualOverrideManager:
                 reason=reason,
                 confirmed=confirmed,
             )
-            self._record_override(record)
+            self._record_override(record, position.symbol)
 
             return OverrideResult(
                 success=True,
@@ -580,7 +586,7 @@ class ManualOverrideManager:
             reason=reason,
             confirmed=confirmed,
         )
-        self._record_override(record)
+        self._record_override(record, position.symbol)
 
         return OverrideResult(
             success=True,
@@ -628,7 +634,7 @@ class ManualOverrideManager:
             reason=reason,
             confirmed=confirmed,
         )
-        self._record_override(record)
+        self._record_override(record, position.symbol)
 
         return OverrideResult(
             success=True,
@@ -708,12 +714,13 @@ class ManualOverrideManager:
             del self._override_states[ticket]
             logger.debug(f"Override state cleared for position {ticket}")
 
-    def _record_override(self, record: OverrideRecord) -> None:
+    def _record_override(self, record: OverrideRecord, symbol: str = "UNKNOWN") -> None:
         """
         Record a manual override action.
 
         Args:
             record: OverrideRecord to store
+            symbol: Trading symbol for the position
         """
         self._override_history.append(record)
 
@@ -721,6 +728,22 @@ class ManualOverrideManager:
             f"Override recorded: {record.action.value} for position {record.ticket} "
             f"by user '{record.user}': {record.reason}"
         )
+
+        # Send alert if alert system is configured
+        if self._alert_system is not None:
+            try:
+                import asyncio
+                asyncio.create_task(
+                    self._alert_system.alert_manual_override_used(
+                        ticket=record.ticket,
+                        symbol=symbol,
+                        action=record.action.value,
+                        user=record.user,
+                        reason=record.reason,
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Failed to send manual override alert: {e}")
 
         # Trigger callback if registered
         if self._on_override_callback:

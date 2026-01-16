@@ -23,6 +23,11 @@ from .schemas import (
     PerformanceMetrics,
     ErrorResponse,
     TradeUpdateMessage,
+    AlertResponse,
+    AlertDigestResponse,
+    AlertsListResponse,
+    AlertPriority,
+    AlertType,
 )
 
 # Configure logging
@@ -463,6 +468,120 @@ async def get_performance_metrics():
         )
 
 
+# Alert endpoints
+@router.get("/alerts", response_model=AlertsListResponse)
+async def get_alerts(
+    ticket: Optional[int] = None,
+    alert_type: Optional[AlertType] = None,
+    priority: Optional[AlertPriority] = None,
+    limit: int = 100,
+):
+    """
+    Get recent alerts.
+
+    Returns a list of alerts matching the specified filters.
+    """
+    try:
+        # This would integrate with the actual alert system
+        # For now, return mock data
+        mock_alerts = [
+            AlertResponse(
+                alert_id="alert_1",
+                alert_type=AlertType.TRAILING_STOP,
+                priority=AlertPriority.INFO,
+                ticket=12345,
+                symbol="EURUSD",
+                message="Trailing stop updated for EURUSD #12345: 1.0840 -> 1.0850",
+                timestamp=datetime.now(),
+                data={"old_sl": 1.0840, "new_sl": 1.0850},
+            ),
+            AlertResponse(
+                alert_id="alert_2",
+                alert_type=AlertType.BREAKEVEN,
+                priority=AlertPriority.INFO,
+                ticket=12346,
+                symbol="GBPUSD",
+                message="Breakeven triggered for GBPUSD #12346",
+                timestamp=datetime.now(),
+                data={"stop_loss": 1.2650, "entry_price": 1.2650},
+            ),
+        ]
+
+        # Apply filters (mock implementation)
+        filtered_alerts = mock_alerts
+        if ticket is not None:
+            filtered_alerts = [a for a in filtered_alerts if a.ticket == ticket]
+        if alert_type is not None:
+            filtered_alerts = [a for a in filtered_alerts if a.alert_type == alert_type]
+        if priority is not None:
+            filtered_alerts = [a for a in filtered_alerts if a.priority == priority]
+
+        return AlertsListResponse(
+            alerts=filtered_alerts[:limit],
+            total_count=len(filtered_alerts),
+            filtered=ticket is not None or alert_type is not None or priority is not None,
+        )
+    except Exception as e:
+        logger.error(f"Error fetching alerts: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch alerts",
+        )
+
+
+@router.get("/alerts/digest", response_model=AlertDigestResponse)
+async def get_alert_digest():
+    """
+    Get hourly alert digest.
+
+    Returns a summary of all alerts in the current hour period.
+    """
+    try:
+        # Mock digest implementation
+        now = datetime.now()
+        return AlertDigestResponse(
+            digest_id=f"digest_{now.strftime('%Y%m%d_%H%M%S')}",
+            start_time=now.replace(minute=0, second=0, microsecond=0),
+            end_time=now,
+            total_alerts=2,
+            alerts_by_type={
+                "trailing_stop": 1,
+                "breakeven": 1,
+            },
+            alerts_by_priority={
+                "info": 2,
+            },
+            alerts=[
+                AlertResponse(
+                    alert_id="alert_1",
+                    alert_type=AlertType.TRAILING_STOP,
+                    priority=AlertPriority.INFO,
+                    ticket=12345,
+                    symbol="EURUSD",
+                    message="Trailing stop updated",
+                    timestamp=now,
+                    data={},
+                ),
+                AlertResponse(
+                    alert_id="alert_2",
+                    alert_type=AlertType.BREAKEVEN,
+                    priority=AlertPriority.INFO,
+                    ticket=12346,
+                    symbol="GBPUSD",
+                    message="Breakeven triggered",
+                    timestamp=now,
+                    data={},
+                ),
+            ],
+        )
+    except Exception as e:
+        logger.error(f"Error fetching alert digest: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch alert digest",
+        )
+
+
 @router.websocket("/ws/trades")
 async def websocket_trades(websocket: WebSocket):
     """
@@ -494,4 +613,38 @@ async def websocket_trades(websocket: WebSocket):
         trade_manager.remove_websocket_client(websocket)
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
+        trade_manager.remove_websocket_client(websocket)
+
+
+@router.websocket("/ws/alerts")
+async def websocket_alerts(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time alert updates.
+
+    Clients connect to this endpoint to receive real-time alerts
+    for all management actions.
+    """
+    await websocket.accept()
+    trade_manager.add_websocket_client(websocket)
+    logger.info("Alerts WebSocket client connected")
+
+    try:
+        # Send initial connection confirmation
+        await websocket.send_json({
+            "event_type": "alerts_connected",
+            "timestamp": datetime.now().isoformat(),
+            "message": "Connected to alerts stream",
+        })
+
+        # Keep connection alive and handle incoming messages
+        while True:
+            data = await websocket.receive_text()
+            # Echo back or process client messages if needed
+            logger.debug(f"Received alerts WebSocket message: {data}")
+
+    except WebSocketDisconnect:
+        logger.info("Alerts WebSocket client disconnected")
+        trade_manager.remove_websocket_client(websocket)
+    except Exception as e:
+        logger.error(f"Alerts WebSocket error: {e}")
         trade_manager.remove_websocket_client(websocket)

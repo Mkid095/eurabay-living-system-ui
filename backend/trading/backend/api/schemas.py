@@ -30,6 +30,25 @@ class Direction(str, Enum):
     SELL = "SELL"
 
 
+class AlertPriority(str, Enum):
+    """Alert priority levels."""
+
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+
+class AlertType(str, Enum):
+    """Types of management alerts."""
+
+    TRAILING_STOP = "trailing_stop"
+    BREAKEVEN = "breakeven"
+    PARTIAL_PROFIT = "partial_profit"
+    POSITION_CLOSED = "position_closed"
+    MANUAL_OVERRIDE = "manual_override"
+    HOLDING_LIMIT = "holding_limit"
+
+
 class TradeStateTransition(BaseModel):
     """State transition record."""
 
@@ -149,3 +168,36 @@ class TradeUpdateMessage(BaseModel):
     ticket: int
     timestamp: datetime
     data: dict
+
+
+class AlertResponse(BaseModel):
+    """Management alert response model."""
+
+    alert_id: str
+    alert_type: AlertType
+    priority: AlertPriority
+    ticket: int
+    symbol: str
+    message: str
+    timestamp: datetime
+    data: dict = Field(default_factory=dict)
+
+
+class AlertDigestResponse(BaseModel):
+    """Alert digest response model."""
+
+    digest_id: str
+    start_time: datetime
+    end_time: datetime
+    total_alerts: int
+    alerts_by_type: dict[str, int]
+    alerts_by_priority: dict[str, int]
+    alerts: list[AlertResponse]
+
+
+class AlertsListResponse(BaseModel):
+    """Response for alerts list endpoint."""
+
+    alerts: list[AlertResponse]
+    total_count: int
+    filtered: bool = False

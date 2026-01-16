@@ -107,14 +107,20 @@ class HoldingTimeOptimizer:
             logger.info(f"Holding time close: {update.close_percentage*100}%")
     """
 
-    def __init__(self, mt5_connector: Optional["MT5Connector"] = None):
+    def __init__(
+        self,
+        mt5_connector: Optional["MT5Connector"] = None,
+        alert_system: Optional["ManagementAlertSystem"] = None,
+    ):
         """
         Initialize the HoldingTimeOptimizer.
 
         Args:
             mt5_connector: MT5 API connector instance (optional, for testing)
+            alert_system: ManagementAlertSystem instance for sending alerts
         """
         self._mt5 = mt5_connector
+        self._alert_system = alert_system
         self._close_history: list[HoldingTimeUpdate] = []
         self._last_check_time: dict[int, float] = {}  # ticket -> timestamp
 
@@ -323,6 +329,24 @@ class HoldingTimeOptimizer:
 
         # Store update in history
         self._close_history.append(update)
+
+        # Send alert if alert system is configured
+        if self._alert_system is not None:
+            try:
+                import asyncio
+                action_taken = f"closed_{close_percentage*100:.0f}%"
+                asyncio.create_task(
+                    self._alert_system.alert_holding_limit_reached(
+                        ticket=position.ticket,
+                        symbol=position.symbol,
+                        hold_duration_seconds=update.trade_age_seconds,
+                        max_hold_duration_seconds=update.max_allowed_seconds,
+                        current_profit=position.profit,
+                        action_taken=action_taken,
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Failed to send holding limit alert: {e}")
 
         # Update position state if fully closed
         if close_percentage >= 1.0:

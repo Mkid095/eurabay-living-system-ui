@@ -80,14 +80,20 @@ class BreakevenManager:
             logger.info(f"Breakeven triggered: {update.new_stop_loss}")
     """
 
-    def __init__(self, mt5_connector: Optional["MT5Connector"] = None):
+    def __init__(
+        self,
+        mt5_connector: Optional["MT5Connector"] = None,
+        alert_system: Optional["ManagementAlertSystem"] = None,
+    ):
         """
         Initialize the BreakevenManager.
 
         Args:
             mt5_connector: MT5 API connector instance (optional, for testing)
+            alert_system: ManagementAlertSystem instance for sending alerts
         """
         self._mt5 = mt5_connector
+        self._alert_system = alert_system
         self._update_history: list[BreakevenUpdate] = []
         self._breakeven_locked: set[int] = set()  # Positions locked at breakeven
 
@@ -293,6 +299,22 @@ class BreakevenManager:
 
         # Store update in history
         self._update_history.append(update)
+
+        # Send alert if alert system is configured
+        if self._alert_system is not None:
+            try:
+                import asyncio
+                asyncio.create_task(
+                    self._alert_system.alert_breakeven_triggered(
+                        ticket=position.ticket,
+                        symbol=position.symbol,
+                        stop_loss=breakeven_price,
+                        entry_price=position.entry_price,
+                        profit_r=current_profit_r,
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Failed to send breakeven alert: {e}")
 
         return update
 

@@ -106,14 +106,20 @@ class PartialProfitManager:
             logger.info(f"Partial profit taken: {update.close_percentage*100}%")
     """
 
-    def __init__(self, mt5_connector: Optional["MT5Connector"] = None):
+    def __init__(
+        self,
+        mt5_connector: Optional["MT5Connector"] = None,
+        alert_system: Optional["ManagementAlertSystem"] = None,
+    ):
         """
         Initialize the PartialProfitManager.
 
         Args:
             mt5_connector: MT5 API connector instance (optional, for testing)
+            alert_system: ManagementAlertSystem instance for sending alerts
         """
         self._mt5 = mt5_connector
+        self._alert_system = alert_system
         self._close_history: list[PartialProfitUpdate] = []
         self._last_close_time: dict[int, float] = {}  # ticket -> timestamp
         self._original_volumes: dict[int, float] = {}  # ticket -> original volume
@@ -417,6 +423,22 @@ class PartialProfitManager:
 
         # Store update in history
         self._close_history.append(update)
+
+        # Send alert if alert system is configured
+        if self._alert_system is not None:
+            try:
+                import asyncio
+                asyncio.create_task(
+                    self._alert_system.alert_partial_profit_taken(
+                        ticket=position.ticket,
+                        symbol=position.symbol,
+                        percentage_closed=update.close_percentage * 100,
+                        profit_banked=update.profit_at_close,
+                        remaining_volume=update.remaining_lots,
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Failed to send partial profit alert: {e}")
 
         # Move SL to breakeven after first partial close if configured
         if config.move_to_breakeven_after_first and self._get_remaining_percentage(position) <= 0.5:
