@@ -48,9 +48,20 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false, // Can be enabled later
-    sendResetPassword: async () => {
-      // TODO: Implement email sending for password reset (US-011)
-      throw new Error('Password reset not implemented yet');
+    sendResetPassword: async ({ user, url }) => {
+      // Password reset implementation for US-011
+      // In production, this would send an email with the reset URL
+      // For now, we log the URL to console for development/testing
+      const resetUrl = typeof url === 'string' ? url : String(url);
+      console.log('[Password Reset] Reset URL for user:', user.email, resetUrl);
+
+      // TODO: Configure email service (e.g., Resend, SendGrid) to send reset emails
+      // Example:
+      // await sendEmail({
+      //   to: user.email,
+      //   subject: 'Reset Your Password',
+      //   html: `<p>Click <a href="${resetUrl}">here</a> to reset your password.</p>`,
+      // });
     },
     sendVerificationEmail: async () => {
       // TODO: Implement email verification

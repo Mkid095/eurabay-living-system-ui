@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -11,22 +11,29 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
-  const { login, loading, isAuthenticated } = useAuth();
+  const searchParams = useSearchParams();
+  const { login, isAuthenticated } = useAuth();
 
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [rememberMe, setRememberMe] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [success, setSuccess] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Redirect to dashboard if already authenticated
   useEffect(() => {
-    if (!loading && isAuthenticated) {
+    if (searchParams.get('reset') === 'success') {
+      setSuccess('Your password has been reset successfully. Please sign in with your new password.');
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
       router.push('/dashboard');
     }
-  }, [loading, isAuthenticated, router]);
+  }, [isAuthenticated, router]);
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -40,14 +47,13 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
 
-    // Validate email format
     if (!validateEmail(email)) {
       setError('Please enter a valid email address');
       return;
     }
 
-    // Validate password minimum length
     if (!validatePassword(password)) {
       setError('Password must be at least 8 characters');
       return;
@@ -59,10 +65,8 @@ export default function LoginPage() {
       const result = await login({ email, password, rememberMe });
 
       if (result.success) {
-        // Redirect to dashboard on successful login
         router.push('/dashboard');
       } else {
-        // Show error message for failed login
         setError(result.error || 'Login failed. Please try again.');
       }
     } catch (err) {
@@ -71,18 +75,6 @@ export default function LoginPage() {
       setIsSubmitting(false);
     }
   };
-
-  // Show loading state while checking authentication
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="text-center">
-          <Spinner className="mx-auto size-8" />
-          <p className="mt-4 text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -95,14 +87,18 @@ export default function LoginPage() {
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            {/* Error message */}
             {error && (
               <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
                 {error}
               </div>
             )}
 
-            {/* Email field */}
+            {success && (
+              <div className="rounded-md bg-primary/15 p-3 text-sm text-foreground">
+                {success}
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -117,7 +113,6 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Password field */}
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
@@ -133,7 +128,6 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Remember me checkbox */}
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="remember"
@@ -151,7 +145,6 @@ export default function LoginPage() {
           </CardContent>
 
           <CardFooter className="flex flex-col space-y-4">
-            {/* Submit button with loading spinner */}
             <Button
               type="submit"
               className="w-full"
@@ -167,7 +160,6 @@ export default function LoginPage() {
               )}
             </Button>
 
-            {/* Forgot password link */}
             <div className="text-center">
               <Link
                 href="/forgot-password"
@@ -177,7 +169,6 @@ export default function LoginPage() {
               </Link>
             </div>
 
-            {/* Sign up link */}
             <div className="text-center text-sm text-muted-foreground">
               Don't have an account?{' '}
               <Link href="/register" className="text-primary hover:underline">
@@ -188,5 +179,20 @@ export default function LoginPage() {
         </form>
       </Card>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="text-center">
+          <Spinner className="mx-auto size-8" />
+          <p className="mt-4 text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }
