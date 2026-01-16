@@ -164,7 +164,7 @@ export default function Home() {
                   <EnhancedActiveTradesTable />
                 </div>
                 <div className="space-y-6">
-                  <PendingSignals signals={pendingSignals} />
+                  <PendingSignals />
                   <RecentTrades trades={recentTrades} />
                 </div>
               </div>

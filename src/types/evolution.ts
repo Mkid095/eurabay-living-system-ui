@@ -67,3 +67,15 @@ export interface EvolvedTrade {
   confidence: number;
   generation?: number;
 }
+
+export type SignalType = 'STRONG_BUY' | 'BUY' | 'SELL' | 'STRONG_SELL';
+
+export interface PendingSignal {
+  id: string;
+  symbol: string;
+  signalType: SignalType;
+  confidence: number;
+  htfContext: string;
+  featuresUsed: string[];
+  timestamp: string;
+}
