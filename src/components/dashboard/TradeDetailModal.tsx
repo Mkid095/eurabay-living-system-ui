@@ -13,10 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { TrendingUp, TrendingDown, Clock, Target, Shield } from "lucide-react";
-import type { EvolvedTrade } from "@/types/evolution";
+import type { EvolvedTrade, ClosedTrade } from "@/types/evolution";
+
+type TradeData = EvolvedTrade | ClosedTrade;
 
 interface TradeDetailModalProps {
-  trade: EvolvedTrade | null;
+  trade: TradeData | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCloseTrade?: (ticket: string) => Promise<void>;
@@ -46,8 +48,17 @@ export function TradeDetailModal({
     }
   };
 
+  // Check if trade is a closed trade
+  const isClosedTrade = (t: TradeData): t is ClosedTrade => {
+    return 'exitPrice' in t && 'exitTime' in t;
+  };
+
   const pnlColor = trade.pnl >= 0 ? "text-profit" : "text-loss";
   const bgColor = trade.pnl >= 0 ? "bg-profit/10" : "bg-loss/10";
+
+  // Get display price based on trade type
+  const displayPrice = isClosedTrade(trade) ? trade.exitPrice : trade.currentPrice;
+  const priceLabel = isClosedTrade(trade) ? "Exit Price" : "Current Price";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -93,9 +104,9 @@ export function TradeDetailModal({
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-muted-foreground">Current Price</p>
+                <p className="text-sm text-muted-foreground">{priceLabel}</p>
                 <p className="text-lg font-mono font-semibold">
-                  {trade.currentPrice.toFixed(5)}
+                  {displayPrice.toFixed(5)}
                 </p>
               </div>
             </div>
@@ -110,9 +121,9 @@ export function TradeDetailModal({
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground mb-1">Current Price</p>
+              <p className="text-sm text-muted-foreground mb-1">{priceLabel}</p>
               <p className="font-mono font-semibold">
-                {trade.currentPrice.toFixed(5)}
+                {displayPrice.toFixed(5)}
               </p>
             </div>
           </div>
@@ -127,6 +138,9 @@ export function TradeDetailModal({
                     <p className="text-xs text-muted-foreground">Stop Loss</p>
                     <p className="font-mono font-semibold text-loss">
                       {trade.stopLoss.toFixed(5)}
+                      {isClosedTrade(trade) && trade.stopLossHit && (
+                        <span className="ml-2 text-xs">Hit!</span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -138,6 +152,9 @@ export function TradeDetailModal({
                     <p className="text-xs text-muted-foreground">Take Profit</p>
                     <p className="font-mono font-semibold text-profit">
                       {trade.takeProfit.toFixed(5)}
+                      {isClosedTrade(trade) && trade.takeProfitHit && (
+                        <span className="ml-2 text-xs">Hit!</span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -146,19 +163,32 @@ export function TradeDetailModal({
           )}
 
           {/* Time Information */}
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-muted-foreground" />
-            <div>
-              <p className="text-xs text-muted-foreground">Entry Time</p>
-              <p className="text-sm font-medium">
-                {new Date(trade.entryTime).toLocaleString()}
-              </p>
-              {trade.duration && (
-                <p className="text-xs text-muted-foreground">
-                  Duration: {trade.duration}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-xs text-muted-foreground">Entry Time</p>
+                <p className="text-sm font-medium">
+                  {new Date(trade.entryTime).toLocaleString()}
                 </p>
-              )}
+              </div>
             </div>
+            {isClosedTrade(trade) && (
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Exit Time</p>
+                  <p className="text-sm font-medium">
+                    {new Date(trade.exitTime).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            )}
+            {trade.duration && (
+              <p className="text-xs text-muted-foreground ml-6">
+                Duration: {trade.duration}
+              </p>
+            )}
           </div>
 
           {/* Context Information */}
@@ -222,7 +252,7 @@ export function TradeDetailModal({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
-          {onCloseTrade && (
+          {onCloseTrade && !isClosedTrade(trade) && (
             <Button
               variant="destructive"
               onClick={handleCloseTrade}

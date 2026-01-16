@@ -165,7 +165,7 @@ export default function Home() {
                 </div>
                 <div className="space-y-6">
                   <PendingSignals />
-                  <RecentTrades trades={recentTrades} />
+                  <RecentTrades />
                 </div>
               </div>
 

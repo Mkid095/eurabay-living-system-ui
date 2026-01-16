@@ -95,6 +95,28 @@ export interface EvolvedTrade {
   generation?: number;
 }
 
+export interface ClosedTrade {
+  ticket: string;
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  entryPrice: number;
+  exitPrice: number;
+  pnl: number;
+  pnlPercent: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  stopLossHit?: boolean;
+  takeProfitHit?: boolean;
+  entryTime: string;
+  exitTime: string;
+  duration: string;
+  htfContext: string;
+  ltfContext: string;
+  featuresUsed: string[];
+  confidence: number;
+  generation?: number;
+}
+
 export type SignalType = 'STRONG_BUY' | 'BUY' | 'SELL' | 'STRONG_SELL';
 
 export interface PendingSignal {
