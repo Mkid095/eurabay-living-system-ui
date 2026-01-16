@@ -44,6 +44,13 @@ from .trade_state import (
     TradeStateTracker,
     TradePosition,
 )
+from .trade_lifecycle_logger import (
+    TradeLifecycleLogger,
+    LifecycleEventType,
+    MarketConditions,
+    LifecycleEvent,
+    ManagementAction,
+)
 from .trailing_stop_manager import (
     TrailingStopManager,
     TrailingStopConfig,
@@ -89,6 +96,11 @@ __all__ = [
     "TradeStateTransition",
     "TradeStateTracker",
     "TradePosition",
+    "TradeLifecycleLogger",
+    "LifecycleEventType",
+    "MarketConditions",
+    "LifecycleEvent",
+    "ManagementAction",
     "TrailingStopManager",
     "TrailingStopConfig",
     "TrailingStopUpdate",
