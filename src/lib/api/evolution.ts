@@ -14,6 +14,7 @@ import type {
   MutationSuccess,
   ControllerDecisionHistory,
   EvolutionLog,
+  FeatureDetail,
 } from '@/types/evolution';
 
 /**
@@ -144,6 +145,19 @@ export async function resetToGeneration(generation: number = 1): Promise<void> {
 }
 
 /**
+ * Fetch feature details
+ * GET /evolution/feature-details/:featureId
+ *
+ * @param featureId - The feature ID to fetch details for
+ */
+export async function fetchFeatureDetails(featureId: string): Promise<FeatureDetail> {
+  const { data } = await apiClient.get<FeatureDetail>(
+    `${API_ENDPOINTS.evolution.featureDetails}/${featureId}`
+  );
+  return data;
+}
+
+/**
  * Export evolution service object
  */
 export const evolutionApi = {
@@ -157,6 +171,7 @@ export const evolutionApi = {
   forceEvolution,
   forceAggressiveEvolution,
   resetToGeneration,
+  fetchFeatureDetails,
 } as const;
 
 /**

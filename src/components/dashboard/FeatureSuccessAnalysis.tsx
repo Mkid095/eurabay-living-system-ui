@@ -20,13 +20,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   Pagination,
   PaginationContent,
   PaginationEllipsis,
@@ -44,8 +37,10 @@ import {
   ArrowUp,
   ArrowDown,
   AlertCircle,
+  GitCompare,
 } from "lucide-react";
 import type { FeatureSuccess } from "@/types/evolution";
+import { FeatureDetailModal } from "./FeatureDetailModal";
 
 interface FeatureSuccessAnalysisProps {
   data: FeatureSuccess[];
@@ -474,86 +469,11 @@ export const FeatureSuccessAnalysis = ({
       </Card>
 
       {/* Feature Detail Modal */}
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Feature Details</DialogTitle>
-            <DialogDescription>
-              Detailed performance metrics for {selectedFeature?.featureName}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedFeature && (
-            <div className="space-y-6">
-              {/* Success Rate */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Success Rate</p>
-                  <div
-                    className={`text-2xl font-bold ${getSuccessRateColor(
-                      selectedFeature.successRate
-                    )}`}
-                  >
-                    {selectedFeature.successRate.toFixed(1)}%
-                  </div>
-                  <div
-                    className={`h-2 rounded-full ${getSuccessRateBgColor(
-                      selectedFeature.successRate
-                    )}`}
-                  >
-                    <div
-                      className="h-full rounded-full bg-current"
-                      style={{ width: `${selectedFeature.successRate}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Total Uses</p>
-                  <p className="text-2xl font-bold">
-                    {selectedFeature.totalUses}
-                  </p>
-                </div>
-              </div>
-
-              {/* Win/Loss Record */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Wins</p>
-                  <p className="text-2xl font-bold text-profit">
-                    {selectedFeature.wins}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Losses</p>
-                  <p className="text-2xl font-bold text-loss">
-                    {selectedFeature.losses}
-                  </p>
-                </div>
-              </div>
-
-              {/* Average P&L */}
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Average P&L per Trade</p>
-                <p
-                  className={`text-2xl font-bold ${
-                    selectedFeature.avgPnL >= 0 ? "text-profit" : "text-loss"
-                  }`}
-                >
-                  {selectedFeature.avgPnL >= 0 ? "+" : ""}
-                  {selectedFeature.avgPnL.toFixed(2)}
-                </p>
-              </div>
-
-              {/* Feature ID */}
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Feature ID</p>
-                <p className="text-sm font-mono bg-muted p-2 rounded">
-                  {selectedFeature.featureId}
-                </p>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <FeatureDetailModal
+        feature={selectedFeature}
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+      />
     </>
   );
 };

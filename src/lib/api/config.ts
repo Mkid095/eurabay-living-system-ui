@@ -33,6 +33,7 @@ export const API_ENDPOINTS = {
     controllerHistory: '/evolution/controller-history',
     logs: '/evolution/logs',
     parameters: '/evolution/parameters',
+    featureDetails: '/evolution/feature-details',
   },
 
   // Trading endpoints

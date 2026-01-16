@@ -26,6 +26,33 @@ export interface FeatureSuccess {
   avgPnL: number;
 }
 
+export interface WinRateBreakdown {
+  symbol: string;
+  winRate: number;
+  totalTrades: number;
+  wins: number;
+  losses: number;
+}
+
+export interface FeatureDetail extends FeatureSuccess {
+  featureType?: string;
+  category?: string;
+  trend?: 'improving' | 'declining' | 'stable';
+  trendPercent?: number;
+  winRatesBySymbol: WinRateBreakdown[];
+  winRatesByTimeframe: Array<{
+    timeframe: string;
+    winRate: number;
+    totalTrades: number;
+    wins: number;
+    losses: number;
+  }>;
+  createdAt: string;
+  lastModified: string;
+  parameters: Record<string, number | string | boolean>;
+  recentTrades: EvolvedTrade[];
+}
+
 export interface MutationSuccess {
   mutationType: string;
   successRate: number;
