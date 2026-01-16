@@ -8,3 +8,4 @@ export * from './config';
 export * from './client';
 export * from './evolution';
 export * from './performance';
+export * from './markets';
