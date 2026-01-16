@@ -20,6 +20,7 @@ alembic==1.13.1
 pandas==2.2.0
 numpy==1.26.3
 pyarrow==14.0.1
+fastparquet==2024.2.0
 
 # Machine Learning
 scikit-learn==1.4.0
