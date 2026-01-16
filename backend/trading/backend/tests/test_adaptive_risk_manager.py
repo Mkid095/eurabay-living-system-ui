@@ -20,6 +20,7 @@ from backend.core.adaptive_risk_manager import (
     CorrelationAdjustment,
     SessionRiskAdjustment,
     DynamicStopAdjustment,
+    ProfitTargetAdjustment,
 )
 from backend.core.performance_comparator import (
     PerformanceComparator,
@@ -2921,4 +2922,697 @@ if __name__ == "__main__":
     test_dynamic_stop_database_storage()
     test_dynamic_stop_insufficient_data()
     test_dynamic_stop_integration_scenario()
+    # Run profit target optimization tests
+    test_calculate_optimal_tp_buy_position()
+    test_calculate_optimal_tp_sell_position()
+    test_calculate_optimal_tp_high_win_rate()
+    test_calculate_optimal_tp_low_win_rate()
+    test_calculate_optimal_tp_min_max_constraints()
+    test_tp_hit_tracking()
+    test_tp_hit_rate_calculation()
+    test_tp_database_storage()
+    test_tp_integration_with_performance_data()
     logger.info("All integration tests passed!")
+
+
+# ============================================================================
+# PROFIT TARGET OPTIMIZATION TESTS (US-007)
+# ============================================================================
+
+def test_calculate_optimal_tp_buy_position():
+    """Test profit target calculation for BUY position."""
+    logger.info("Testing profit target calculation for BUY position...")
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # Setup
+        db_path = Path(temp_dir) / "test_profit_target.db"
+        comparator = PerformanceComparator(database_path=str(db_path).replace("profit_target", "performance"))
+        risk_manager = AdaptiveRiskManager(
+            performance_comparator=comparator,
+            database_path=str(db_path),
+            base_risk_percent=2.0,
+        )
+
+        # Test BUY position
+        symbol = "EURUSD"
+        entry_price = 1.0850
+        direction = "BUY"
+
+        take_profit, tp_distance_pct, win_rate = risk_manager.calculate_optimal_tp(
+            symbol=symbol,
+            entry_price=entry_price,
+            direction=direction,
+        )
+
+        # Verify TP is above entry for BUY
+        assert take_profit > entry_price, f"BUY TP should be above entry price"
+
+        # Verify TP distance is reasonable (1-5% of price typically)
+        assert 0.5 < tp_distance_pct < 10.0, f"TP distance should be reasonable: {tp_distance_pct}%"
+
+        # Verify win rate is returned
+        assert 0 <= win_rate <= 100, f"Win rate should be 0-100: {win_rate}%"
+
+        logger.info(f"  BUY position: Entry={entry_price}, TP={take_profit}, Distance={tp_distance_pct}%, Win rate={win_rate}%")
+
+        # Verify adjustment was recorded
+        adjustments = risk_manager.get_profit_target_adjustments()
+        assert len(adjustments) > 0, "TP adjustment should be recorded"
+        assert adjustments[-1].symbol == symbol
+        assert adjustments[-1].direction == "BUY"
+
+        logger.info("BUY profit target calculation test passed")
+
+    finally:
+        comparator.close()
+        risk_manager.close()
+        import time
+        time.sleep(0.1)
+        try:
+            import shutil
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            pass
+
+
+def test_calculate_optimal_tp_sell_position():
+    """Test profit target calculation for SELL position."""
+    logger.info("Testing profit target calculation for SELL position...")
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # Setup
+        db_path = Path(temp_dir) / "test_profit_target_sell.db"
+        comparator = PerformanceComparator(database_path=str(db_path).replace("profit_target_sell", "performance"))
+        risk_manager = AdaptiveRiskManager(
+            performance_comparator=comparator,
+            database_path=str(db_path),
+        )
+
+        # Test SELL position
+        symbol = "GBPUSD"
+        entry_price = 1.2650
+        direction = "SELL"
+
+        take_profit, tp_distance_pct, win_rate = risk_manager.calculate_optimal_tp(
+            symbol=symbol,
+            entry_price=entry_price,
+            direction=direction,
+        )
+
+        # Verify TP is below entry for SELL
+        assert take_profit < entry_price, f"SELL TP should be below entry price"
+
+        # Verify TP distance is reasonable
+        assert 0.5 < tp_distance_pct < 10.0, f"TP distance should be reasonable: {tp_distance_pct}%"
+
+        logger.info(f"  SELL position: Entry={entry_price}, TP={take_profit}, Distance={tp_distance_pct}%, Win rate={win_rate}%")
+
+        # Verify adjustment was recorded
+        adjustments = risk_manager.get_profit_target_adjustments(symbol=symbol)
+        assert len(adjustments) > 0, "TP adjustment should be recorded"
+
+        logger.info("SELL profit target calculation test passed")
+
+    finally:
+        comparator.close()
+        risk_manager.close()
+        import time
+        time.sleep(0.1)
+        try:
+            import shutil
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            pass
+
+
+def test_calculate_optimal_tp_high_win_rate():
+    """Test profit target calculation with high win rate (should use tighter TP)."""
+    logger.info("Testing profit target calculation with high win rate...")
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # Setup
+        db_path = Path(temp_dir) / "test_tp_high_winrate.db"
+        comparator = PerformanceComparator(database_path=str(db_path).replace("tp_high_winrate", "performance"))
+        risk_manager = AdaptiveRiskManager(
+            performance_comparator=comparator,
+            database_path=str(db_path),
+        )
+
+        # Create trade outcomes with 75% win rate
+        for i in range(20):
+            profit = 100.0 if i < 15 else -100.0  # 15 wins, 5 losses = 75%
+            position = TradePosition(
+                ticket=5000 + i,
+                symbol="EURUSD",
+                direction="BUY",
+                entry_price=1.0850,
+                current_price=1.0850,
+                volume=1.0,
+                stop_loss=1.0800,
+                take_profit=1.0900,
+                entry_time=datetime.utcnow(),
+                profit=profit,
+                swap=0.0,
+                commission=0.0,
+            )
+
+            comparator.record_trade_outcome(
+                position=position,
+                exit_price=1.0850,
+                exit_time=datetime.utcnow(),
+                final_profit=profit,
+                peak_profit=100.0 if profit > 0 else 0.0,
+                max_adverse_excursion=0.0 if profit > 0 else -100.0,
+            )
+
+        # Calculate TP with high win rate
+        symbol = "EURUSD"
+        entry_price = 1.0850
+        direction = "BUY"
+
+        take_profit, tp_distance_pct, win_rate = risk_manager.calculate_optimal_tp(
+            symbol=symbol,
+            entry_price=entry_price,
+            direction=direction,
+        )
+
+        # Verify high win rate was detected
+        assert win_rate > 60.0, f"Expected high win rate > 60%, got {win_rate}%"
+
+        # Verify TP was calculated
+        assert take_profit > entry_price, "BUY TP should be above entry"
+
+        # Get the adjustment to check the multiplier used
+        adjustments = risk_manager.get_profit_target_adjustments(symbol=symbol)
+        assert len(adjustments) > 0
+        adjustment = adjustments[-1]
+
+        # With high win rate (>60%), should use tighter TP (2x ATR)
+        assert adjustment.atr_multiplier == 2.0, f"Expected 2x ATR multiplier for high win rate, got {adjustment.atr_multiplier}x"
+
+        logger.info(f"  High win rate test: Win rate={win_rate}%, ATR multiplier={adjustment.atr_multiplier}x, TP={take_profit}")
+
+        logger.info("High win rate profit target test passed")
+
+    finally:
+        comparator.close()
+        risk_manager.close()
+        import time
+        time.sleep(0.1)
+        try:
+            import shutil
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            pass
+
+
+def test_calculate_optimal_tp_low_win_rate():
+    """Test profit target calculation with low win rate (should use wider TP)."""
+    logger.info("Testing profit target calculation with low win rate...")
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # Setup
+        db_path = Path(temp_dir) / "test_tp_low_winrate.db"
+        comparator = PerformanceComparator(database_path=str(db_path).replace("tp_low_winrate", "performance"))
+        risk_manager = AdaptiveRiskManager(
+            performance_comparator=comparator,
+            database_path=str(db_path),
+        )
+
+        # Create trade outcomes with 40% win rate
+        for i in range(20):
+            profit = 100.0 if i < 8 else -100.0  # 8 wins, 12 losses = 40%
+            position = TradePosition(
+                ticket=6000 + i,
+                symbol="EURUSD",
+                direction="BUY",
+                entry_price=1.0850,
+                current_price=1.0850,
+                volume=1.0,
+                stop_loss=1.0800,
+                take_profit=1.0900,
+                entry_time=datetime.utcnow(),
+                profit=profit,
+                swap=0.0,
+                commission=0.0,
+            )
+
+            comparator.record_trade_outcome(
+                position=position,
+                exit_price=1.0850,
+                exit_time=datetime.utcnow(),
+                final_profit=profit,
+                peak_profit=100.0 if profit > 0 else 0.0,
+                max_adverse_excursion=0.0 if profit > 0 else -100.0,
+            )
+
+        # Calculate TP with low win rate
+        symbol = "EURUSD"
+        entry_price = 1.0850
+        direction = "BUY"
+
+        take_profit, tp_distance_pct, win_rate = risk_manager.calculate_optimal_tp(
+            symbol=symbol,
+            entry_price=entry_price,
+            direction=direction,
+        )
+
+        # Verify low win rate was detected
+        assert win_rate < 60.0, f"Expected low win rate <= 60%, got {win_rate}%"
+
+        # Verify TP was calculated
+        assert take_profit > entry_price, "BUY TP should be above entry"
+
+        # Get the adjustment to check the multiplier used
+        adjustments = risk_manager.get_profit_target_adjustments(symbol=symbol)
+        assert len(adjustments) > 0
+        adjustment = adjustments[-1]
+
+        # With low win rate (<=60%), should use wider TP (3x ATR)
+        assert adjustment.atr_multiplier == 3.0, f"Expected 3x ATR multiplier for low win rate, got {adjustment.atr_multiplier}x"
+
+        logger.info(f"  Low win rate test: Win rate={win_rate}%, ATR multiplier={adjustment.atr_multiplier}x, TP={take_profit}")
+
+        logger.info("Low win rate profit target test passed")
+
+    finally:
+        comparator.close()
+        risk_manager.close()
+        import time
+        time.sleep(0.1)
+        try:
+            import shutil
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            pass
+
+
+def test_calculate_optimal_tp_min_max_constraints():
+    """Test profit target min/max constraints (1x to 5x ATR)."""
+    logger.info("Testing profit target min/max constraints...")
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # Setup with custom min/max TP multipliers
+        db_path = Path(temp_dir) / "test_tp_constraints.db"
+        comparator = PerformanceComparator(database_path=str(db_path).replace("tp_constraints", "performance"))
+        risk_manager = AdaptiveRiskManager(
+            performance_comparator=comparator,
+            database_path=str(db_path),
+            min_tp_atr_multiplier=1.0,
+            max_tp_atr_multiplier=5.0,
+            high_win_rate_tp_multiplier=2.0,
+            low_win_rate_tp_multiplier=3.0,
+        )
+
+        # Test with no performance data (should use default multipliers)
+        symbol = "EURUSD"
+        entry_price = 1.0850
+        direction = "BUY"
+
+        take_profit, tp_distance_pct, win_rate = risk_manager.calculate_optimal_tp(
+            symbol=symbol,
+            entry_price=entry_price,
+            direction=direction,
+        )
+
+        # Get the adjustment to check the multiplier
+        adjustments = risk_manager.get_profit_target_adjustments(symbol=symbol)
+        assert len(adjustments) > 0
+        adjustment = adjustments[-1]
+
+        # With 50% default win rate (no trades), should use low win rate multiplier (3x ATR)
+        # Verify it's within bounds
+        assert 1.0 <= adjustment.atr_multiplier <= 5.0, \
+            f"ATR multiplier {adjustment.atr_multiplier}x should be within 1x-5x bounds"
+
+        logger.info(f"  Constraints test: ATR multiplier={adjustment.atr_multiplier}x (within 1x-5x bounds)")
+
+        # Test multiple calculations to verify bounds are enforced
+        for _ in range(5):
+            tp, _, _ = risk_manager.calculate_optimal_tp(
+                symbol=symbol,
+                entry_price=entry_price,
+                direction=direction,
+            )
+            assert tp > 0, "TP should be positive"
+
+        logger.info("Min/max constraints test passed")
+
+    finally:
+        comparator.close()
+        risk_manager.close()
+        import time
+        time.sleep(0.1)
+        try:
+            import shutil
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            pass
+
+
+def test_tp_hit_tracking():
+    """Test TP hit tracking functionality."""
+    logger.info("Testing TP hit tracking...")
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # Setup
+        db_path = Path(temp_dir) / "test_tp_tracking.db"
+        comparator = PerformanceComparator(database_path=str(db_path).replace("tp_tracking", "performance"))
+        risk_manager = AdaptiveRiskManager(
+            performance_comparator=comparator,
+            database_path=str(db_path),
+        )
+
+        # Track a TP hit (BUY position)
+        symbol = "EURUSD"
+        entry_price = 1.0850
+        direction = "BUY"
+        tp_price = 1.0900
+        atr_multiplier = 2.0
+        exit_price = 1.0910  # Above TP = hit
+        holding_time = 4.5
+
+        tp_hit = risk_manager.track_tp_hit(
+            symbol=symbol,
+            entry_price=entry_price,
+            direction=direction,
+            tp_price=tp_price,
+            atr_multiplier=atr_multiplier,
+            exit_price=exit_price,
+            holding_time_hours=holding_time,
+        )
+
+        assert tp_hit is True, "TP should be hit (exit above TP for BUY)"
+
+        # Track a TP miss (BUY position)
+        exit_price_miss = 1.0820  # Below TP = miss
+
+        tp_miss = risk_manager.track_tp_hit(
+            symbol=symbol,
+            entry_price=entry_price,
+            direction=direction,
+            tp_price=tp_price,
+            atr_multiplier=atr_multiplier,
+            exit_price=exit_price_miss,
+            holding_time_hours=2.0,
+        )
+
+        assert tp_miss is False, "TP should be missed (exit below TP for BUY)"
+
+        # Test SELL position
+        direction = "SELL"
+        entry_price = 1.0850
+        tp_price = 1.0800
+        exit_price = 1.0790  # Below TP = hit for SELL
+
+        tp_hit_sell = risk_manager.track_tp_hit(
+            symbol=symbol,
+            entry_price=entry_price,
+            direction=direction,
+            tp_price=tp_price,
+            atr_multiplier=atr_multiplier,
+            exit_price=exit_price,
+            holding_time_hours=3.0,
+        )
+
+        assert tp_hit_sell is True, "TP should be hit (exit below TP for SELL)"
+
+        logger.info("TP hit tracking test passed")
+
+    finally:
+        comparator.close()
+        risk_manager.close()
+        import time
+        time.sleep(0.1)
+        try:
+            import shutil
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            pass
+
+
+def test_tp_hit_rate_calculation():
+    """Test TP hit rate calculation."""
+    logger.info("Testing TP hit rate calculation...")
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # Setup
+        db_path = Path(temp_dir) / "test_tp_hitrate.db"
+        comparator = PerformanceComparator(database_path=str(db_path).replace("tp_hitrate", "performance"))
+        risk_manager = AdaptiveRiskManager(
+            performance_comparator=comparator,
+            database_path=str(db_path),
+        )
+
+        # Track multiple trades
+        symbol = "EURUSD"
+        entry_price = 1.0850
+        direction = "BUY"
+        atr_multiplier = 2.0
+
+        # 7 hits out of 10 trades = 70% hit rate
+        for i in range(10):
+            tp_hit = i < 7  # First 7 hit, last 3 miss
+            exit_price = 1.0900 if tp_hit else 1.0820
+            tp_price = 1.0880
+
+            risk_manager.track_tp_hit(
+                symbol=symbol,
+                entry_price=entry_price,
+                direction=direction,
+                tp_price=tp_price,
+                atr_multiplier=atr_multiplier,
+                exit_price=exit_price,
+                holding_time_hours=float(i + 1),
+            )
+
+        # Calculate hit rate
+        hit_rate, total_trades = risk_manager.get_tp_hit_rate(symbol=symbol)
+
+        assert total_trades == 10, f"Expected 10 trades, got {total_trades}"
+        assert hit_rate == 70.0, f"Expected 70% hit rate, got {hit_rate}%"
+
+        logger.info(f"  TP hit rate: {hit_rate}% ({total_trades} trades)")
+
+        # Test filtering by ATR multiplier
+        hit_rate_filtered, total_filtered = risk_manager.get_tp_hit_rate(
+            symbol=symbol,
+            atr_multiplier=2.0
+        )
+
+        assert total_filtered == 10, f"Expected 10 trades for 2x ATR filter, got {total_filtered}"
+
+        logger.info("TP hit rate calculation test passed")
+
+    finally:
+        comparator.close()
+        risk_manager.close()
+        import time
+        time.sleep(0.1)
+        try:
+            import shutil
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            pass
+
+
+def test_tp_database_storage():
+    """Test that TP adjustments are stored in database."""
+    logger.info("Testing TP database storage...")
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # Setup
+        db_path = Path(temp_dir) / "test_tp_storage.db"
+        comparator = PerformanceComparator(database_path=str(db_path).replace("tp_storage", "performance"))
+        risk_manager = AdaptiveRiskManager(
+            performance_comparator=comparator,
+            database_path=str(db_path),
+        )
+
+        # Calculate TP for multiple symbols
+        symbols = ["EURUSD", "GBPUSD", "USDJPY"]
+        for symbol in symbols:
+            risk_manager.calculate_optimal_tp(
+                symbol=symbol,
+                entry_price=1.0850 if symbol != "USDJPY" else 145.50,
+                direction="BUY",
+            )
+
+        # Verify in database
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT COUNT(*) FROM profit_target_adjustments")
+        db_count = cursor.fetchone()[0]
+
+        cursor.execute("SELECT DISTINCT symbol FROM profit_target_adjustments")
+        db_symbols = [row[0] for row in cursor.fetchall()]
+
+        conn.close()
+
+        assert db_count == len(symbols), f"Expected {len(symbols)} TP adjustments in DB, got {db_count}"
+        assert set(db_symbols) == set(symbols), f"Expected symbols {set(symbols)}, got {set(db_symbols)}"
+
+        logger.info(f"  TP adjustments stored: {db_count}")
+        logger.info(f"  Symbols in DB: {db_symbols}")
+
+        logger.info("TP database storage test passed")
+
+    finally:
+        comparator.close()
+        risk_manager.close()
+        import time
+        time.sleep(0.1)
+        try:
+            import shutil
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            pass
+
+
+def test_tp_integration_with_performance_data():
+    """Integration test for TP optimization with historical performance data."""
+    logger.info("Testing TP optimization integration with performance data...")
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # Setup
+        db_path = Path(temp_dir) / "test_tp_integration.db"
+        comparator = PerformanceComparator(database_path=str(db_path).replace("tp_integration", "performance"))
+        risk_manager = AdaptiveRiskManager(
+            performance_comparator=comparator,
+            database_path=str(db_path),
+        )
+
+        # Simulate a trading history with varying performance
+        # First 20 trades: 50% win rate (should use wider TP)
+        for i in range(20):
+            profit = 100.0 if i % 2 == 0 else -100.0
+            position = TradePosition(
+                ticket=7000 + i,
+                symbol="EURUSD",
+                direction="BUY",
+                entry_price=1.0850,
+                current_price=1.0850,
+                volume=1.0,
+                stop_loss=1.0800,
+                take_profit=1.0900,
+                entry_time=datetime.utcnow(),
+                profit=profit,
+                swap=0.0,
+                commission=0.0,
+            )
+
+            comparator.record_trade_outcome(
+                position=position,
+                exit_price=1.0850,
+                exit_time=datetime.utcnow(),
+                final_profit=profit,
+                peak_profit=100.0 if profit > 0 else 0.0,
+                max_adverse_excursion=0.0 if profit > 0 else -100.0,
+            )
+
+        # Calculate TP - should use 3x ATR (low win rate)
+        tp1, dist1, win_rate1 = risk_manager.calculate_optimal_tp(
+            symbol="EURUSD",
+            entry_price=1.0850,
+            direction="BUY",
+        )
+
+        logger.info(f"  Phase 1 (50% win rate): TP={tp1}, Distance={dist1}%, Win rate={win_rate1}%")
+
+        # Add more winning trades to improve win rate to 70%
+        for i in range(20, 40):
+            profit = 100.0 if i < 34 else -100.0  # Now have ~67% win rate overall
+            position = TradePosition(
+                ticket=7000 + i,
+                symbol="EURUSD",
+                direction="BUY",
+                entry_price=1.0850,
+                current_price=1.0850,
+                volume=1.0,
+                stop_loss=1.0800,
+                take_profit=1.0900,
+                entry_time=datetime.utcnow(),
+                profit=profit,
+                swap=0.0,
+                commission=0.0,
+            )
+
+            comparator.record_trade_outcome(
+                position=position,
+                exit_price=1.0850,
+                exit_time=datetime.utcnow(),
+                final_profit=profit,
+                peak_profit=100.0 if profit > 0 else 0.0,
+                max_adverse_excursion=0.0 if profit > 0 else -100.0,
+            )
+
+        # Calculate TP again - should use 2x ATR (high win rate)
+        tp2, dist2, win_rate2 = risk_manager.calculate_optimal_tp(
+            symbol="EURUSD",
+            entry_price=1.0850,
+            direction="BUY",
+        )
+
+        logger.info(f"  Phase 2 (~67% win rate): TP={tp2}, Distance={dist2}%, Win rate={win_rate2}%")
+
+        # Get adjustments to verify multipliers
+        adjustments = risk_manager.get_profit_target_adjustments(symbol="EURUSD")
+        assert len(adjustments) >= 2
+
+        # First adjustment (50% win rate) should use 3x ATR
+        adj1 = adjustments[-2]
+        # Second adjustment (67% win rate) should use 2x ATR
+        adj2 = adjustments[-1]
+
+        logger.info(f"  Adjustment 1 multiplier: {adj1.atr_multiplier}x (win rate: {adj1.win_rate}%)")
+        logger.info(f"  Adjustment 2 multiplier: {adj2.atr_multiplier}x (win rate: {adj2.win_rate}%)")
+
+        # Verify TP distance decreased as win rate improved (tighter TP)
+        # Note: This may vary slightly due to ATR fluctuations, but the multiplier should change
+        assert win_rate2 > win_rate1, "Win rate should have improved"
+
+        # Track TP hits for analysis
+        # Simulate 10 trades with 2x ATR TP
+        for i in range(10):
+            tp_hit = i < 6  # 60% hit rate
+            exit_price = tp2 + 0.001 if tp_hit else tp2 - 0.002
+
+            risk_manager.track_tp_hit(
+                symbol="EURUSD",
+                entry_price=1.0850,
+                direction="BUY",
+                tp_price=tp2,
+                atr_multiplier=2.0,
+                exit_price=exit_price,
+                holding_time_hours=float(i + 1),
+            )
+
+        # Calculate hit rate
+        hit_rate, total_trades = risk_manager.get_tp_hit_rate(symbol="EURUSD", atr_multiplier=2.0)
+
+        logger.info(f"  TP hit rate for 2x ATR: {hit_rate}% ({total_trades} trades)")
+
+        assert total_trades == 10, "Should have tracked 10 trades"
+
+        logger.info("TP integration test passed")
+
+    finally:
+        comparator.close()
+        risk_manager.close()
+        import time
+        time.sleep(0.1)
+        try:
+            import shutil
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            pass

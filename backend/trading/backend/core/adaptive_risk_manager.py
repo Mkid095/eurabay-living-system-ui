@@ -236,6 +236,51 @@ class DynamicStopAdjustment:
         }
 
 
+@dataclass
+class ProfitTargetAdjustment:
+    """
+    Record of a profit target (take profit) adjustment.
+
+    Attributes:
+        timestamp: When the TP was calculated
+        symbol: Trading symbol
+        entry_price: Entry price for the position
+        direction: "BUY" or "SELL"
+        current_atr: Current ATR value
+        win_rate: Current win rate used for TP calculation
+        atr_multiplier: ATR multiplier used for TP calculation
+        calculated_tp: The calculated take profit price
+        tp_distance_pct: TP distance as percentage of price
+        reason: Explanation for the TP calculation
+    """
+
+    timestamp: datetime
+    symbol: str
+    entry_price: float
+    direction: str
+    current_atr: float
+    win_rate: float
+    atr_multiplier: float
+    calculated_tp: float
+    tp_distance_pct: float
+    reason: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for storage."""
+        return {
+            "timestamp": self.timestamp.isoformat(),
+            "symbol": self.symbol,
+            "entry_price": round(self.entry_price, 6),
+            "direction": self.direction,
+            "current_atr": round(self.current_atr, 6),
+            "win_rate": round(self.win_rate, 2),
+            "atr_multiplier": round(self.atr_multiplier, 3),
+            "calculated_tp": round(self.calculated_tp, 6),
+            "tp_distance_pct": round(self.tp_distance_pct, 4),
+            "reason": self.reason,
+        }
+
+
 class AdaptiveRiskManager:
     """
     Manages adaptive risk based on recent trading performance and market volatility.
@@ -302,6 +347,11 @@ class AdaptiveRiskManager:
         max_stop_distance_pct: float = 2.0,
         low_volatility_atr_multiplier: float = 1.5,
         high_volatility_atr_multiplier: float = 3.0,
+        min_tp_atr_multiplier: float = 1.0,
+        max_tp_atr_multiplier: float = 5.0,
+        high_win_rate_tp_multiplier: float = 2.0,
+        low_win_rate_tp_multiplier: float = 3.0,
+        win_rate_threshold: float = 60.0,
     ):
         """
         Initialize the AdaptiveRiskManager.
@@ -328,6 +378,11 @@ class AdaptiveRiskManager:
             max_stop_distance_pct: Maximum stop distance as percentage of price (default: 2.0%)
             low_volatility_atr_multiplier: ATR multiplier for low volatility stops (default: 1.5)
             high_volatility_atr_multiplier: ATR multiplier for high volatility stops (default: 3.0)
+            min_tp_atr_multiplier: Minimum TP multiplier as ATR multiple (default: 1.0)
+            max_tp_atr_multiplier: Maximum TP multiplier as ATR multiple (default: 5.0)
+            high_win_rate_tp_multiplier: TP multiplier when win rate > threshold (default: 2.0)
+            low_win_rate_tp_multiplier: TP multiplier when win rate <= threshold (default: 3.0)
+            win_rate_threshold: Win rate threshold for TP adjustment (default: 60.0%)
         """
         self._performance_comparator = performance_comparator
         self._database_path = database_path
@@ -368,6 +423,14 @@ class AdaptiveRiskManager:
         self._low_volatility_atr_multiplier = low_volatility_atr_multiplier
         self._high_volatility_atr_multiplier = high_volatility_atr_multiplier
         self._dynamic_stop_adjustments: list[DynamicStopAdjustment] = []
+
+        # Profit target optimization parameters
+        self._min_tp_atr_multiplier = min_tp_atr_multiplier
+        self._max_tp_atr_multiplier = max_tp_atr_multiplier
+        self._high_win_rate_tp_multiplier = high_win_rate_tp_multiplier
+        self._low_win_rate_tp_multiplier = low_win_rate_tp_multiplier
+        self._win_rate_threshold = win_rate_threshold
+        self._profit_target_adjustments: list[ProfitTargetAdjustment] = []
 
         # Initialize database
         self._initialize_database()
@@ -500,6 +563,41 @@ class AdaptiveRiskManager:
                 )
             """)
 
+            # Create profit_target_adjustments table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS profit_target_adjustments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    entry_price REAL NOT NULL,
+                    direction TEXT NOT NULL,
+                    current_atr REAL NOT NULL,
+                    win_rate REAL NOT NULL,
+                    atr_multiplier REAL NOT NULL,
+                    calculated_tp REAL NOT NULL,
+                    tp_distance_pct REAL NOT NULL,
+                    reason TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # Create tp_hit_tracking table for tracking TP hit rate
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS tp_hit_tracking (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    entry_price REAL NOT NULL,
+                    direction TEXT NOT NULL,
+                    tp_price REAL NOT NULL,
+                    atr_multiplier REAL NOT NULL,
+                    tp_hit BOOLEAN NOT NULL,
+                    exit_price REAL,
+                    holding_time_hours REAL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Create indexes
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_adjustments_timestamp
@@ -554,6 +652,26 @@ class AdaptiveRiskManager:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_dynamic_stop_symbol
                 ON dynamic_stop_adjustments(symbol)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_profit_target_timestamp
+                ON profit_target_adjustments(timestamp DESC)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_profit_target_symbol
+                ON profit_target_adjustments(symbol)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_tp_hit_timestamp
+                ON tp_hit_tracking(timestamp DESC)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_tp_hit_symbol
+                ON tp_hit_tracking(symbol)
             """)
 
             self._connection.commit()
@@ -2148,3 +2266,435 @@ class AdaptiveRiskManager:
 
         except sqlite3.Error as e:
             logger.error(f"Failed to store dynamic stop adjustment in database: {e}")
+
+    def calculate_optimal_tp(
+        self,
+        symbol: str,
+        entry_price: float,
+        direction: str,
+    ) -> tuple[float, float, float]:
+        """
+        Calculate optimal profit target (take profit) based on ATR and win rate.
+
+        This method implements dynamic profit target optimization that adapts to both
+        market volatility (ATR) and recent trading performance. Higher win rates allow
+        for tighter profit targets to maximize turnover, while lower win rates use
+        wider targets to give trades more room to develop.
+
+        Formula:
+            tp = entry ± (ATR * multiplier)
+            Where multiplier varies based on win rate:
+            - High win rate (> 60%): 2x ATR (tighter TP for more frequent wins)
+            - Low win rate (<= 60%): 3x ATR (wider TP to give trades room)
+
+        The TP distance is constrained between 1x and 5x ATR to ensure targets
+        are neither too aggressive nor too conservative.
+
+        Args:
+            symbol: Trading symbol (e.g., "EURUSD", "GBPUSD", "V10", "V100")
+            entry_price: Entry price for the position
+            direction: "BUY" or "SELL"
+
+        Returns:
+            Tuple of (take_profit_price, tp_distance_pct, current_win_rate)
+            - take_profit_price: Calculated take profit price
+            - tp_distance_pct: TP distance as percentage of entry price
+            - current_win_rate: Current win rate used for calculation
+        """
+        try:
+            # Fetch price data for ATR calculation
+            price_data = self._fetch_price_data(symbol)
+
+            if price_data is None or len(price_data) < self._atr_lookback:
+                logger.warning(
+                    f"Insufficient price data for {symbol} to calculate optimal TP. "
+                    f"Using default TP (3x ATR estimate)."
+                )
+                # Fallback: use 3% TP distance as default
+                tp_distance_pct = 3.0
+                if direction.upper() == "BUY":
+                    take_profit = entry_price * (1 + tp_distance_pct / 100)
+                else:
+                    take_profit = entry_price * (1 - tp_distance_pct / 100)
+                return take_profit, tp_distance_pct, 50.0
+
+            # Calculate ATR values
+            atr_values = self._calculate_atr(price_data, self._atr_period)
+
+            if len(atr_values) < self._atr_lookback:
+                logger.warning(
+                    f"Insufficient ATR values for {symbol}. "
+                    f"Using default TP (3x ATR estimate)."
+                )
+                tp_distance_pct = 3.0
+                if direction.upper() == "BUY":
+                    take_profit = entry_price * (1 + tp_distance_pct / 100)
+                else:
+                    take_profit = entry_price * (1 - tp_distance_pct / 100)
+                return take_profit, tp_distance_pct, 50.0
+
+            # Get current ATR (most recent)
+            current_atr = atr_values.iloc[-1]
+
+            # Get current win rate
+            recent_outcomes = self._get_recent_trade_outcomes()
+            current_win_rate = self._calculate_win_rate(recent_outcomes)
+
+            # Determine ATR multiplier based on win rate
+            # Higher win rate = tighter TP (more frequent wins)
+            # Lower win rate = wider TP (give trades room to develop)
+            if current_win_rate > self._win_rate_threshold:
+                atr_multiplier = self._high_win_rate_tp_multiplier
+                multiplier_rationale = "high"
+            else:
+                atr_multiplier = self._low_win_rate_tp_multiplier
+                multiplier_rationale = "low"
+
+            # Apply min/max constraints to ATR multiplier
+            atr_multiplier = max(
+                self._min_tp_atr_multiplier,
+                min(self._max_tp_atr_multiplier, atr_multiplier)
+            )
+
+            # Calculate initial TP distance using ATR
+            atr_tp_distance = current_atr * atr_multiplier
+
+            # Calculate TP as percentage of price
+            atr_tp_distance_pct = (atr_tp_distance / entry_price) * 100
+
+            # Apply minimum and maximum TP distance constraints (1x to 5x ATR)
+            # Note: These are ATR-based constraints, not percentage-based
+            # So we recalculate with constrained ATR multiplier
+            if atr_multiplier < self._min_tp_atr_multiplier:
+                atr_multiplier = self._min_tp_atr_multiplier
+            elif atr_multiplier > self._max_tp_atr_multiplier:
+                atr_multiplier = self._max_tp_atr_multiplier
+
+            # Recalculate TP distance with constrained multiplier
+            final_tp_distance = current_atr * atr_multiplier
+            final_tp_distance_pct = (final_tp_distance / entry_price) * 100
+
+            # Calculate final take profit price
+            if direction.upper() == "BUY":
+                take_profit = entry_price + final_tp_distance
+            else:  # SELL
+                take_profit = entry_price - final_tp_distance
+
+            # Generate detailed reason
+            if current_win_rate > self._win_rate_threshold:
+                win_rate_description = (
+                    f"High win rate detected ({current_win_rate:.1f}% > {self._win_rate_threshold:.1f}%). "
+                    f"Using tighter TP ({atr_multiplier}x ATR) to capitalize on edge and increase turnover."
+                )
+            else:
+                win_rate_description = (
+                    f"Low/moderate win rate ({current_win_rate:.1f}% <= {self._win_rate_threshold:.1f}%). "
+                    f"Using wider TP ({atr_multiplier}x ATR) to give trades room to develop."
+                )
+
+            constraint_note = ""
+            if atr_multiplier == self._min_tp_atr_multiplier and atr_multiplier != self._high_win_rate_tp_multiplier:
+                constraint_note = (
+                    f" Applied minimum constraint (1x ATR = {final_tp_distance:.6f})."
+                )
+            elif atr_multiplier == self._max_tp_atr_multiplier and atr_multiplier != self._low_win_rate_tp_multiplier:
+                constraint_note = (
+                    f" Applied maximum constraint (5x ATR = {final_tp_distance:.6f})."
+                )
+
+            reason = (
+                f"Optimal TP calculation for {symbol} {direction} position. "
+                f"Entry: {entry_price:.6f}, Current ATR: {current_atr:.6f}, "
+                f"Win rate: {current_win_rate:.1f}%. {win_rate_description}"
+                f" TP: {take_profit:.6f}, Distance: {final_tp_distance_pct:.3f}% "
+                f"({atr_multiplier}x ATR = {final_tp_distance:.6f}).{constraint_note}"
+            )
+
+            # Create and store profit target adjustment record
+            adjustment = ProfitTargetAdjustment(
+                timestamp=datetime.utcnow(),
+                symbol=symbol,
+                entry_price=entry_price,
+                direction=direction.upper(),
+                current_atr=float(current_atr),
+                win_rate=current_win_rate,
+                atr_multiplier=atr_multiplier,
+                calculated_tp=take_profit,
+                tp_distance_pct=final_tp_distance_pct,
+                reason=reason,
+            )
+
+            self._profit_target_adjustments.append(adjustment)
+            self._store_profit_target_adjustment(adjustment)
+
+            # Log the calculation
+            logger.info(
+                f"Optimal TP calculated for {symbol} {direction}: "
+                f"Entry={entry_price:.6f}, TP={take_profit:.6f}, "
+                f"Distance={final_tp_distance_pct:.3f}%, "
+                f"Win rate={current_win_rate:.1f}%, ATR={current_atr:.6f}, "
+                f"Multiplier={atr_multiplier:.2f}x"
+            )
+
+            return take_profit, final_tp_distance_pct, current_win_rate
+
+        except Exception as e:
+            logger.error(f"Error calculating optimal TP for {symbol}: {e}")
+            # Fallback: use 3% TP distance
+            tp_distance_pct = 3.0
+            if direction.upper() == "BUY":
+                take_profit = entry_price * (1 + tp_distance_pct / 100)
+            else:
+                take_profit = entry_price * (1 - tp_distance_pct / 100)
+            return take_profit, tp_distance_pct, 50.0
+
+    def track_tp_hit(
+        self,
+        symbol: str,
+        entry_price: float,
+        direction: str,
+        tp_price: float,
+        atr_multiplier: float,
+        exit_price: float,
+        holding_time_hours: float,
+    ) -> bool:
+        """
+        Track whether a profit target was hit and record the result.
+
+        This method records the outcome of a trade's profit target in the database
+        for analysis. It helps track the effectiveness of different TP strategies
+        and optimize the multipliers over time.
+
+        Args:
+            symbol: Trading symbol
+            entry_price: Entry price for the position
+            direction: "BUY" or "SELL"
+            tp_price: The original profit target price
+            atr_multiplier: ATR multiplier used for the TP calculation
+            exit_price: Actual exit price
+            holding_time_hours: How long the position was held
+
+        Returns:
+            True if TP was hit, False otherwise
+        """
+        try:
+            # Determine if TP was hit
+            if direction.upper() == "BUY":
+                tp_hit = exit_price >= tp_price
+            else:  # SELL
+                tp_hit = exit_price <= tp_price
+
+            # Store the tracking record
+            self._store_tp_hit_tracking(
+                symbol=symbol,
+                entry_price=entry_price,
+                direction=direction,
+                tp_price=tp_price,
+                atr_multiplier=atr_multiplier,
+                tp_hit=tp_hit,
+                exit_price=exit_price,
+                holding_time_hours=holding_time_hours,
+            )
+
+            # Log the result
+            logger.info(
+                f"TP tracking for {symbol} {direction}: "
+                f"Entry={entry_price:.6f}, TP={tp_price:.6f}, Exit={exit_price:.6f}, "
+                f"TP_hit={tp_hit}, ATR_mult={atr_multiplier:.2f}x, "
+                f"Holding_time={holding_time_hours:.2f}h"
+            )
+
+            return tp_hit
+
+        except Exception as e:
+            logger.error(f"Error tracking TP hit for {symbol}: {e}")
+            return False
+
+    def get_tp_hit_rate(
+        self,
+        symbol: Optional[str] = None,
+        atr_multiplier: Optional[float] = None,
+        limit: int = 1000,
+    ) -> tuple[float, int]:
+        """
+        Calculate the TP hit rate for analysis.
+
+        This method analyzes historical TP hit data to calculate the percentage
+        of trades that hit their profit target. This can be used to optimize
+        TP multipliers for better performance.
+
+        Args:
+            symbol: Optional symbol to filter by
+            atr_multiplier: Optional ATR multiplier to filter by
+            limit: Maximum number of records to analyze
+
+        Returns:
+            Tuple of (hit_rate, total_trades)
+            - hit_rate: Percentage of trades that hit TP (0-100)
+            - total_trades: Total number of trades analyzed
+        """
+        try:
+            if self._connection is None:
+                logger.warning("Database connection not available for TP hit rate calculation")
+                return 0.0, 0
+
+            cursor = self._connection.cursor()
+
+            # Build query with optional filters
+            query = "SELECT tp_hit, COUNT(*) FROM tp_hit_tracking WHERE 1=1"
+            params = []
+
+            if symbol is not None:
+                query += " AND symbol = ?"
+                params.append(symbol)
+
+            if atr_multiplier is not None:
+                query += " AND atr_multiplier = ?"
+                params.append(atr_multiplier)
+
+            query += " GROUP BY tp_hit"
+
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+
+            if not results:
+                return 0.0, 0
+
+            # Calculate hit rate
+            hit_count = 0
+            total_count = 0
+
+            for tp_hit, count in results:
+                if tp_hit:
+                    hit_count = count
+                total_count += count
+
+            if total_count == 0:
+                return 0.0, 0
+
+            hit_rate = (hit_count / total_count) * 100
+
+            logger.info(
+                f"TP hit rate calculated: {hit_rate:.1f}% "
+                f"({hit_count}/{total_count} trades hit TP)"
+            )
+
+            return hit_rate, total_count
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to calculate TP hit rate: {e}")
+            return 0.0, 0
+
+    def get_profit_target_adjustments(
+        self,
+        symbol: Optional[str] = None,
+        limit: int = 100,
+    ) -> list[ProfitTargetAdjustment]:
+        """
+        Get profit target adjustment history.
+
+        Args:
+            symbol: Optional symbol to filter by
+            limit: Maximum number of adjustments to return
+
+        Returns:
+            List of ProfitTargetAdjustment records
+        """
+        if symbol is None:
+            return self._profit_target_adjustments[-limit:]
+        return [p for p in self._profit_target_adjustments if p.symbol == symbol][-limit:]
+
+    def _store_profit_target_adjustment(self, adjustment: ProfitTargetAdjustment) -> None:
+        """
+        Store a profit target adjustment in the database.
+
+        Args:
+            adjustment: ProfitTargetAdjustment to store
+        """
+        if self._connection is None:
+            logger.warning("Database connection not available, adjustment not stored")
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            cursor.execute("""
+                INSERT INTO profit_target_adjustments (
+                    timestamp, symbol, entry_price, direction,
+                    current_atr, win_rate, atr_multiplier,
+                    calculated_tp, tp_distance_pct, reason
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                adjustment.timestamp.isoformat(),
+                adjustment.symbol,
+                adjustment.entry_price,
+                adjustment.direction,
+                adjustment.current_atr,
+                adjustment.win_rate,
+                adjustment.atr_multiplier,
+                adjustment.calculated_tp,
+                adjustment.tp_distance_pct,
+                adjustment.reason,
+            ))
+
+            self._connection.commit()
+
+            logger.debug(f"Profit target adjustment stored in database for {adjustment.symbol}")
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to store profit target adjustment in database: {e}")
+
+    def _store_tp_hit_tracking(
+        self,
+        symbol: str,
+        entry_price: float,
+        direction: str,
+        tp_price: float,
+        atr_multiplier: float,
+        tp_hit: bool,
+        exit_price: float,
+        holding_time_hours: float,
+    ) -> None:
+        """
+        Store a TP hit tracking record in the database.
+
+        Args:
+            symbol: Trading symbol
+            entry_price: Entry price for the position
+            direction: "BUY" or "SELL"
+            tp_price: The original profit target price
+            atr_multiplier: ATR multiplier used for the TP calculation
+            tp_hit: Whether the TP was hit
+            exit_price: Actual exit price
+            holding_time_hours: How long the position was held
+        """
+        if self._connection is None:
+            logger.warning("Database connection not available, TP tracking not stored")
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            cursor.execute("""
+                INSERT INTO tp_hit_tracking (
+                    timestamp, symbol, entry_price, direction,
+                    tp_price, atr_multiplier, tp_hit, exit_price, holding_time_hours
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                datetime.utcnow().isoformat(),
+                symbol,
+                entry_price,
+                direction.upper(),
+                tp_price,
+                atr_multiplier,
+                tp_hit,
+                exit_price,
+                holding_time_hours,
+            ))
+
+            self._connection.commit()
+
+            logger.debug(f"TP hit tracking stored in database for {symbol}")
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to store TP hit tracking in database: {e}")
