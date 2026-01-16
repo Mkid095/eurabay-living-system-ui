@@ -410,8 +410,8 @@
       "mavenSteps": [3, 6],
       "mcpTools": {},
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Successfully implemented MT5 position integration with active trades table. Added mt5Ticket and mt5Comment fields to EvolvedTrade type in both src/lib/api/types.ts and src/types/evolution.ts. Updated EnhancedActiveTradesTable component to display MT5 ticket column alongside System Ticket, with blue color and ExternalLink icon to indicate link to MT5 terminal position. Added tooltip showing position comment (includes evolution generation) and generation number. Added WebSocket event schemas for mt5_position_update and mt5_position_closed events in src/lib/websocket/schemas.ts. Updated useActiveTrades hook to subscribe to MT5 position update events (updates currentPrice, pnl, pnlPercent in real-time) and MT5 position closed events (removes trade from active list). Typecheck passes with no errors."
     }
   ]
 }

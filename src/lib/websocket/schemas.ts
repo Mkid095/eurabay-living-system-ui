@@ -290,6 +290,36 @@ export const MT5PositionModifiedEventSchema = z.object({
 });
 
 /**
+ * MT5 Position Update Event Schema
+ * Real-time P&L and price updates for open positions
+ */
+export const MT5PositionUpdateEventSchema = z.object({
+  positionId: z.number(),
+  symbol: z.string(),
+  currentPrice: z.number(),
+  profit: z.number(),
+  profitPercentage: z.number().optional(),
+  timestamp: z.string(),
+});
+
+/**
+ * MT5 Position Closed Event Schema
+ * Fired when a position is closed in MT5
+ */
+export const MT5PositionClosedEventSchema = z.object({
+  positionId: z.number(),
+  symbol: z.string(),
+  lots: z.number(),
+  entryPrice: z.number(),
+  exitPrice: z.number(),
+  profit: z.number(),
+  commission: z.number(),
+  swap: z.number(),
+  closeTime: z.string(),
+  reason: z.string().optional(),
+});
+
+/**
  * MT5 Error Event Schema
  */
 export const MT5ErrorEventSchema = z.object({
@@ -344,6 +374,8 @@ export const EventSchemaMap = {
   mt5_order_opened: MT5OrderOpenedEventSchema,
   mt5_order_closed: MT5OrderClosedEventSchema,
   mt5_position_modified: MT5PositionModifiedEventSchema,
+  mt5_position_update: MT5PositionUpdateEventSchema,
+  mt5_position_closed: MT5PositionClosedEventSchema,
   mt5_error: MT5ErrorEventSchema,
 } as const;
 
@@ -365,5 +397,7 @@ export type EventDataType = {
   mt5_order_opened: z.infer<typeof MT5OrderOpenedEventSchema>;
   mt5_order_closed: z.infer<typeof MT5OrderClosedEventSchema>;
   mt5_position_modified: z.infer<typeof MT5PositionModifiedEventSchema>;
+  mt5_position_update: z.infer<typeof MT5PositionUpdateEventSchema>;
+  mt5_position_closed: z.infer<typeof MT5PositionClosedEventSchema>;
   mt5_error: z.infer<typeof MT5ErrorEventSchema>;
 };

@@ -5,6 +5,12 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DataTableSkeleton } from "@/components/ui/loading-skeleton";
 import { CompactErrorState } from "@/components/ui/error-state";
 import {
@@ -14,6 +20,7 @@ import {
   Clock,
   Target,
   Shield,
+  ExternalLink,
 } from "lucide-react";
 import { useActiveTrades } from "@/hooks/useActiveTrades";
 import { TradeDetailModal } from "./TradeDetailModal";
@@ -99,7 +106,7 @@ export function EnhancedActiveTradesTable() {
           <h3 className="text-lg font-semibold">Active Trades</h3>
           <p className="text-sm text-muted-foreground">Loading trades...</p>
         </div>
-        <DataTableSkeleton rowCount={5} columnCount={12} />
+        <DataTableSkeleton rowCount={5} columnCount={13} />
       </Card>
     );
   }
@@ -137,7 +144,10 @@ export function EnhancedActiveTradesTable() {
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">
-                  Ticket
+                  System Ticket
+                </th>
+                <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">
+                  MT5 Ticket
                 </th>
                 <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">
                   Symbol
@@ -177,7 +187,7 @@ export function EnhancedActiveTradesTable() {
             <tbody>
               {trades.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-8 text-muted-foreground">
+                  <td colSpan={13} className="text-center py-8 text-muted-foreground">
                     No active trades
                   </td>
                 </tr>
@@ -192,6 +202,34 @@ export function EnhancedActiveTradesTable() {
                   >
                     <td className="py-3 px-2">
                       <span className="font-mono text-sm">{trade.ticket}</span>
+                    </td>
+                    <td className="py-3 px-2">
+                      {trade.mt5Ticket ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center gap-1 cursor-help">
+                                <span className="font-mono text-sm text-blue-600">
+                                  {trade.mt5Ticket}
+                                </span>
+                                <ExternalLink className="w-3 h-3 text-blue-600" />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">
+                                {trade.mt5Comment || `MT5 Position #${trade.mt5Ticket}`}
+                              </p>
+                              {trade.generation && (
+                                <p className="text-xs text-muted-foreground">
+                                  Generation: {trade.generation}
+                                </p>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
                     </td>
                     <td className="py-3 px-2">
                       <span className="font-medium">{trade.symbol}</span>

@@ -100,6 +100,8 @@ export interface EvolvedTrade {
     sentiment: number;
   };
   generation?: number;
+  mt5Ticket?: number;
+  mt5Comment?: string;
 }
 
 export interface ClosedTrade {

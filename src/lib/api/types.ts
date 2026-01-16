@@ -283,6 +283,10 @@ export interface EvolvedTrade extends BaseTrade {
   };
   /** Evolution generation that created this trade */
   generation?: number;
+  /** MT5 position ticket number (optional) */
+  mt5Ticket?: number;
+  /** MT5 position comment (includes evolution generation) */
+  mt5Comment?: string;
 }
 
 /**

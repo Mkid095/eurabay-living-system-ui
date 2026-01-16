@@ -32,6 +32,34 @@ export interface TradeUpdateData {
 }
 
 /**
+ * MT5 Position Update Event Data
+ */
+export interface MT5PositionUpdateData {
+  positionId: number;
+  symbol: string;
+  currentPrice: number;
+  profit: number;
+  profitPercentage?: number;
+  timestamp: string;
+}
+
+/**
+ * MT5 Position Closed Event Data
+ */
+export interface MT5PositionClosedData {
+  positionId: number;
+  symbol: string;
+  lots: number;
+  entryPrice: number;
+  exitPrice: number;
+  profit: number;
+  commission: number;
+  swap: number;
+  closeTime: string;
+  reason?: string;
+}
+
+/**
  * Hook to fetch and manage active trades with real-time updates
  */
 export function useActiveTrades(): UseActiveTradesReturn {
@@ -43,6 +71,8 @@ export function useActiveTrades(): UseActiveTradesReturn {
 
   const isMounted = useRef(true);
   const wsHandlerRef = useRef<(() => () => void) | null>(null);
+  const wsMT5HandlerRef = useRef<(() => () => void) | null>(null);
+  const wsMT5ClosedRef = useRef<(() => () => void) | null>(null);
   const flashingTradesRef = useRef<Set<string>>(new Set());
 
   /**
@@ -124,6 +154,55 @@ export function useActiveTrades(): UseActiveTradesReturn {
   }, [flashTrade]);
 
   /**
+   * Handle MT5 position update from WebSocket
+   * Updates trade P&L and current price based on MT5 position data
+   */
+  const handleMT5PositionUpdate = useCallback((data: MT5PositionUpdateData) => {
+    if (!isMounted.current) return;
+
+    setTrades((prevTrades) => {
+      const updatedTrades = prevTrades.map((trade) => {
+        // Match trade by MT5 ticket number
+        if (trade.mt5Ticket === data.positionId) {
+          return {
+            ...trade,
+            currentPrice: data.currentPrice,
+            pnl: data.profit,
+            pnlPercent: data.profitPercentage,
+          };
+        }
+        return trade;
+      });
+
+      return updatedTrades;
+    });
+
+    // Flash the trade with matching MT5 ticket
+    setTrades((prevTrades) => {
+      const matchingTrade = prevTrades.find(t => t.mt5Ticket === data.positionId);
+      if (matchingTrade) {
+        flashTrade(matchingTrade.ticket);
+      }
+      return prevTrades;
+    });
+  }, [flashTrade]);
+
+  /**
+   * Handle MT5 position closed event from WebSocket
+   * Removes the trade from active trades list when MT5 position is closed
+   */
+  const handleMT5PositionClosed = useCallback((data: MT5PositionClosedData) => {
+    if (!isMounted.current) return;
+
+    setTrades((prevTrades) => {
+      // Remove the trade that matches the closed MT5 position
+      return prevTrades.filter((trade) => trade.mt5Ticket !== data.positionId);
+    });
+
+    console.log('[useActiveTrades] MT5 position closed:', data.positionId, data.symbol);
+  }, []);
+
+  /**
    * Subscribe to WebSocket connection state
    */
   useEffect(() => {
@@ -151,6 +230,38 @@ export function useActiveTrades(): UseActiveTradesReturn {
       unsubscribe?.();
     };
   }, [handleTradeUpdate]);
+
+  /**
+   * Subscribe to MT5 position update events
+   */
+  useEffect(() => {
+    wsMT5HandlerRef.current = () => {
+      const unsubscribe = wsClient.on<MT5PositionUpdateData>('mt5_position_update', handleMT5PositionUpdate);
+      return unsubscribe;
+    };
+
+    const unsubscribe = wsMT5HandlerRef.current();
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [handleMT5PositionUpdate]);
+
+  /**
+   * Subscribe to MT5 position closed events
+   */
+  useEffect(() => {
+    wsMT5ClosedRef.current = () => {
+      const unsubscribe = wsClient.on<MT5PositionClosedData>('mt5_position_closed', handleMT5PositionClosed);
+      return unsubscribe;
+    };
+
+    const unsubscribe = wsMT5ClosedRef.current();
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [handleMT5PositionClosed]);
 
   /**
    * Initial fetch and auto-refresh interval
