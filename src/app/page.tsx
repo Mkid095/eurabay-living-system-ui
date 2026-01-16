@@ -30,7 +30,7 @@ import { MutationSuccessTracking } from "@/components/dashboard/MutationSuccessT
 import { ControllerDecisionTimeline } from "@/components/dashboard/ControllerDecisionTimeline";
 import { EvolutionLogViewer } from "@/components/dashboard/EvolutionLogViewer";
 import { EnhancedActiveTradesTable } from "@/components/dashboard/EnhancedActiveTradesTable";
-import { EvolutionParameters } from "@/components/dashboard/EvolutionParameters";
+import { EvolutionParameterControls } from "@/components/dashboard/EvolutionParameterControls";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useEvolutionData } from "@/hooks/useEvolutionData";
 
@@ -305,10 +305,8 @@ export default function Home() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <EvolutionParameterControls />
                 <EvolutionParameters />
-                <div className="space-y-6">
-                  <DerivMarketOverview />
-                </div>
               </div>
 
               <LogsViewer />
