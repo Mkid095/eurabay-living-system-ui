@@ -2,11 +2,27 @@
  * API Client
  *
  * Core HTTP client for making API requests with error handling,
- * timeout support, auth interceptors, and consistent response formatting.
+ * timeout support, auth interceptors, Zod validation, logging, and consistent response formatting.
  */
 
+import { z } from 'zod';
 import { API_CONFIG } from './config';
 import { apiCache } from '../cache';
+import { apiLogger, type RequestLogEntry, type ResponseLogEntry, type ErrorLogEntry } from './logger';
+
+/**
+ * Validation options for API requests
+ */
+export interface ValidationOptions {
+  /** Zod schema to validate the response against */
+  schema?: z.ZodType;
+  /** Disable validation (useful for development/debugging) */
+  disable?: boolean;
+  /** Return safe default values on validation failure instead of throwing */
+  returnSafeDefaults?: boolean;
+  /** Custom safe default value when validation fails */
+  safeDefault?: unknown;
+}
 
 export interface ApiResponse<T> {
   data: T;
@@ -57,6 +73,39 @@ export class ApiRequestError extends Error implements ApiError {
     this.name = 'ApiRequestError';
     this.status = status;
     this.code = code;
+  }
+}
+
+/**
+ * Validation error class for Zod validation failures
+ */
+export class ValidationError extends Error {
+  /** Zod error details */
+  public readonly zodError: z.ZodError;
+  /** The response data that failed validation */
+  public readonly responseData: unknown;
+  /** The path of the API request that failed */
+  public readonly path: string;
+
+  constructor(zodError: z.ZodError, responseData: unknown, path: string) {
+    const formattedErrors = zodError.errors
+      .map(e => `${e.path.join('.')}: ${e.message}`)
+      .join(', ');
+    super(`API response validation failed for ${path}: ${formattedErrors}`);
+    this.name = 'ValidationError';
+    this.zodError = zodError;
+    this.responseData = responseData;
+    this.path = path;
+  }
+
+  /**
+   * Get formatted validation errors
+   */
+  getErrors(): Array<{ path: string[]; message: string }> {
+    return this.zodError.errors.map(e => ({
+      path: e.path,
+      message: e.message,
+    }));
   }
 }
 
@@ -202,19 +251,37 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
 }
 
 /**
- * Core fetch wrapper with timeout, retry logic, and error handling
+ * Core fetch wrapper with timeout, retry logic, error handling, and logging
  */
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
   timeout: number = API_CONFIG.timeout,
-  retryConfig: RetryConfig = DEFAULT_RETRY_CONFIG
-): Promise<Response> {
+  retryConfig: RetryConfig = DEFAULT_RETRY_CONFIG,
+  correlationId?: string
+): Promise<{ response: Response; startTime: number; attemptNumber: number }> {
   let lastError: Error | null = null;
   let attemptNumber = 0;
 
+  // Generate correlation ID if not provided
+  const cid = correlationId ?? apiLogger.generateCorrelationId();
+
+  // Extract method and body for logging
+  const method = (options.method as string) || 'GET';
+  const body = options.body ? JSON.parse(options.body as string) : undefined;
+
+  // Log the request
+  apiLogger.logRequest(cid, {
+    method,
+    url,
+    headers: options.headers as Record<string, string>,
+    params: undefined, // Already in URL
+    body,
+  } as RequestLogEntry);
+
   // Retry loop for 5xx errors and network errors
   while (attemptNumber <= retryConfig.maxRetries) {
+    const startTime = Date.now();
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -242,24 +309,29 @@ async function fetchWithTimeout(
         attemptNumber++;
         const delay = getRetryDelay(attemptNumber - 1, retryConfig.retryDelay);
 
-        // Log retry attempt in development
-        if (process.env.NODE_ENV === 'development') {
-          console.warn(
-            `API request failed with ${response.status}, retrying in ${delay}ms (attempt ${attemptNumber}/${retryConfig.maxRetries})`
-          );
-        }
+        // Log retry attempt using logger
+        apiLogger.logRetry(cid, attemptNumber, retryConfig.maxRetries, delay);
 
         await sleep(delay);
         continue;
       }
 
       // Response interceptor: Handle specific status codes
-      return response;
+      return { response, startTime, attemptNumber };
     } catch (error) {
       clearTimeout(timeoutId);
 
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new ApiRequestError('Request timeout', undefined, 'TIMEOUT');
+        const timeoutError = new ApiRequestError('Request timeout', undefined, 'TIMEOUT');
+
+        // Log timeout error
+        apiLogger.logError(cid, {
+          message: timeoutError.message,
+          code: 'TIMEOUT',
+          request: { method, url },
+        } as ErrorLogEntry);
+
+        throw timeoutError;
       }
 
       // Network errors are retryable
@@ -268,77 +340,186 @@ async function fetchWithTimeout(
         attemptNumber++;
         const delay = getRetryDelay(attemptNumber - 1, retryConfig.retryDelay);
 
-        // Log retry attempt in development
-        if (process.env.NODE_ENV === 'development') {
-          console.warn(
-            `Network error, retrying in ${delay}ms (attempt ${attemptNumber}/${retryConfig.maxRetries})`
-          );
-        }
+        // Log retry attempt using logger
+        apiLogger.logRetry(cid, attemptNumber, retryConfig.maxRetries, delay);
 
         await sleep(delay);
         continue;
       }
 
-      throw new ApiRequestError(
+      // Log final network error
+      const networkError = new ApiRequestError(
         error instanceof Error ? error.message : 'Network error',
         undefined,
         'NETWORK_ERROR'
       );
+
+      apiLogger.logError(cid, {
+        message: networkError.message,
+        code: 'NETWORK_ERROR',
+        stack: error instanceof Error ? error.stack : undefined,
+        request: { method, url },
+      } as ErrorLogEntry);
+
+      throw networkError;
     }
   }
 
-  // All retries exhausted
-  throw new ApiRequestError(
+  // All retries exhausted - log error
+  const maxRetriesError = new ApiRequestError(
     lastError?.message || 'Request failed after multiple retries',
     undefined,
     'MAX_RETRIES_EXCEEDED'
   );
+
+  apiLogger.logError(cid, {
+    message: maxRetriesError.message,
+    code: 'MAX_RETRIES_EXCEEDED',
+    request: { method, url },
+  } as ErrorLogEntry);
+
+  throw maxRetriesError;
+}
+
+/**
+ * Validate response data using Zod schema
+ */
+function validateResponse<T>(
+  data: unknown,
+  schema: z.ZodType<T>,
+  path: string,
+  options: ValidationOptions,
+  correlationId: string
+): T {
+  // Skip validation if disabled
+  if (options.disable) {
+    return data as T;
+  }
+
+  try {
+    return schema.parse(data);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      // Log validation error using logger
+      apiLogger.logValidationError(correlationId, path, error.errors);
+
+      // Return safe default if configured
+      if (options.returnSafeDefaults) {
+        return (options.safeDefault as T) ?? ({} as T);
+      }
+
+      // Throw validation error
+      throw new ValidationError(error, data, path);
+    }
+
+    // Re-throw non-Zod errors
+    throw error;
+  }
 }
 
 /**
  * Response interceptor: Parse response and handle errors
  */
-async function parseResponse<T>(response: Response): Promise<ApiResponse<T>> {
+async function parseResponse<T>(
+  fetchResult: { response: Response; startTime: number; attemptNumber: number },
+  validationOptions?: ValidationOptions,
+  requestPath?: string,
+  correlationId?: string
+): Promise<ApiResponse<T>> {
+  const { response, startTime, attemptNumber } = fetchResult;
+  const cid = correlationId ?? apiLogger.generateCorrelationId();
+  const duration = Date.now() - startTime;
+
   const contentType = response.headers.get('content-type');
   const isJson = contentType?.includes('application/json');
 
   // Handle 401 Unauthorized - clear auth token and redirect to login
   if (response.status === 401) {
-    clearAuthTokens();
-    redirectToLogin();
-    throw new ApiRequestError(
+    const authError = new ApiRequestError(
       'Authentication failed. Please log in again.',
       401,
       'UNAUTHORIZED'
     );
+
+    apiLogger.logError(cid, {
+      message: authError.message,
+      code: 'UNAUTHORIZED',
+      status: 401,
+      response: { status: response.status, ok: response.ok, duration },
+    } as ErrorLogEntry);
+
+    clearAuthTokens();
+    redirectToLogin();
+    throw authError;
   }
 
   // Handle 403 Forbidden - permission error
   if (response.status === 403) {
-    throw new ApiRequestError(
+    const forbiddenError = new ApiRequestError(
       'You do not have permission to perform this action.',
       403,
       'FORBIDDEN'
     );
+
+    apiLogger.logError(cid, {
+      message: forbiddenError.message,
+      code: 'FORBIDDEN',
+      status: 403,
+      response: { status: response.status, ok: response.ok, duration },
+    } as ErrorLogEntry);
+
+    throw forbiddenError;
   }
 
   // Handle other error responses
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+    let errorData: unknown;
 
     if (isJson) {
       try {
-        const errorData = await response.json();
-        errorMessage = errorData.message || errorData.error || errorMessage;
+        errorData = await response.clone().json();
+        errorMessage = (errorData as { message?: string; error?: string }).message ??
+                       (errorData as { message?: string; error?: string }).error ??
+                       errorMessage;
       } catch {
         // Use default error message if JSON parsing fails
       }
     }
 
-    throw new ApiRequestError(errorMessage, response.status);
+    const httpError = new ApiRequestError(errorMessage, response.status);
+
+    apiLogger.logError(cid, {
+      message: httpError.message,
+      status: response.status,
+      response: { status: response.status, ok: response.ok, duration },
+      ...(errorData && { data: errorData }),
+    } as ErrorLogEntry);
+
+    throw httpError;
   }
 
-  const data = isJson ? await response.json() : await response.text();
+  const rawData = isJson ? await response.json() : await response.text();
+
+  // Validate response if schema provided
+  let data: T = rawData as T;
+  if (validationOptions?.schema && isJson) {
+    data = validateResponse<T>(
+      rawData,
+      validationOptions.schema,
+      requestPath || response.url,
+      validationOptions,
+      cid
+    );
+  }
+
+  // Log the response
+  apiLogger.logResponse(cid, {
+    status: response.status,
+    ok: response.ok,
+    duration,
+    ...(isJson && { data: rawData }),
+  } as ResponseLogEntry);
 
   return {
     data,
@@ -381,13 +562,19 @@ function invalidateRelatedCache(path: string): void {
 }
 
 /**
- * GET request with optional URL parameters and caching
+ * GET request with optional URL parameters, caching, and validation
  */
 export async function get<T>(
   path: string,
   params?: Record<string, string | number | boolean | undefined>,
-  options?: RequestInit & { cache?: CacheOptions | boolean }
+  options?: RequestInit & {
+    cache?: CacheOptions | boolean;
+    validate?: ValidationOptions;
+  }
 ): Promise<ApiResponse<T>> {
+  // Generate correlation ID for this request
+  const correlationId = apiLogger.generateCorrelationId();
+
   // Parse cache options
   const cacheEnabled = options?.cache === undefined || options?.cache === true
     ? (typeof options?.cache === 'object' ? options.cache.enabled !== false : true)
@@ -396,6 +583,7 @@ export async function get<T>(
   const cacheOpts: CacheOptions | undefined = typeof options?.cache === 'object' ? options.cache : undefined;
   const customTTL = cacheOpts?.ttl;
   const customKey = cacheOpts?.key;
+  const validationOptions = options?.validate;
 
   // Generate cache key
   const cacheKey = customKey ?? generateCacheKey(path, params);
@@ -404,9 +592,7 @@ export async function get<T>(
   if (cacheEnabled) {
     const cachedData = apiCache.get<T>(cacheKey);
     if (cachedData !== null) {
-      if (process.env.NODE_ENV === 'development') {
-        console.debug(`[API Cache HIT] ${cacheKey}`);
-      }
+      apiLogger.logCacheHit(correlationId, cacheKey);
       return {
         data: cachedData,
         status: 200,
@@ -414,24 +600,20 @@ export async function get<T>(
       };
     }
 
-    if (process.env.NODE_ENV === 'development') {
-      console.debug(`[API Cache MISS] ${cacheKey}`);
-    }
+    apiLogger.logCacheMiss(correlationId, cacheKey);
   }
 
   // Make the actual request
   const url = buildUrl(path, params);
-  const response = await fetchWithTimeout(url, { ...options, method: 'GET' });
-  const result = await parseResponse<T>(response);
+  const fetchResult = await fetchWithTimeout(url, { ...options, method: 'GET' }, API_CONFIG.timeout, DEFAULT_RETRY_CONFIG, correlationId);
+  const result = await parseResponse<T>(fetchResult, validationOptions, path, correlationId);
 
   // Cache successful responses if caching is enabled
   if (cacheEnabled && result.ok) {
     const ttl = customTTL ?? getDefaultTTL(path);
     if (ttl > 0) {
       apiCache.set(cacheKey, result.data, ttl);
-      if (process.env.NODE_ENV === 'development') {
-        console.debug(`[API Cache SET] ${cacheKey} (TTL: ${ttl}s)`);
-      }
+      apiLogger.logCacheSet(correlationId, cacheKey, ttl);
     }
   }
 
@@ -439,73 +621,79 @@ export async function get<T>(
 }
 
 /**
- * POST request
+ * POST request with optional validation
  */
 export async function post<T>(
   path: string,
   body?: unknown,
-  options?: RequestInit
+  options?: RequestInit & {
+    validate?: ValidationOptions;
+  }
 ): Promise<ApiResponse<T>> {
+  const correlationId = apiLogger.generateCorrelationId();
   const url = buildUrl(path);
-  const response = await fetchWithTimeout(url, {
+  const fetchResult = await fetchWithTimeout(url, {
     method: 'POST',
     body: body ? JSON.stringify(body) : undefined,
     ...options,
-  });
-  const result = await parseResponse<T>(response);
+  }, API_CONFIG.timeout, DEFAULT_RETRY_CONFIG, correlationId);
+  const validationOptions = options?.validate;
+  const result = await parseResponse<T>(fetchResult, validationOptions, path, correlationId);
 
   // Invalidate related cache entries after successful POST
   if (result.ok) {
     invalidateRelatedCache(path);
-    if (process.env.NODE_ENV === 'development') {
-      console.debug(`[API Cache] Invalidated related caches for POST ${path}`);
-    }
   }
 
   return result;
 }
 
 /**
- * PUT request
+ * PUT request with optional validation
  */
 export async function put<T>(
   path: string,
   body?: unknown,
-  options?: RequestInit
+  options?: RequestInit & {
+    validate?: ValidationOptions;
+  }
 ): Promise<ApiResponse<T>> {
+  const correlationId = apiLogger.generateCorrelationId();
   const url = buildUrl(path);
-  const response = await fetchWithTimeout(url, {
+  const fetchResult = await fetchWithTimeout(url, {
     method: 'PUT',
     body: body ? JSON.stringify(body) : undefined,
     ...options,
-  });
-  const result = await parseResponse<T>(response);
+  }, API_CONFIG.timeout, DEFAULT_RETRY_CONFIG, correlationId);
+  const validationOptions = options?.validate;
+  const result = await parseResponse<T>(fetchResult, validationOptions, path, correlationId);
 
   // Invalidate related cache entries after successful PUT
   if (result.ok) {
     invalidateRelatedCache(path);
-    if (process.env.NODE_ENV === 'development') {
-      console.debug(`[API Cache] Invalidated related caches for PUT ${path}`);
-    }
   }
 
   return result;
 }
 
 /**
- * DELETE request
+ * DELETE request with optional validation
  */
-export async function del<T>(path: string, options?: RequestInit): Promise<ApiResponse<T>> {
+export async function del<T>(
+  path: string,
+  options?: RequestInit & {
+    validate?: ValidationOptions;
+  }
+): Promise<ApiResponse<T>> {
+  const correlationId = apiLogger.generateCorrelationId();
   const url = buildUrl(path);
-  const response = await fetchWithTimeout(url, { method: 'DELETE', ...options });
-  const result = await parseResponse<T>(response);
+  const fetchResult = await fetchWithTimeout(url, { method: 'DELETE', ...options }, API_CONFIG.timeout, DEFAULT_RETRY_CONFIG, correlationId);
+  const validationOptions = options?.validate;
+  const result = await parseResponse<T>(fetchResult, validationOptions, path, correlationId);
 
   // Invalidate related cache entries after successful DELETE
   if (result.ok) {
     invalidateRelatedCache(path);
-    if (process.env.NODE_ENV === 'development') {
-      console.debug(`[API Cache] Invalidated related caches for DELETE ${path}`);
-    }
   }
 
   return result;
@@ -557,4 +745,27 @@ export const authUtils = {
       // Ignore errors in localStorage access
     }
   },
+} as const;
+
+/**
+ * Export logger utilities for external use
+ */
+export const loggerUtils = {
+  setConfig: (config: Parameters<typeof apiLogger.setConfig>[0]) => apiLogger.setConfig(config),
+  setMinLevel: (level: Parameters<typeof apiLogger.setMinLevel>[0]) => apiLogger.setMinLevel(level),
+  generateCorrelationId: () => apiLogger.generateCorrelationId(),
+  logRequest: (correlationId: string, request: Parameters<typeof apiLogger.logRequest>[1]) =>
+    apiLogger.logRequest(correlationId, request),
+  logResponse: (correlationId: string, response: Parameters<typeof apiLogger.logResponse>[1]) =>
+    apiLogger.logResponse(correlationId, response),
+  logError: (correlationId: string, error: Parameters<typeof apiLogger.logError>[1]) =>
+    apiLogger.logError(correlationId, error),
+  debug: (correlationId: string, message: string, data?: unknown) =>
+    apiLogger.debug(correlationId, message, data),
+  info: (correlationId: string, message: string, data?: unknown) =>
+    apiLogger.info(correlationId, message, data),
+  warn: (correlationId: string, message: string, data?: unknown) =>
+    apiLogger.warn(correlationId, message, data),
+  error: (correlationId: string, message: string, data?: unknown) =>
+    apiLogger.error(correlationId, message, data),
 } as const;
