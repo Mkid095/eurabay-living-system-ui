@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useActiveTrades } from "@/hooks/useActiveTrades";
 import { TradeDetailModal } from "./TradeDetailModal";
+import { ModifySLTPDialog } from "./ModifySLTPDialog";
 import type { EvolvedTrade } from "@/types/evolution";
 
 export function EnhancedActiveTradesTable() {
@@ -31,6 +32,8 @@ export function EnhancedActiveTradesTable() {
 
   const [selectedTrade, setSelectedTrade] = useState<EvolvedTrade | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modifyTradeTicket, setModifyTradeTicket] = useState<string | null>(null);
+  const [isModifyDialogOpen, setIsModifyDialogOpen] = useState(false);
 
   const handleRowClick = useCallback((trade: EvolvedTrade) => {
     setSelectedTrade(trade);
@@ -47,6 +50,36 @@ export function EnhancedActiveTradesTable() {
       }
     } catch (error) {
       console.error("Failed to close trade:", error);
+    }
+  }, [refreshTrades]);
+
+  const handleModifySLTP = useCallback((ticket: string) => {
+    setModifyTradeTicket(ticket);
+    setIsModifyDialogOpen(true);
+  }, []);
+
+  const handleSaveSLTP = useCallback(async (
+    ticket: string,
+    stopLoss?: number,
+    takeProfit?: number
+  ) => {
+    try {
+      const response = await fetch(`/api/trades/${ticket}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          stopLoss,
+          takeProfit,
+        }),
+      });
+      if (response.ok) {
+        await refreshTrades();
+      }
+    } catch (error) {
+      console.error("Failed to modify SL/TP:", error);
+      throw error;
     }
   }, [refreshTrades]);
 
@@ -121,6 +154,9 @@ export function EnhancedActiveTradesTable() {
                   Side
                 </th>
                 <th className="text-right py-3 px-2 text-sm font-medium text-muted-foreground">
+                  Lots
+                </th>
+                <th className="text-right py-3 px-2 text-sm font-medium text-muted-foreground">
                   Entry
                 </th>
                 <th className="text-right py-3 px-2 text-sm font-medium text-muted-foreground">
@@ -149,7 +185,7 @@ export function EnhancedActiveTradesTable() {
             <tbody>
               {trades.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="text-center py-8 text-muted-foreground">
+                  <td colSpan={12} className="text-center py-8 text-muted-foreground">
                     No active trades
                   </td>
                 </tr>
@@ -183,6 +219,9 @@ export function EnhancedActiveTradesTable() {
                         )}
                         {trade.side}
                       </Badge>
+                    </td>
+                    <td className="py-3 px-2 text-right font-medium text-sm">
+                      {trade.lots}
                     </td>
                     <td className="py-3 px-2 text-right font-mono text-sm">
                       {trade.entryPrice.toFixed(5)}
@@ -287,6 +326,14 @@ export function EnhancedActiveTradesTable() {
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         onCloseTrade={handleCloseTrade}
+        onModifySLTP={handleModifySLTP}
+      />
+
+      <ModifySLTPDialog
+        trade={trades.find((t) => t.ticket === modifyTradeTicket) || null}
+        open={isModifyDialogOpen}
+        onOpenChange={setIsModifyDialogOpen}
+        onSave={handleSaveSLTP}
       />
     </>
   );

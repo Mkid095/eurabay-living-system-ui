@@ -149,8 +149,8 @@
       "mavenSteps": [3, 5, 6],
       "mcpTools": {},
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented comprehensive TradeDetailModal component with all acceptance criteria. Added lots field display, HTF/LTF context explanations (explainHTFContext and explainLTFContext helper functions), feature success rates display (color-coded by performance), confidence score breakdown (technical/fundamental/sentiment), trade chart placeholder (BarChart3 icon with message), close trade button with loading state, modify SL/TP button that closes modal and triggers callback. Updated EvolvedTrade and ClosedTrade types to include lots, featureSuccessRates, and confidenceBreakdown fields. Uses shadcn/ui Dialog, Button, Badge, Progress components. Typecheck passes. Build succeeds."
     },
     {
       "id": "US-006",
@@ -176,8 +176,8 @@
       "mavenSteps": [3, 5, 6],
       "mcpTools": {},
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented comprehensive ModifySLTPDialog component with all acceptance criteria. Added input fields for stop loss and take profit with number type and 0.00001 step, displays current SL/TP levels with Shield/Target icons, displays current price for reference, calculates and displays potential P&L at new levels (using calculatePotentialPnL function with lot multiplier), risk/reward ratio calculation with color coding (green for >=2, neutral for >=1, red for <1), save button calling PUT /trades/{ticket} endpoint, cancel button, validation errors (SL below price for BUY, above for SELL, SL below TP for BUY, SL above TP for SELL), loading state during save, error display in dialog. Uses shadcn/ui Dialog, Input, Label, Button components. Integrated with EnhancedActiveTradesTable with handleModifySLTP and handleSaveSLTP callbacks. Typecheck passes. Build succeeds."
     },
     {
       "id": "US-007",

@@ -80,6 +80,7 @@ export interface EvolvedTrade {
   ticket: string;
   symbol: string;
   side: 'BUY' | 'SELL';
+  lots: number;
   entryPrice: number;
   currentPrice: number;
   pnl: number;
@@ -91,7 +92,13 @@ export interface EvolvedTrade {
   htfContext: string;
   ltfContext: string;
   featuresUsed: string[];
+  featureSuccessRates?: Record<string, number>;
   confidence: number;
+  confidenceBreakdown?: {
+    technical: number;
+    fundamental: number;
+    sentiment: number;
+  };
   generation?: number;
 }
 
@@ -99,6 +106,7 @@ export interface ClosedTrade {
   ticket: string;
   symbol: string;
   side: 'BUY' | 'SELL';
+  lots: number;
   entryPrice: number;
   exitPrice: number;
   pnl: number;
@@ -113,7 +121,13 @@ export interface ClosedTrade {
   htfContext: string;
   ltfContext: string;
   featuresUsed: string[];
+  featureSuccessRates?: Record<string, number>;
   confidence: number;
+  confidenceBreakdown?: {
+    technical: number;
+    fundamental: number;
+    sentiment: number;
+  };
   generation?: number;
 }
 
