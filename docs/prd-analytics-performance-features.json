@@ -55,8 +55,8 @@
       "mavenSteps": [3, 5, 6],
       "mcpTools": {},
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented equity history API, types, hook, and updated EquityCurve component with real data from GET /portfolio/equity-history. Features include: line chart with date on X-axis and equity on Y-axis, tooltips with date/equity/P&L, starting equity reference line, peak equity markers, summary stats, date range selector, auto-refresh every 30s, loading skeleton, error state with retry, and empty state handling."
     },
     {
       "id": "US-003",
