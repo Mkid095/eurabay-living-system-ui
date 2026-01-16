@@ -3,22 +3,18 @@
 import { Card } from "@/components/ui/card";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { fetchMarketsOverview, fetchMarketTrend } from "@/lib/api/markets";
-import type { MarketOverviewData, FlashState, MarketTrendData } from "@/types/market";
-import { wsClient } from "@/lib/websocket/client";
-import type { MarketUpdateEvent } from "@/types/market";
+import type { MarketOverviewData, MarketTrendData } from "@/types/market";
 import { MarketDetailModal } from "@/components/dashboard/MarketDetailModal";
 import { TrendBadge } from "@/components/dashboard/TrendBadge";
+import { useRealTimeMarkets } from "@/hooks/useRealTimeMarkets";
 
 // Refresh interval for polling (3 seconds as per requirements)
 const POLL_INTERVAL = 3000;
 
 // Trend data refresh interval (10 seconds as per requirements)
 const TREND_REFRESH_INTERVAL = 10000;
-
-// Flash animation duration (ms)
-const FLASH_DURATION = 500;
 
 /**
  * Format price for display based on value
@@ -55,11 +51,9 @@ function formatTimestamp(timestamp: string): string {
 }
 
 export function MarketOverview() {
-  const [markets, setMarkets] = useState<MarketOverviewData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [flashStates, setFlashStates] = useState<Record<string, FlashState>>({});
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [initialMarkets, setInitialMarkets] = useState<MarketOverviewData[]>([]);
 
   // Trend data state
   const [trends, setTrends] = useState<Record<string, MarketTrendData>>({});
@@ -70,8 +64,18 @@ export function MarketOverview() {
   const [selectedMarket, setSelectedMarket] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Track previous prices to determine flash direction
-  const previousPricesRef = useRef<Record<string, number>>({});
+  // Use real-time markets hook for WebSocket updates
+  const {
+    markets,
+    flashStates,
+    isConnected,
+    isLoading: isRefreshing,
+    lastUpdate,
+  } = useRealTimeMarkets(initialMarkets, {
+    enableFlash: true,
+    highlightThreshold: 2,
+    flashDuration: 500,
+  });
 
   // Handle market card click to open detail modal
   const handleMarketClick = useCallback((symbol: string) => {
@@ -90,27 +94,7 @@ export function MarketOverview() {
     try {
       setError(null);
       const data = await fetchMarketsOverview();
-
-      // Determine flash states based on price changes
-      const newFlashStates: Record<string, FlashState> = {};
-      data.markets.forEach((market) => {
-        const previousPrice = previousPricesRef.current[market.symbol];
-        if (previousPrice !== undefined && previousPrice !== market.price) {
-          newFlashStates[market.symbol] = market.price > previousPrice ? 'up' : 'down';
-        }
-        previousPricesRef.current[market.symbol] = market.price;
-      });
-
-      setMarkets(data.markets);
-      setFlashStates(newFlashStates);
-      setLastUpdate(new Date());
-
-      // Clear flash states after animation
-      if (Object.keys(newFlashStates).length > 0) {
-        setTimeout(() => {
-          setFlashStates({});
-        }, FLASH_DURATION);
-      }
+      setInitialMarkets(data.markets);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch market data';
       setError(errorMessage);
@@ -148,53 +132,6 @@ export function MarketOverview() {
     );
   }, [markets, fetchMarketTrendData]);
 
-  // Handle WebSocket market update events
-  const handleMarketUpdate = useCallback((event: MarketUpdateEvent) => {
-    setMarkets((prevMarkets) => {
-      const updated = prevMarkets.map((market) => {
-        if (market.symbol !== event.symbol) {
-          return market;
-        }
-
-        // Determine flash direction based on price change
-        const previousPrice = previousPricesRef.current[event.symbol];
-        let flashState: FlashState = null;
-
-        if (previousPrice !== undefined && previousPrice !== event.bid) {
-          flashState = event.bid > previousPrice ? 'up' : 'down';
-        }
-
-        previousPricesRef.current[event.symbol] = event.bid;
-
-        // Set flash state
-        if (flashState) {
-          setFlashStates((prev) => ({ ...prev, [event.symbol]: flashState }));
-          setTimeout(() => {
-            setFlashStates((prev) => {
-              const next = { ...prev };
-              delete next[event.symbol];
-              return next;
-            });
-          }, FLASH_DURATION);
-        }
-
-        // Update market with WebSocket data
-        return {
-          ...market,
-          price: event.bid,
-          priceChange: event.priceChange,
-          priceChangePercentage: event.priceChangePercentage,
-          high24h: Math.max(market.high24h, event.bid),
-          low24h: Math.min(market.low24h, event.bid),
-          timestamp: event.timestamp,
-        };
-      });
-
-      setLastUpdate(new Date());
-      return updated;
-    });
-  }, []);
-
   // Initial fetch and polling setup
   useEffect(() => {
     fetchMarkets();
@@ -217,19 +154,6 @@ export function MarketOverview() {
 
     return () => clearInterval(intervalId);
   }, [markets, fetchAllTrends]);
-
-  // WebSocket subscription for real-time updates
-  useEffect(() => {
-    // Subscribe to market_update events
-    const unsubscribe = wsClient.on<MarketUpdateEvent>(
-      'market_update',
-      handleMarketUpdate
-    );
-
-    return () => {
-      unsubscribe();
-    };
-  }, [handleMarketUpdate]);
 
   // Render loading skeleton
   if (loading) {
@@ -292,7 +216,7 @@ export function MarketOverview() {
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-xl font-bold">Volatility Indices</h2>
           <span className="text-xs text-muted-foreground">
-            Updated {formatTimestamp(lastUpdate.toISOString())}
+            {lastUpdate ? `Updated ${formatTimestamp(lastUpdate.toISOString())}` : 'Loading...'}
           </span>
         </div>
         <div className="flex gap-2">
