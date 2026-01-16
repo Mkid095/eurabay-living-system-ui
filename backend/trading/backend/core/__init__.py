@@ -37,6 +37,13 @@ from .trailing_stop_manager import (
     TrailingStopConfig,
     TrailingStopUpdate,
 )
+from .position_monitoring_loop import (
+    PositionMonitoringLoop,
+    PositionMonitoringConfig,
+    MonitoringAction,
+    MonitoringActionRecord,
+    MonitoringLoopStats,
+)
 
 __all__ = [
     "ActiveTradeManager",
@@ -67,4 +74,9 @@ __all__ = [
     "TrailingStopManager",
     "TrailingStopConfig",
     "TrailingStopUpdate",
+    "PositionMonitoringLoop",
+    "PositionMonitoringConfig",
+    "MonitoringAction",
+    "MonitoringActionRecord",
+    "MonitoringLoopStats",
 ]
