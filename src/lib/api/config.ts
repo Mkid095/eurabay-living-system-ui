@@ -47,6 +47,8 @@ export const API_ENDPOINTS = {
   system: {
     forceEvolution: '/system/force-evolution',
     status: '/system/status',
+    start: '/system/start',
+    stop: '/system/stop',
   },
 
   // WebSocket endpoint

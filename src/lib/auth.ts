@@ -76,3 +76,19 @@ export const auth = betterAuth({
  * Type exports for TypeScript
  */
 export type Session = typeof auth.$Infer.Session;
+
+/**
+ * Extended session type with role field
+ */
+export interface ExtendedSession extends Session {
+  user: {
+    id: string;
+    createdAt: Date;
+    updatedAt: Date;
+    email: string;
+    emailVerified: boolean;
+    name: string;
+    image?: string | null;
+    role?: 'admin' | 'trader' | 'viewer';
+  };
+}
