@@ -1,4 +1,6 @@
 import { WSEvent } from './events';
+import { EventSchemaMap } from './schemas';
+import { z } from 'zod';
 
 /**
  * WebSocket Connection States
@@ -462,6 +464,7 @@ export class WSClient {
 
   /**
    * Dispatch incoming message to appropriate event handlers
+   * Validates messages using Zod schemas before dispatching
    */
   private dispatchMessage(message: unknown): void {
     // Validate message has event property
@@ -480,6 +483,38 @@ export class WSClient {
         console.warn('[WS] Received message without valid event type:', message);
       }
       return;
+    }
+
+    // Get the schema for this event type
+    const schema = EventSchemaMap[eventType as keyof typeof EventSchemaMap];
+
+    // Validate the event data if a schema exists
+    if (schema) {
+      const validationResult = schema.safeParse(msg.data);
+
+      if (!validationResult.success) {
+        // Log validation errors with full message details
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(
+            `[WS] Validation failed for event '${eventType}':`,
+            {
+              errors: validationResult.error.issues,
+              data: msg.data,
+              fullMessage: message,
+            }
+          );
+        }
+        // Discard invalid messages
+        return;
+      }
+
+      // Use the validated data (with safe defaults applied)
+      msg.data = validationResult.data;
+    } else {
+      // No schema exists for this event type - handle gracefully
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[WS] No validation schema for event type: ${eventType}, using raw data`);
+      }
     }
 
     // Construct WSEvent object
