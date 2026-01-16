@@ -66,6 +66,7 @@ from .position_monitoring_loop import (
 from .adaptive_risk_manager import (
     AdaptiveRiskManager,
     RiskAdjustment,
+    ConsecutiveLossAdjustment,
 )
 
 __all__ = [
@@ -115,4 +116,5 @@ __all__ = [
     "MonitoringLoopStats",
     "AdaptiveRiskManager",
     "RiskAdjustment",
+    "ConsecutiveLossAdjustment",
 ]

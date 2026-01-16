@@ -23,6 +23,7 @@ from backend.core.adaptive_risk_manager import (
     ProfitTargetAdjustment,
     DailyLossTracking,
     DailyLimitAlert,
+    ConsecutiveLossAdjustment,
 )
 from backend.core.performance_comparator import (
     PerformanceComparator,
@@ -3961,6 +3962,446 @@ def test_daily_loss_limit_historical_simulation():
         assert "Daily loss limit hit" in alerts[0].message
 
         logger.info("Daily loss limit historical simulation test passed")
+
+    finally:
+        comparator.close()
+        rm.close()
+        import time
+        time.sleep(0.1)
+        try:
+            import shutil
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            pass
+
+
+# ========== Consecutive Loss Protection Tests ==========
+
+
+def test_consecutive_loss_tracking_first_threshold(risk_manager):
+    """Test that position size is reduced by 25% after 3 consecutive losses."""
+    logger.info("Testing consecutive loss tracking - first threshold (3 losses)")
+
+    rm = risk_manager
+
+    # Simulate 3 consecutive losses
+    for i in range(3):
+        count, allowed = rm.track_consecutive_losses(profit=-100.0)
+        logger.info(f"Loss {i+1}: count={count}, allowed={allowed}")
+
+    # After 3 losses, risk should be reduced by 25%
+    # Base risk is 2.0%, so new risk should be 1.5%
+    expected_risk = 2.0 * (1 - 0.25)
+    actual_risk = rm._current_risk_percent
+
+    assert abs(actual_risk - expected_risk) < 0.01, \
+        f"Expected risk {expected_risk}%, got {actual_risk}%"
+
+    # Trading should still be allowed
+    count, allowed = rm.track_consecutive_losses(profit=-100.0)
+    assert allowed is True, "Trading should still be allowed after 3 losses"
+
+    # Check that adjustment was recorded
+    adjustments = rm.get_consecutive_loss_adjustments()
+    assert len(adjustments) >= 1, "At least one adjustment should be recorded"
+
+    # Find the adjustment at threshold 3
+    threshold_adjustment = None
+    for adj in adjustments:
+        if adj.consecutive_losses == 3:
+            threshold_adjustment = adj
+            break
+
+    assert threshold_adjustment is not None, "Should have adjustment at 3 losses"
+    assert threshold_adjustment.trading_halted is False
+    assert abs(threshold_adjustment.new_risk_percent - expected_risk) < 0.01
+
+    logger.info(f"First threshold test passed: risk reduced to {actual_risk}%")
+
+
+def test_consecutive_loss_tracking_second_threshold(risk_manager):
+    """Test that position size is reduced by 50% after 5 consecutive losses."""
+    logger.info("Testing consecutive loss tracking - second threshold (5 losses)")
+
+    rm = risk_manager
+
+    # Simulate 5 consecutive losses
+    for i in range(5):
+        count, allowed = rm.track_consecutive_losses(profit=-100.0)
+        logger.info(f"Loss {i+1}: count={count}, allowed={allowed}")
+
+    # After 5 losses, risk should be reduced by 50%
+    # Base risk is 2.0%, so new risk should be 1.0%
+    expected_risk = 2.0 * (1 - 0.50)
+    actual_risk = rm._current_risk_percent
+
+    assert abs(actual_risk - expected_risk) < 0.01, \
+        f"Expected risk {expected_risk}%, got {actual_risk}%"
+
+    # Trading should still be allowed
+    count, allowed = rm.track_consecutive_losses(profit=-100.0)
+    assert allowed is True, "Trading should still be allowed after 5 losses"
+
+    # Check that adjustment at threshold 5 was recorded
+    adjustments = rm.get_consecutive_loss_adjustments()
+    threshold_adjustment = None
+    for adj in adjustments:
+        if adj.consecutive_losses == 5:
+            threshold_adjustment = adj
+            break
+
+    assert threshold_adjustment is not None, "Should have adjustment at 5 losses"
+    assert threshold_adjustment.trading_halted is False
+    assert abs(threshold_adjustment.new_risk_percent - expected_risk) < 0.01
+
+    logger.info(f"Second threshold test passed: risk reduced to {actual_risk}%")
+
+
+def test_consecutive_loss_tracking_circuit_breaker(risk_manager):
+    """Test that trading is halted after 7 consecutive losses."""
+    logger.info("Testing consecutive loss tracking - circuit breaker (7 losses)")
+
+    rm = risk_manager
+
+    # Simulate 7 consecutive losses
+    for i in range(7):
+        count, allowed = rm.track_consecutive_losses(profit=-100.0)
+        logger.info(f"Loss {i+1}: count={count}, allowed={allowed}")
+
+    # After 7 losses, trading should be halted
+    assert rm.is_trading_halted_by_consecutive_losses() is True, \
+        "Trading should be halted after 7 consecutive losses"
+
+    # Risk should be 0 when trading is halted
+    assert rm._current_risk_percent == 0.0, \
+        f"Risk should be 0% when halted, got {rm._current_risk_percent}%"
+
+    # Check that circuit breaker adjustment was recorded
+    adjustments = rm.get_consecutive_loss_adjustments()
+    circuit_breaker_adjustment = None
+    for adj in adjustments:
+        if adj.consecutive_losses == 7:
+            circuit_breaker_adjustment = adj
+            break
+
+    assert circuit_breaker_adjustment is not None, "Should have circuit breaker adjustment"
+    assert circuit_breaker_adjustment.trading_halted is True
+    assert "Circuit breaker triggered" in circuit_breaker_adjustment.reason
+
+    logger.info("Circuit breaker test passed: trading halted after 7 losses")
+
+
+def test_consecutive_loss_reset_on_win(risk_manager):
+    """Test that consecutive loss counter is reset after a winning trade."""
+    logger.info("Testing consecutive loss reset on winning trade")
+
+    rm = risk_manager
+
+    # Simulate 4 consecutive losses
+    for i in range(4):
+        count, allowed = rm.track_consecutive_losses(profit=-100.0)
+
+    assert rm.get_consecutive_losses_count() == 4, \
+        f"Should have 4 consecutive losses, got {rm.get_consecutive_losses_count()}"
+
+    # Reset risk to known value before winning trade
+    initial_risk = rm._current_risk_percent
+    logger.info(f"Risk before win: {initial_risk}%")
+
+    # Simulate a winning trade
+    count, allowed = rm.track_consecutive_losses(profit=150.0)
+
+    # Counter should be reset to 0
+    assert rm.get_consecutive_losses_count() == 0, \
+        f"Counter should be reset to 0, got {rm.get_consecutive_losses_count()}"
+
+    # Risk should be restored to base risk
+    assert rm._current_risk_percent == rm._base_risk_percent, \
+        f"Risk should be restored to base {rm._base_risk_percent}%, got {rm._current_risk_percent}%"
+
+    # Trading should be allowed
+    assert allowed is True, "Trading should be allowed after reset"
+
+    logger.info("Reset on win test passed: counter reset to 0")
+
+
+def test_consecutive_loss_reset_from_halted(risk_manager):
+    """Test that trading halt is lifted when counter is reset by a win."""
+    logger.info("Testing consecutive loss reset from halted state")
+
+    rm = risk_manager
+
+    # Trigger circuit breaker
+    for i in range(7):
+        rm.track_consecutive_losses(profit=-100.0)
+
+    assert rm.is_trading_halted_by_consecutive_losses() is True
+
+    # Simulate a winning trade to reset
+    count, allowed = rm.track_consecutive_losses(profit=200.0)
+
+    # Trading halt should be lifted
+    assert rm.is_trading_halted_by_consecutive_losses() is False, \
+        "Trading halt should be lifted after winning trade"
+
+    # Risk should be restored to base risk
+    assert rm._current_risk_percent == rm._base_risk_percent, \
+        f"Risk should be restored to base {rm._base_risk_percent}%"
+
+    # Counter should be 0
+    assert rm.get_consecutive_losses_count() == 0
+
+    # Trading should be allowed
+    assert allowed is True
+
+    logger.info("Reset from halted test passed: trading halt lifted")
+
+
+def test_consecutive_loss_manual_reset(risk_manager):
+    """Test manual reset of consecutive loss counter."""
+    logger.info("Testing manual consecutive loss reset")
+
+    rm = risk_manager
+
+    # Trigger first threshold
+    for i in range(3):
+        rm.track_consecutive_losses(profit=-100.0)
+
+    assert rm.get_consecutive_losses_count() == 3
+
+    # Manually reset
+    rm.reset_consecutive_losses()
+
+    # Counter should be 0
+    assert rm.get_consecutive_losses_count() == 0, \
+        "Counter should be 0 after manual reset"
+
+    # Trading halt should be lifted (if it was set)
+    assert rm.is_trading_halted_by_consecutive_losses() is False
+
+    # Risk should be restored to base
+    assert rm._current_risk_percent == rm._base_risk_percent
+
+    logger.info("Manual reset test passed")
+
+
+def test_consecutive_loss_disabled(risk_manager):
+    """Test that consecutive loss protection can be disabled."""
+    logger.info("Testing consecutive loss protection disabled")
+
+    # Create a new risk manager with consecutive loss protection disabled
+    rm = AdaptiveRiskManager(
+        performance_comparator=risk_manager._performance_comparator,
+        database_path=risk_manager._database_path,
+        enable_consecutive_loss_protection=False,
+    )
+
+    # Simulate 10 consecutive losses
+    for i in range(10):
+        count, allowed = rm.track_consecutive_losses(profit=-100.0)
+
+    # Counter should still increment
+    assert rm.get_consecutive_losses_count() == 10
+
+    # But trading should never be halted
+    assert rm.is_trading_halted_by_consecutive_losses() is False
+
+    # And risk should not change
+    assert rm._current_risk_percent == rm._base_risk_percent
+
+    logger.info("Disabled test passed")
+
+
+def test_consecutive_loss_historical_simulation():
+    """
+    Test consecutive loss protection with historical simulation.
+
+    Simulates a realistic losing streak followed by recovery to verify
+    the complete behavior of the consecutive loss protection system.
+    """
+    logger.info("Testing consecutive loss protection with historical simulation")
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        db_path = Path(temp_dir) / "test_consecutive_historical.db"
+        comparator_path = Path(temp_dir) / "test_performance.db"
+
+        comparator = PerformanceComparator(database_path=str(comparator_path))
+        rm = AdaptiveRiskManager(
+            performance_comparator=comparator,
+            database_path=str(db_path),
+            base_risk_percent=2.0,
+            min_risk_percent=0.5,
+            max_risk_percent=3.0,
+            enable_consecutive_loss_protection=True,
+        )
+
+        # Scenario: Alternating wins and losses that eventually leads to losing streak
+        # P&L sequence: +150, -100, +200, -100, -100, -100, -100, -100, +300, -100
+
+        trades = [
+            (+150, "Win - profitable trade"),
+            (-100, "Loss - market moved against"),
+            (+200, "Win - good entry"),
+            (-100, "Loss - stopped out"),
+            (-100, "Loss - 2 consecutive"),
+            (-100, "Loss - 3 consecutive - should reduce risk"),
+            (-100, "Loss - 4 consecutive"),
+            (-100, "Loss - 5 consecutive - should reduce risk more"),
+            (+300, "Win - big winner - should reset counter"),
+            (-100, "Loss - 1 consecutive after reset"),
+        ]
+
+        consecutive_losses = 0
+        trading_halted = False
+
+        for i, (profit, description) in enumerate(trades):
+            old_count = rm.get_consecutive_losses_count()
+            count, allowed = rm.track_consecutive_losses(profit=profit)
+            current_risk = rm._current_risk_percent
+            halted = rm.is_trading_halted_by_consecutive_losses()
+
+            logger.info(
+                f"Trade {i+1}: {description} | "
+                f"P&L=${profit:.0f} | "
+                f"Count: {old_count} -> {count} | "
+                f"Risk: {current_risk:.2f}% | "
+                f"Allowed: {allowed} | "
+                f"Halted: {halted}"
+            )
+
+            # Verify behavior
+            if profit < 0:
+                consecutive_losses += 1
+            else:
+                consecutive_losses = 0
+
+            if i == 5:  # After 3 consecutive losses (trades 4, 5, 6)
+                # Risk should be reduced by 25%
+                expected_risk = 2.0 * 0.75
+                assert abs(current_risk - expected_risk) < 0.01, \
+                    f"Trade {i+1}: Expected risk {expected_risk}%, got {current_risk}%"
+
+            elif i == 7:  # After 5 consecutive losses
+                # Risk should be reduced by 50%
+                expected_risk = 2.0 * 0.50
+                assert abs(current_risk - expected_risk) < 0.01, \
+                    f"Trade {i+1}: Expected risk {expected_risk}%, got {current_risk}%"
+
+            elif i == 8:  # After winning trade
+                # Counter should be reset
+                assert count == 0, f"Trade {i+1}: Counter should be 0 after win"
+                # Risk should be restored to base
+                assert abs(current_risk - 2.0) < 0.01, \
+                    f"Trade {i+1}: Risk should be restored to 2.0%"
+
+            # Verify trading was never halted in this scenario
+            assert halted is False, f"Trade {i+1}: Trading should not be halted"
+            assert allowed is True, f"Trade {i+1}: Trading should be allowed"
+
+        # Check final state
+        assert rm.get_consecutive_losses_count() == 1, \
+            "Final count should be 1 (one loss after reset)"
+
+        # Get adjustment history
+        adjustments = rm.get_consecutive_loss_adjustments()
+
+        logger.info(f"Total consecutive loss adjustments: {len(adjustments)}")
+        for adj in adjustments:
+            logger.info(
+                f"  - Losses: {adj.consecutive_losses}, "
+                f"Risk: {adj.old_risk_percent:.2f}% -> {adj.new_risk_percent:.2f}%, "
+                f"Halted: {adj.trading_halted}"
+            )
+
+        # Should have at least 2 adjustments (at 3 and 5 losses)
+        assert len(adjustments) >= 2, \
+            f"Should have at least 2 adjustments, got {len(adjustments)}"
+
+        # Should have exactly 2 trading halt resets (after wins)
+        reset_adjustments = [a for a in adjustments if a.consecutive_losses == 0]
+        assert len(reset_adjustments) >= 1, \
+            "Should have at least 1 reset adjustment"
+
+        logger.info("Consecutive loss historical simulation test passed")
+
+    finally:
+        comparator.close()
+        rm.close()
+        import time
+        time.sleep(0.1)
+        try:
+            import shutil
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            pass
+
+
+def test_consecutive_loss_circuit_breaker_recovery():
+    """
+    Test recovery from circuit breaker triggered by consecutive losses.
+
+    Verifies that after hitting the circuit breaker (7 losses),
+    a winning trade properly resets the system and allows trading to resume.
+    """
+    logger.info("Testing consecutive loss circuit breaker recovery")
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        db_path = Path(temp_dir) / "test_consecutive_recovery.db"
+        comparator_path = Path(temp_dir) / "test_performance.db"
+
+        comparator = PerformanceComparator(database_path=str(comparator_path))
+        rm = AdaptiveRiskManager(
+            performance_comparator=comparator,
+            database_path=str(db_path),
+            base_risk_percent=2.0,
+            min_risk_percent=0.5,
+            max_risk_percent=3.0,
+            enable_consecutive_loss_protection=True,
+        )
+
+        # Trigger circuit breaker
+        logger.info("Triggering circuit breaker with 7 consecutive losses...")
+        for i in range(7):
+            count, allowed = rm.track_consecutive_losses(profit=-100.0)
+            logger.info(f"  Loss {i+1}: count={count}, allowed={allowed}, halted={rm.is_trading_halted_by_consecutive_losses()}")
+
+        # Verify circuit breaker is active
+        assert rm.is_trading_halted_by_consecutive_losses() is True
+        assert rm._current_risk_percent == 0.0
+
+        # Try to open new position while halted (should not be allowed)
+        count, allowed = rm.track_consecutive_losses(profit=-100.0)
+        assert allowed is False, "Trading should not be allowed while halted"
+        assert rm.is_trading_halted_by_consecutive_losses() is True
+
+        logger.info("Circuit breaker active - trading halted")
+
+        # Simulate winning trade to reset
+        logger.info("Simulating winning trade to reset...")
+        count, allowed = rm.track_consecutive_losses(profit=500.0)
+
+        # Verify reset
+        assert rm.is_trading_halted_by_consecutive_losses() is False, \
+            "Trading halt should be lifted after win"
+        assert rm.get_consecutive_losses_count() == 0, \
+            "Counter should be reset to 0"
+        assert rm._current_risk_percent == rm._base_risk_percent, \
+            f"Risk should be restored to {rm._base_risk_percent}%"
+        assert allowed is True, "Trading should be allowed after reset"
+
+        logger.info("System reset successfully after winning trade")
+
+        # Verify normal trading resumes
+        logger.info("Verifying normal trading resumes...")
+        count, allowed = rm.track_consecutive_losses(profit=-50.0)
+        assert count == 1, "Should have 1 consecutive loss"
+        assert allowed is True, "Trading should be allowed"
+        assert rm._current_risk_percent == rm._base_risk_percent, \
+            "Risk should remain at base level"
+
+        logger.info("Circuit breaker recovery test passed")
 
     finally:
         comparator.close()

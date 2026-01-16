@@ -359,6 +359,39 @@ class DailyLimitAlert:
         }
 
 
+@dataclass
+class ConsecutiveLossAdjustment:
+    """
+    Record of a consecutive loss-based risk adjustment.
+
+    Attributes:
+        timestamp: When the adjustment occurred
+        old_risk_percent: Previous risk percentage
+        new_risk_percent: New risk percentage
+        consecutive_losses: Number of consecutive losses that triggered the adjustment
+        trading_halted: Whether trading was halted due to consecutive losses
+        reason: Explanation for the adjustment
+    """
+
+    timestamp: datetime
+    old_risk_percent: float
+    new_risk_percent: float
+    consecutive_losses: int
+    trading_halted: bool
+    reason: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for storage."""
+        return {
+            "timestamp": self.timestamp.isoformat(),
+            "old_risk_percent": round(self.old_risk_percent, 2),
+            "new_risk_percent": round(self.new_risk_percent, 2),
+            "consecutive_losses": self.consecutive_losses,
+            "trading_halted": self.trading_halted,
+            "reason": self.reason,
+        }
+
+
 class AdaptiveRiskManager:
     """
     Manages adaptive risk based on recent trading performance and market volatility.
@@ -432,6 +465,7 @@ class AdaptiveRiskManager:
         win_rate_threshold: float = 60.0,
         daily_loss_limit_percent: float = 5.0,
         enable_daily_loss_limit: bool = True,
+        enable_consecutive_loss_protection: bool = True,
     ):
         """
         Initialize the AdaptiveRiskManager.
@@ -465,6 +499,7 @@ class AdaptiveRiskManager:
             win_rate_threshold: Win rate threshold for TP adjustment (default: 60.0%)
             daily_loss_limit_percent: Daily loss limit as percentage of account balance (default: 5.0%)
             enable_daily_loss_limit: Whether to enable daily loss limit (default: True)
+            enable_consecutive_loss_protection: Whether to enable consecutive loss protection (default: True)
         """
         self._performance_comparator = performance_comparator
         self._database_path = database_path
@@ -520,6 +555,17 @@ class AdaptiveRiskManager:
         self._daily_loss_tracking: dict[str, DailyLossTracking] = {}
         self._daily_limit_alerts: list[DailyLimitAlert] = []
         self._current_account_balance: float = initial_account_balance
+
+        # Consecutive loss protection parameters
+        self._consecutive_losses: int = 0
+        self._consecutive_loss_threshold_1: int = 3
+        self._consecutive_loss_threshold_2: int = 5
+        self._consecutive_loss_threshold_3: int = 7
+        self._consecutive_loss_reduction_1: float = 0.25
+        self._consecutive_loss_reduction_2: float = 0.50
+        self._enable_consecutive_loss_protection: bool = enable_consecutive_loss_protection
+        self._consecutive_loss_adjustments: list[ConsecutiveLossAdjustment] = []
+        self._consecutive_loss_halted: bool = False
 
         # Initialize database
         self._initialize_database()
@@ -720,6 +766,20 @@ class AdaptiveRiskManager:
                 )
             """)
 
+            # Create consecutive_loss_adjustments table for consecutive loss tracking
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS consecutive_loss_adjustments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    old_risk_percent REAL NOT NULL,
+                    new_risk_percent REAL NOT NULL,
+                    consecutive_losses INTEGER NOT NULL,
+                    trading_halted BOOLEAN NOT NULL,
+                    reason TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Create indexes
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_adjustments_timestamp
@@ -814,6 +874,16 @@ class AdaptiveRiskManager:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_daily_alerts_date
                 ON daily_limit_alerts(date)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_consecutive_loss_timestamp
+                ON consecutive_loss_adjustments(timestamp DESC)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_consecutive_loss_halted
+                ON consecutive_loss_adjustments(trading_halted)
             """)
 
             self._connection.commit()
@@ -3283,3 +3353,281 @@ class AdaptiveRiskManager:
 
         except sqlite3.Error as e:
             logger.error(f"Failed to store daily limit alert in database: {e}")
+
+    # ========== Consecutive Loss Protection Methods ==========
+
+    def track_consecutive_losses(self, profit: float) -> tuple[int, bool]:
+        """
+        Track consecutive losing trades and adjust position sizing or halt trading.
+
+        This method should be called after each trade closes with the final P&L.
+        It maintains a counter of consecutive losses and applies risk adjustments
+        based on predefined thresholds.
+
+        Args:
+            profit: Final profit/loss of the closed trade (negative = loss)
+
+        Returns:
+            Tuple of (consecutive_losses_count, trading_allowed)
+            - consecutive_losses_count: Current count of consecutive losses
+            - trading_allowed: Whether new positions are allowed
+
+        Risk adjustment rules:
+        - Reduce position size by 25% after 3 consecutive losses
+        - Reduce position size by 50% after 5 consecutive losses
+        - Halt trading after 7 consecutive losses (circuit breaker)
+        - Reset counter to 0 after any winning trade
+        """
+        try:
+            old_risk = self._current_risk_percent
+            new_risk = old_risk
+            trading_halted = False
+            reason = ""
+
+            if profit < 0:
+                # Losing trade - increment counter (always track, even if disabled)
+                self._consecutive_losses += 1
+                count = self._consecutive_losses
+
+                logger.info(f"Consecutive loss #{count} recorded (P&L=${profit:.2f})")
+
+                # Only apply adjustments if consecutive loss protection is enabled
+                if not self._enable_consecutive_loss_protection:
+                    # Just track the counter, don't apply adjustments
+                    logger.debug("Consecutive loss protection disabled, skipping adjustments")
+                    return self._consecutive_losses, True
+
+                # Apply risk adjustments based on thresholds
+                if count >= self._consecutive_loss_threshold_3:
+                    # Circuit breaker - halt trading
+                    self._consecutive_loss_halted = True
+                    trading_halted = True
+                    reason = (
+                        f"Circuit breaker triggered: {count} consecutive losses. "
+                        f"Trading halted to prevent further losses and emotional trading."
+                    )
+                    logger.critical(f"CONSECUTIVE LOSS CIRCUIT BREAKER: {reason}")
+
+                elif count >= self._consecutive_loss_threshold_2:
+                    # Second threshold - reduce risk by 50%
+                    reduction = self._consecutive_loss_reduction_2
+                    new_risk = self._base_risk_percent * (1 - reduction)
+                    reason = (
+                        f"{count} consecutive losses detected. "
+                        f"Reducing position size by {reduction*100:.0f}% to {new_risk:.2f}% "
+                        f"to protect capital during losing streak."
+                    )
+                    logger.warning(f"Consecutive loss protection: {reason}")
+
+                elif count >= self._consecutive_loss_threshold_1:
+                    # First threshold - reduce risk by 25%
+                    reduction = self._consecutive_loss_reduction_1
+                    new_risk = self._base_risk_percent * (1 - reduction)
+                    reason = (
+                        f"{count} consecutive losses detected. "
+                        f"Reducing position size by {reduction*100:.0f}% to {new_risk:.2f}% "
+                        f"to moderate risk during losing streak."
+                    )
+                    logger.info(f"Consecutive loss protection: {reason}")
+
+                else:
+                    # Below first threshold - just log
+                    reason = (
+                        f"{count} consecutive losses recorded. "
+                        f"Monitoring for potential risk adjustment at threshold {self._consecutive_loss_threshold_1}."
+                    )
+                    logger.debug(reason)
+
+                # Apply min/max caps to new risk
+                if trading_halted:
+                    new_risk = 0.0
+                elif new_risk < self._min_risk_percent:
+                    new_risk = self._min_risk_percent
+                    reason += f" Cap at minimum {self._min_risk_percent}%."
+
+                # Update current risk if changed
+                if abs(new_risk - old_risk) > 0.01 or trading_halted:
+                    self._current_risk_percent = new_risk
+
+                    # Create adjustment record
+                    adjustment = ConsecutiveLossAdjustment(
+                        timestamp=datetime.utcnow(),
+                        old_risk_percent=old_risk,
+                        new_risk_percent=new_risk,
+                        consecutive_losses=count,
+                        trading_halted=trading_halted,
+                        reason=reason,
+                    )
+
+                    # Store in history
+                    self._consecutive_loss_adjustments.append(adjustment)
+
+                    # Store in database
+                    self._store_consecutive_loss_adjustment(adjustment)
+                    self._store_risk_settings()
+
+            else:
+                # Winning trade - reset counter
+                if self._consecutive_losses > 0:
+                    old_count = self._consecutive_losses
+                    self._consecutive_losses = 0
+
+                    # If protection is disabled, just reset and return
+                    if not self._enable_consecutive_loss_protection:
+                        logger.debug(
+                            f"Winning trade reset consecutive losses from {old_count} to 0. "
+                            f"Protection disabled, no adjustments applied."
+                        )
+                        return self._consecutive_losses, True
+
+                    # Reset trading halt if it was active
+                    if self._consecutive_loss_halted:
+                        self._consecutive_loss_halted = False
+                        reason = (
+                            f"Winning trade reset consecutive losses from {old_count} to 0. "
+                            f"Trading halt lifted. Resuming normal risk levels."
+                        )
+                        logger.info(f"Consecutive loss reset: {reason}")
+
+                        # Restore base risk
+                        new_risk = self._base_risk_percent
+                        self._current_risk_percent = new_risk
+
+                        # Create adjustment record for the reset
+                        adjustment = ConsecutiveLossAdjustment(
+                            timestamp=datetime.utcnow(),
+                            old_risk_percent=old_risk,
+                            new_risk_percent=new_risk,
+                            consecutive_losses=0,
+                            trading_halted=False,
+                            reason=reason,
+                        )
+
+                        self._consecutive_loss_adjustments.append(adjustment)
+                        self._store_consecutive_loss_adjustment(adjustment)
+                        self._store_risk_settings()
+                    else:
+                        # Trading wasn't halted but risk was reduced, restore base risk
+                        reason = (
+                            f"Winning trade reset consecutive losses from {old_count} to 0. "
+                            f"Restoring risk to base level."
+                        )
+                        logger.info(f"Consecutive loss reset: {reason}")
+
+                        # Restore base risk
+                        new_risk = self._base_risk_percent
+                        self._current_risk_percent = new_risk
+
+                        # Create adjustment record for the reset
+                        adjustment = ConsecutiveLossAdjustment(
+                            timestamp=datetime.utcnow(),
+                            old_risk_percent=old_risk,
+                            new_risk_percent=new_risk,
+                            consecutive_losses=0,
+                            trading_halted=False,
+                            reason=reason,
+                        )
+
+                        self._consecutive_loss_adjustments.append(adjustment)
+                        self._store_consecutive_loss_adjustment(adjustment)
+                        self._store_risk_settings()
+                else:
+                    logger.debug(f"Winning trade (P&L=${profit:.2f}). No consecutive losses to reset.")
+
+            trading_allowed = not self._consecutive_loss_halted
+
+            return self._consecutive_losses, trading_allowed
+
+        except Exception as e:
+            logger.error(f"Failed to track consecutive losses: {e}")
+            return self._consecutive_losses, not self._consecutive_loss_halted
+
+    def is_trading_halted_by_consecutive_losses(self) -> bool:
+        """
+        Check if trading is halted due to consecutive losses.
+
+        Returns:
+            True if trading is halted, False otherwise
+        """
+        return self._consecutive_loss_halted
+
+    def get_consecutive_losses_count(self) -> int:
+        """
+        Get the current count of consecutive losses.
+
+        Returns:
+            Number of consecutive losing trades
+        """
+        return self._consecutive_losses
+
+    def reset_consecutive_losses(self) -> None:
+        """
+        Manually reset the consecutive loss counter.
+
+        This can be used to manually lift the trading halt after
+        reviewing the situation and determining it's safe to resume.
+        """
+        old_count = self._consecutive_losses
+        was_halted = self._consecutive_loss_halted
+
+        self._consecutive_losses = 0
+        self._consecutive_loss_halted = False
+
+        # Restore base risk
+        self._current_risk_percent = self._base_risk_percent
+
+        logger.info(
+            f"Consecutive losses manually reset from {old_count} to 0. "
+            f"Trading halt lifted (was_halted={was_halted}). "
+            f"Risk restored to {self._current_risk_percent:.2f}%."
+        )
+
+    def get_consecutive_loss_adjustments(self, limit: int = 100) -> list[ConsecutiveLossAdjustment]:
+        """
+        Get the history of consecutive loss adjustments.
+
+        Args:
+            limit: Maximum number of adjustments to return
+
+        Returns:
+            List of ConsecutiveLossAdjustment records
+        """
+        return self._consecutive_loss_adjustments[-limit:]
+
+    def _store_consecutive_loss_adjustment(self, adjustment: ConsecutiveLossAdjustment) -> None:
+        """
+        Store a consecutive loss adjustment in the database.
+
+        Args:
+            adjustment: ConsecutiveLossAdjustment object to store
+        """
+        if self._connection is None:
+            logger.warning("Database connection not available, adjustment not stored")
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            cursor.execute("""
+                INSERT INTO consecutive_loss_adjustments (
+                    timestamp, old_risk_percent, new_risk_percent,
+                    consecutive_losses, trading_halted, reason
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                adjustment.timestamp.isoformat(),
+                adjustment.old_risk_percent,
+                adjustment.new_risk_percent,
+                adjustment.consecutive_losses,
+                int(adjustment.trading_halted),
+                adjustment.reason,
+            ))
+
+            self._connection.commit()
+
+            logger.debug(
+                f"Consecutive loss adjustment stored: "
+                f"losses={adjustment.consecutive_losses}, halted={adjustment.trading_halted}"
+            )
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to store consecutive loss adjustment in database: {e}")
