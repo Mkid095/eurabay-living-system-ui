@@ -14,6 +14,7 @@ from pathlib import Path
 from backend.core.adaptive_risk_manager import (
     AdaptiveRiskManager,
     RiskAdjustment,
+    VolatilityAdjustment,
 )
 from backend.core.performance_comparator import (
     PerformanceComparator,
@@ -52,6 +53,29 @@ def risk_manager(performance_comparator, temp_database):
         min_risk_percent=0.5,
         max_risk_percent=3.0,
         performance_window=20,
+        atr_period=14,
+        atr_lookback=100,
+        min_volatility_multiplier=0.3,
+        max_volatility_multiplier=1.5,
+        enable_volatility_adjustment=False,  # Disabled for backward compatibility with existing tests
+    )
+
+
+@pytest.fixture
+def risk_manager_with_volatility(performance_comparator, temp_database):
+    """Create an AdaptiveRiskManager with volatility adjustment enabled."""
+    return AdaptiveRiskManager(
+        performance_comparator=performance_comparator,
+        database_path=temp_database,
+        base_risk_percent=2.0,
+        min_risk_percent=0.5,
+        max_risk_percent=3.0,
+        performance_window=20,
+        atr_period=14,
+        atr_lookback=100,
+        min_volatility_multiplier=0.3,
+        max_volatility_multiplier=1.5,
+        enable_volatility_adjustment=True,  # Enabled for volatility tests
     )
 
 
@@ -527,6 +551,215 @@ class TestAdaptiveRiskManager:
         # Verify the reason mentions maximizing winning streak
         history = risk_manager.get_adjustment_history()
         assert "maximize" in history[-1].reason.lower() or "winning" in history[-1].reason.lower()
+
+    def test_volatility_multiplier_bounds(self, risk_manager_with_volatility):
+        """Test that volatility multiplier stays within min/max bounds."""
+        # Test with different symbols
+        symbols = ["EURUSD", "GBPUSD", "V10", "V100"]
+
+        for symbol in symbols:
+            vol_mult = risk_manager_with_volatility.calculate_volatility_multiplier(symbol)
+
+            # Verify bounds
+            assert risk_manager_with_volatility._min_volatility_multiplier <= vol_mult <= risk_manager_with_volatility._max_volatility_multiplier
+
+            logger.info(f"Volatility multiplier for {symbol}: {vol_mult:.3f}")
+
+    def test_volatility_multiplier_high_volatility(self, risk_manager_with_volatility):
+        """Test volatility multiplier for high volatility symbols (V100)."""
+        vol_mult = risk_manager_with_volatility.calculate_volatility_multiplier("V100")
+
+        # V100 should have lower multiplier due to high volatility
+        # The exact value depends on the synthetic data, but it should be reasonable
+        assert 0.3 <= vol_mult <= 1.5
+
+        # Get the volatility adjustment details
+        adjustments = risk_manager_with_volatility.get_volatility_adjustments(symbol="V100")
+        assert len(adjustments) > 0
+
+        latest = adjustments[-1]
+        assert latest.symbol == "V100"
+        assert latest.volatility_multiplier == vol_mult
+        assert latest.current_atr > 0
+        assert latest.average_atr > 0
+
+        logger.info(f"V100 volatility adjustment: {latest.reason}")
+
+    def test_volatility_multiplier_low_volatility(self, risk_manager_with_volatility):
+        """Test volatility multiplier for low volatility symbols (V10)."""
+        vol_mult = risk_manager_with_volatility.calculate_volatility_multiplier("V10")
+
+        # V10 should have higher multiplier due to low volatility
+        assert 0.3 <= vol_mult <= 1.5
+
+        # Get the volatility adjustment details
+        adjustments = risk_manager_with_volatility.get_volatility_adjustments(symbol="V10")
+        assert len(adjustments) > 0
+
+        latest = adjustments[-1]
+        assert latest.symbol == "V10"
+        assert latest.volatility_multiplier == vol_mult
+
+        logger.info(f"V10 volatility adjustment: {latest.reason}")
+
+    def test_position_size_with_volatility_adjustment(self, risk_manager_with_volatility):
+        """Test position size calculation with volatility adjustment."""
+        account_balance = 10000.0
+        entry_price = 1.0850
+        stop_loss = 1.0800
+        symbol = "EURUSD"
+
+        # Calculate position size with volatility adjustment
+        position_size = risk_manager_with_volatility.calculate_position_size(
+            account_balance, entry_price, stop_loss, "BUY", symbol
+        )
+
+        # Position size should be positive
+        assert position_size > 0
+
+        # Get the volatility multiplier
+        vol_mult = risk_manager_with_volatility.calculate_volatility_multiplier(symbol)
+
+        # Calculate expected position size
+        risk_amount = account_balance * 0.02  # 2% base risk
+        risk_per_lot = abs(entry_price - stop_loss)
+        base_position_size = risk_amount / (risk_per_lot * 100000)
+        expected_position_size = base_position_size * vol_mult
+
+        # Verify position size matches expected (within tolerance)
+        assert abs(position_size - expected_position_size) < 0.01
+
+        logger.info(f"Position size with volatility adjustment: {position_size:.2f} lots (vol_mult: {vol_mult:.3f})")
+
+    def test_position_size_without_volatility_adjustment(self, risk_manager):
+        """Test position size calculation without volatility adjustment."""
+        # Volatility adjustment is already disabled in the risk_manager fixture
+
+        account_balance = 10000.0
+        entry_price = 1.0850
+        stop_loss = 1.0800
+        symbol = "EURUSD"
+
+        # Calculate position size without volatility adjustment
+        position_size = risk_manager.calculate_position_size(
+            account_balance, entry_price, stop_loss, "BUY", symbol
+        )
+
+        # Calculate expected position size (no volatility multiplier)
+        risk_amount = account_balance * 0.02  # 2% base risk
+        risk_per_lot = abs(entry_price - stop_loss)
+        expected_position_size = risk_amount / (risk_per_lot * 100000)
+
+        # Verify position size matches expected (within tolerance)
+        assert abs(position_size - expected_position_size) < 0.01
+
+        logger.info(f"Position size without volatility adjustment: {position_size:.2f} lots")
+
+    def test_atr_calculation(self, risk_manager_with_volatility):
+        """Test ATR calculation method."""
+        import pandas as pd
+
+        # Create sample price data
+        data = pd.DataFrame({
+            'high': [1.0850, 1.0860, 1.0870, 1.0880, 1.0890],
+            'low': [1.0830, 1.0840, 1.0850, 1.0860, 1.0870],
+            'close': [1.0840, 1.0850, 1.0860, 1.0870, 1.0880],
+        })
+
+        atr = risk_manager_with_volatility._calculate_atr(data, period=14)
+
+        # ATR should be calculated for all data points
+        assert len(atr) == len(data)
+
+        # ATR values should be positive
+        assert all(atr > 0)
+
+        logger.info(f"ATR values: {atr.tolist()}")
+
+    def test_volatility_adjustment_database_persistence(self, risk_manager_with_volatility, temp_database):
+        """Test that volatility adjustments are persisted to database."""
+        # Calculate volatility multipliers for multiple symbols
+        symbols = ["EURUSD", "GBPUSD", "V10", "V100"]
+
+        for symbol in symbols:
+            risk_manager_with_volatility.calculate_volatility_multiplier(symbol)
+
+        # Verify data was stored in database
+        conn = sqlite3.connect(temp_database)
+        cursor = conn.cursor()
+
+        # Check volatility_adjustments table
+        cursor.execute("SELECT COUNT(*) FROM volatility_adjustments")
+        adjustment_count = cursor.fetchone()[0]
+        assert adjustment_count == len(symbols)
+
+        # Verify unique symbols were stored
+        cursor.execute("SELECT DISTINCT symbol FROM volatility_adjustments")
+        stored_symbols = [row[0] for row in cursor.fetchall()]
+        assert set(stored_symbols) == set(symbols)
+
+        # Verify adjustment details for one symbol
+        cursor.execute(
+            "SELECT current_atr, average_atr, volatility_ratio, volatility_multiplier "
+            "FROM volatility_adjustments WHERE symbol = ? "
+            "ORDER BY id DESC LIMIT 1",
+            ("EURUSD",)
+        )
+        row = cursor.fetchone()
+        assert row is not None
+        assert row[0] > 0  # current_atr
+        assert row[1] > 0  # average_atr
+        assert row[2] > 0  # volatility_ratio
+        assert 0.3 <= row[3] <= 1.5  # volatility_multiplier
+
+        conn.close()
+
+    def test_volatility_adjustment_history(self, risk_manager_with_volatility):
+        """Test getting volatility adjustment history."""
+        # Calculate multipliers for different symbols
+        symbols = ["EURUSD", "GBPUSD", "V10"]
+
+        for symbol in symbols:
+            risk_manager_with_volatility.calculate_volatility_multiplier(symbol)
+
+        # Get all adjustments
+        all_adjustments = risk_manager_with_volatility.get_volatility_adjustments()
+        assert len(all_adjustments) == len(symbols)
+
+        # Get adjustments for specific symbol
+        eurusd_adjustments = risk_manager_with_volatility.get_volatility_adjustments(symbol="EURUSD")
+        assert len(eurusd_adjustments) == 1
+        assert eurusd_adjustments[0].symbol == "EURUSD"
+
+    def test_volatility_multiplier_caching(self, risk_manager_with_volatility):
+        """Test that price data is cached for repeated calculations."""
+        symbol = "EURUSD"
+
+        # Calculate volatility multiplier twice
+        vol_mult_1 = risk_manager_with_volatility.calculate_volatility_multiplier(symbol)
+        vol_mult_2 = risk_manager_with_volatility.calculate_volatility_multiplier(symbol)
+
+        # Results should be consistent (using cached data)
+        assert vol_mult_1 == vol_mult_2
+
+        # Cache should be populated
+        cache_key = f"{symbol}_H1"
+        assert cache_key in risk_manager_with_volatility._price_data_cache
+        assert len(risk_manager_with_volatility._price_data_cache[cache_key]) >= risk_manager_with_volatility._atr_lookback
+
+    def test_volatility_multiplier_error_handling(self, risk_manager_with_volatility):
+        """Test error handling in volatility multiplier calculation."""
+        # This test verifies graceful error handling
+        # The synthetic data generation should handle errors gracefully
+
+        # Try with an unusual symbol
+        unusual_symbol = "UNUSUAL_SYMBOL_123"
+        vol_mult = risk_manager_with_volatility.calculate_volatility_multiplier(unusual_symbol)
+
+        # Should return a valid multiplier even for unusual symbols
+        assert 0.3 <= vol_mult <= 1.5
+
+        logger.info(f"Volatility multiplier for unusual symbol: {vol_mult:.3f}")
 
 
 def test_integration_with_historical_data():

@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 from typing import Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
+import numpy as np
+import pandas as pd
 
 from .trade_state import TradePosition
 from .performance_comparator import PerformanceComparator, TradeOutcome
@@ -54,9 +56,45 @@ class RiskAdjustment:
         }
 
 
+@dataclass
+class VolatilityAdjustment:
+    """
+    Record of a volatility-based position size adjustment.
+
+    Attributes:
+        timestamp: When the adjustment occurred
+        symbol: Trading symbol
+        current_atr: Current ATR value
+        average_atr: Average ATR over lookback period
+        volatility_ratio: Ratio of current to average ATR
+        volatility_multiplier: Position size multiplier applied
+        reason: Explanation for the adjustment
+    """
+
+    timestamp: datetime
+    symbol: str
+    current_atr: float
+    average_atr: float
+    volatility_ratio: float
+    volatility_multiplier: float
+    reason: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for storage."""
+        return {
+            "timestamp": self.timestamp.isoformat(),
+            "symbol": self.symbol,
+            "current_atr": round(self.current_atr, 6),
+            "average_atr": round(self.average_atr, 6),
+            "volatility_ratio": round(self.volatility_ratio, 3),
+            "volatility_multiplier": round(self.volatility_multiplier, 3),
+            "reason": self.reason,
+        }
+
+
 class AdaptiveRiskManager:
     """
-    Manages adaptive risk based on recent trading performance.
+    Manages adaptive risk based on recent trading performance and market volatility.
 
     Features:
     - Calculates base risk percentage (default 2%)
@@ -65,8 +103,13 @@ class AdaptiveRiskManager:
     - Increases risk by 25% when win rate > 70%
     - Caps minimum risk at 0.5%
     - Caps maximum risk at 3%
+    - Adjusts position sizes based on current market volatility (ATR)
+    - Calculates volatility multiplier: size *= (1 / volatility_ratio)
+    - Applies minimum multiplier of 0.3 (for V100 high volatility)
+    - Applies maximum multiplier of 1.5 (for V10 low volatility)
     - Logs all risk adjustments with reasoning
     - Stores risk adjustment history in database
+    - Stores volatility adjustments in database
 
     Usage:
         risk_manager = AdaptiveRiskManager(
@@ -80,12 +123,16 @@ class AdaptiveRiskManager:
         # Adjust risk based on recent performance
         adjusted_risk = risk_manager.adjust_for_recent_performance()
 
-        # Calculate position size for a trade
+        # Calculate position size for a trade with volatility adjustment
         position_size = risk_manager.calculate_position_size(
             account_balance=10000,
             entry_price=1.0850,
-            stop_loss=1.0800
+            stop_loss=1.0800,
+            symbol="EURUSD"
         )
+
+        # Get volatility multiplier for a symbol
+        vol_mult = risk_manager.calculate_volatility_multiplier("EURUSD")
     """
 
     def __init__(
@@ -96,6 +143,11 @@ class AdaptiveRiskManager:
         min_risk_percent: float = 0.5,
         max_risk_percent: float = 3.0,
         performance_window: int = 20,
+        atr_period: int = 14,
+        atr_lookback: int = 100,
+        min_volatility_multiplier: float = 0.3,
+        max_volatility_multiplier: float = 1.5,
+        enable_volatility_adjustment: bool = True,
     ):
         """
         Initialize the AdaptiveRiskManager.
@@ -107,6 +159,11 @@ class AdaptiveRiskManager:
             min_risk_percent: Minimum allowed risk percentage (default: 0.5%)
             max_risk_percent: Maximum allowed risk percentage (default: 3.0%)
             performance_window: Number of recent trades to analyze (default: 20)
+            atr_period: Period for ATR calculation (default: 14)
+            atr_lookback: Number of bars to calculate average ATR (default: 100)
+            min_volatility_multiplier: Minimum volatility multiplier for high volatility (default: 0.3)
+            max_volatility_multiplier: Maximum volatility multiplier for low volatility (default: 1.5)
+            enable_volatility_adjustment: Whether to enable volatility-based position sizing (default: True)
         """
         self._performance_comparator = performance_comparator
         self._database_path = database_path
@@ -114,9 +171,16 @@ class AdaptiveRiskManager:
         self._min_risk_percent = min_risk_percent
         self._max_risk_percent = max_risk_percent
         self._performance_window = performance_window
+        self._atr_period = atr_period
+        self._atr_lookback = atr_lookback
+        self._min_volatility_multiplier = min_volatility_multiplier
+        self._max_volatility_multiplier = max_volatility_multiplier
+        self._enable_volatility_adjustment = enable_volatility_adjustment
         self._connection: Optional[sqlite3.Connection] = None
         self._adjustment_history: list[RiskAdjustment] = []
+        self._volatility_adjustments: list[VolatilityAdjustment] = []
         self._current_risk_percent = base_risk_percent
+        self._price_data_cache: dict[str, pd.DataFrame] = {}
 
         # Initialize database
         self._initialize_database()
@@ -127,7 +191,8 @@ class AdaptiveRiskManager:
         logger.info(
             f"AdaptiveRiskManager initialized: base_risk={base_risk_percent}%, "
             f"min_risk={min_risk_percent}%, max_risk={max_risk_percent}%, "
-            f"window={performance_window} trades"
+            f"window={performance_window} trades, "
+            f"volatility_adjustment={enable_volatility_adjustment}"
         )
 
     def _initialize_database(self) -> None:
@@ -137,6 +202,7 @@ class AdaptiveRiskManager:
         Creates tables for:
         - risk_adjustments: Risk adjustment history
         - risk_settings: Current risk settings snapshots
+        - volatility_adjustments: Volatility-based position sizing history
         """
         try:
             self._connection = sqlite3.connect(self._database_path)
@@ -170,6 +236,21 @@ class AdaptiveRiskManager:
                 )
             """)
 
+            # Create volatility_adjustments table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS volatility_adjustments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    current_atr REAL NOT NULL,
+                    average_atr REAL NOT NULL,
+                    volatility_ratio REAL NOT NULL,
+                    volatility_multiplier REAL NOT NULL,
+                    reason TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Create indexes
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_adjustments_timestamp
@@ -179,6 +260,16 @@ class AdaptiveRiskManager:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_settings_updated
                 ON risk_settings(last_updated DESC)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_volatility_timestamp
+                ON volatility_adjustments(timestamp DESC)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_volatility_symbol
+                ON volatility_adjustments(symbol)
             """)
 
             self._connection.commit()
@@ -366,15 +457,17 @@ class AdaptiveRiskManager:
         entry_price: float,
         stop_loss: float,
         direction: str = "BUY",
+        symbol: str = "EURUSD",
     ) -> float:
         """
-        Calculate position size based on current risk percentage.
+        Calculate position size based on current risk percentage and volatility.
 
         Args:
             account_balance: Current account balance
             entry_price: Entry price for the trade
             stop_loss: Stop loss price for the trade
             direction: "BUY" or "SELL" (default: "BUY")
+            symbol: Trading symbol (default: "EURUSD")
 
         Returns:
             Position size in lots
@@ -399,18 +492,35 @@ class AdaptiveRiskManager:
         # For forex, 1 standard lot = 100,000 units
         lot_multiplier = 100000
 
-        # Calculate position size in lots
-        position_size_lots = risk_amount / (risk_per_lot_price * lot_multiplier)
+        # Calculate base position size in lots
+        base_position_size = risk_amount / (risk_per_lot_price * lot_multiplier)
 
-        logger.debug(
-            f"Position size calculation: balance={account_balance:.2f}, "
-            f"risk_pct={self._current_risk_percent:.2f}%, "
-            f"risk_amount={risk_amount:.2f}, "
-            f"risk_per_lot={risk_per_lot_price:.5f}, "
-            f"position_size={position_size_lots:.2f} lots"
-        )
+        # Apply volatility adjustment if enabled
+        if self._enable_volatility_adjustment:
+            volatility_multiplier = self.calculate_volatility_multiplier(symbol)
+            adjusted_position_size = base_position_size * volatility_multiplier
 
-        return position_size_lots
+            logger.debug(
+                f"Position size calculation: balance={account_balance:.2f}, "
+                f"risk_pct={self._current_risk_percent:.2f}%, "
+                f"risk_amount={risk_amount:.2f}, "
+                f"risk_per_lot={risk_per_lot_price:.5f}, "
+                f"base_position_size={base_position_size:.2f} lots, "
+                f"volatility_multiplier={volatility_multiplier:.3f}, "
+                f"adjusted_position_size={adjusted_position_size:.2f} lots"
+            )
+
+            return adjusted_position_size
+        else:
+            logger.debug(
+                f"Position size calculation: balance={account_balance:.2f}, "
+                f"risk_pct={self._current_risk_percent:.2f}%, "
+                f"risk_amount={risk_amount:.2f}, "
+                f"risk_per_lot={risk_per_lot_price:.5f}, "
+                f"position_size={base_position_size:.2f} lots (volatility adjustment disabled)"
+            )
+
+            return base_position_size
 
     def get_current_risk_percent(self) -> float:
         """
@@ -420,6 +530,294 @@ class AdaptiveRiskManager:
             Current risk percentage
         """
         return self._current_risk_percent
+
+    def calculate_volatility_multiplier(self, symbol: str) -> float:
+        """
+        Calculate volatility-based position size multiplier for a symbol.
+
+        Uses ATR (Average True Range) to measure current volatility relative to
+        historical average and adjusts position size accordingly.
+
+        Formula:
+            volatility_ratio = current_ATR / average_ATR
+            volatility_multiplier = 1 / volatility_ratio
+            volatility_multiplier = clamp(volatility_multiplier, min, max)
+
+        Where:
+            - current_ATR: Most recent ATR value
+            - average_ATR: Average ATR over lookback period (default: 100 bars)
+            - min: 0.3 (for high volatility symbols like V100)
+            - max: 1.5 (for low volatility symbols like V10)
+
+        Args:
+            symbol: Trading symbol (e.g., "EURUSD", "GBPUSD", "V10", "V100")
+
+        Returns:
+            Volatility multiplier (0.3 to 1.5)
+        """
+        try:
+            # Fetch price data for ATR calculation
+            price_data = self._fetch_price_data(symbol)
+
+            if price_data is None or len(price_data) < self._atr_lookback:
+                logger.warning(
+                    f"Insufficient price data for {symbol} (need {self._atr_lookback} bars). "
+                    f"Using default volatility multiplier of 1.0"
+                )
+                return 1.0
+
+            # Calculate ATR values
+            atr_values = self._calculate_atr(price_data, self._atr_period)
+
+            if len(atr_values) < self._atr_lookback:
+                logger.warning(
+                    f"Insufficient ATR values for {symbol} (need {self._atr_lookback}, have {len(atr_values)}). "
+                    f"Using default volatility multiplier of 1.0"
+                )
+                return 1.0
+
+            # Get current ATR (most recent)
+            current_atr = atr_values.iloc[-1]
+
+            # Calculate average ATR over lookback period
+            average_atr = atr_values.iloc[-self._atr_lookback:].mean()
+
+            # Calculate volatility ratio
+            volatility_ratio = current_atr / average_atr if average_atr > 0 else 1.0
+
+            # Calculate volatility multiplier: inverse of volatility ratio
+            # High volatility (ratio > 1) = reduce position size (multiplier < 1)
+            # Low volatility (ratio < 1) = increase position size (multiplier > 1)
+            volatility_multiplier = 1.0 / volatility_ratio
+
+            # Apply min/max bounds
+            volatility_multiplier = max(
+                self._min_volatility_multiplier,
+                min(self._max_volatility_multiplier, volatility_multiplier)
+            )
+
+            # Generate reason
+            if volatility_ratio > 1.3:
+                reason = (
+                    f"High volatility detected: current ATR ({current_atr:.6f}) is "
+                    f"{volatility_ratio:.2f}x higher than average ({average_atr:.6f}). "
+                    f"Reducing position size to {volatility_multiplier:.2f}x to manage risk."
+                )
+            elif volatility_ratio > 1.1:
+                reason = (
+                    f"Moderately high volatility: current ATR ({current_atr:.6f}) is "
+                    f"{volatility_ratio:.2f}x higher than average ({average_atr:.6f}). "
+                    f"Slightly reducing position size to {volatility_multiplier:.2f}x."
+                )
+            elif volatility_ratio < 0.7:
+                reason = (
+                    f"Low volatility detected: current ATR ({current_atr:.6f}) is "
+                    f"{volatility_ratio:.2f}x lower than average ({average_atr:.6f}). "
+                    f"Increasing position size to {volatility_multiplier:.2f}x to capitalize on stability."
+                )
+            elif volatility_ratio < 0.9:
+                reason = (
+                    f"Moderately low volatility: current ATR ({current_atr:.6f}) is "
+                    f"{volatility_ratio:.2f}x lower than average ({average_atr:.6f}). "
+                    f"Slightly increasing position size to {volatility_multiplier:.2f}x."
+                )
+            else:
+                reason = (
+                    f"Normal volatility: current ATR ({current_atr:.6f}) is "
+                    f"{volatility_ratio:.2f}x of average ({average_atr:.6f}). "
+                    f"Using standard position size multiplier of {volatility_multiplier:.2f}x."
+                )
+
+            # Create and store volatility adjustment record
+            adjustment = VolatilityAdjustment(
+                timestamp=datetime.utcnow(),
+                symbol=symbol,
+                current_atr=float(current_atr),
+                average_atr=float(average_atr),
+                volatility_ratio=float(volatility_ratio),
+                volatility_multiplier=float(volatility_multiplier),
+                reason=reason,
+            )
+
+            self._volatility_adjustments.append(adjustment)
+            self._store_volatility_adjustment(adjustment)
+
+            # Log the adjustment
+            logger.info(
+                f"Volatility multiplier calculated for {symbol}: {volatility_multiplier:.3f} "
+                f"| Current ATR: {current_atr:.6f} | Avg ATR: {average_atr:.6f} "
+                f"| Ratio: {volatility_ratio:.3f}"
+            )
+
+            return float(volatility_multiplier)
+
+        except Exception as e:
+            logger.error(f"Error calculating volatility multiplier for {symbol}: {e}")
+            return 1.0
+
+    def _fetch_price_data(self, symbol: str, timeframe: str = "H1") -> Optional[pd.DataFrame]:
+        """
+        Fetch historical price data for a symbol.
+
+        In production, this would fetch from MT5 or a market data provider.
+        For now, generates synthetic data for testing.
+
+        Args:
+            symbol: Trading symbol
+            timeframe: Timeframe for bars (default: "H1")
+
+        Returns:
+            DataFrame with 'high', 'low', 'close' columns, or None if unavailable
+        """
+        # Check cache first
+        cache_key = f"{symbol}_{timeframe}"
+        if cache_key in self._price_data_cache:
+            cached_data = self._price_data_cache[cache_key]
+            if len(cached_data) >= self._atr_lookback:
+                logger.debug(f"Using cached price data for {symbol}")
+                return cached_data
+
+        try:
+            # TODO: Replace with actual MT5 API call
+            # For now, generate synthetic data for testing
+            logger.warning(
+                f"Using synthetic price data for {symbol}. "
+                f"Replace with actual MT5 data fetching in production."
+            )
+
+            # Generate synthetic price data
+            np.random.seed(hash(symbol) % 2**32)  # Consistent data per symbol
+            num_bars = self._atr_lookback + 50
+
+            # Base price depends on symbol
+            if "V10" in symbol or "V100" in symbol:
+                # Indices/volatility symbols
+                base_price = 100.0 if "V100" in symbol else 10.0
+                volatility_factor = 0.02 if "V100" in symbol else 0.005
+            else:
+                # Forex pairs
+                base_price = 1.1000  # EURUSD-like
+                volatility_factor = 0.002
+
+            # Generate price series
+            price_changes = np.random.normal(0, volatility_factor, num_bars)
+            close_prices = base_price * (1 + price_changes).cumprod()
+
+            # Generate high/low from close
+            high_prices = close_prices * (1 + np.abs(np.random.normal(0, volatility_factor/2, num_bars)))
+            low_prices = close_prices * (1 - np.abs(np.random.normal(0, volatility_factor/2, num_bars)))
+
+            # Create DataFrame
+            data = pd.DataFrame({
+                'high': high_prices,
+                'low': low_prices,
+                'close': close_prices,
+            })
+
+            # Cache the data
+            self._price_data_cache[cache_key] = data
+
+            logger.debug(f"Generated {len(data)} bars of synthetic price data for {symbol}")
+
+            return data
+
+        except Exception as e:
+            logger.error(f"Failed to fetch price data for {symbol}: {e}")
+            return None
+
+    def _calculate_atr(self, data: pd.DataFrame, period: int = 14) -> pd.Series:
+        """
+        Calculate Average True Range (ATR) for price data.
+
+        ATR measures market volatility by taking the average of true ranges
+        over a specified period.
+
+        True Range = max(high - low, abs(high - prev_close), abs(low - prev_close))
+
+        Args:
+            data: DataFrame with 'high', 'low', 'close' columns
+            period: ATR period (default: 14)
+
+        Returns:
+            Series of ATR values
+        """
+        try:
+            high = data['high']
+            low = data['low']
+            close = data['close']
+
+            # Calculate previous close
+            prev_close = close.shift(1)
+
+            # Calculate True Range components
+            tr1 = high - low
+            tr2 = (high - prev_close).abs()
+            tr3 = (low - prev_close).abs()
+
+            # True Range is the maximum of the three
+            true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
+            # Calculate ATR using exponential moving average (Wilder's smoothing)
+            atr = true_range.ewm(alpha=1/period, adjust=False).mean()
+
+            logger.debug(f"Calculated ATR with period {period}: {len(atr)} values")
+
+            return atr
+
+        except Exception as e:
+            logger.error(f"Failed to calculate ATR: {e}")
+            return pd.Series()
+
+    def _store_volatility_adjustment(self, adjustment: VolatilityAdjustment) -> None:
+        """
+        Store a volatility adjustment in the database.
+
+        Args:
+            adjustment: VolatilityAdjustment to store
+        """
+        if self._connection is None:
+            logger.warning("Database connection not available, adjustment not stored")
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            cursor.execute("""
+                INSERT INTO volatility_adjustments (
+                    timestamp, symbol, current_atr, average_atr,
+                    volatility_ratio, volatility_multiplier, reason
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                adjustment.timestamp.isoformat(),
+                adjustment.symbol,
+                adjustment.current_atr,
+                adjustment.average_atr,
+                adjustment.volatility_ratio,
+                adjustment.volatility_multiplier,
+                adjustment.reason,
+            ))
+
+            self._connection.commit()
+
+            logger.debug(f"Volatility adjustment stored in database for {adjustment.symbol}")
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to store volatility adjustment in database: {e}")
+
+    def get_volatility_adjustments(self, symbol: Optional[str] = None, limit: int = 100) -> list[VolatilityAdjustment]:
+        """
+        Get volatility adjustment history.
+
+        Args:
+            symbol: Optional symbol to filter by
+            limit: Maximum number of adjustments to return
+
+        Returns:
+            List of VolatilityAdjustment records
+        """
+        if symbol is None:
+            return self._volatility_adjustments[-limit:]
+        return [v for v in self._volatility_adjustments if v.symbol == symbol][-limit:]
 
     def _store_risk_adjustment(self, adjustment: RiskAdjustment) -> None:
         """
