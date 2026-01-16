@@ -6,6 +6,7 @@
  */
 
 import { API_CONFIG } from './config';
+import { apiCache } from '../cache';
 
 export interface ApiResponse<T> {
   data: T;
@@ -18,6 +19,31 @@ export interface ApiError {
   status?: number;
   code?: string;
 }
+
+/**
+ * Cache options for API requests
+ */
+export interface CacheOptions {
+  /** Enable/disable caching (default: true for GET requests) */
+  enabled?: boolean;
+  /** Custom TTL in seconds (overrides default) */
+  ttl?: number;
+  /** Custom cache key (auto-generated if not provided) */
+  key?: string;
+}
+
+/**
+ * Default cache TTLs for different endpoint patterns
+ */
+const DEFAULT_CACHE_TTLS: Record<string, number> = {
+  'system/status': 10,
+  'system/health': 10,
+  'config': 60,
+  'markets/overview': 5,
+  'markets': 5,
+  'evolution/metrics': 10,
+  'portfolio/metrics': 10,
+};
 
 /**
  * Generic API error class
@@ -125,6 +151,28 @@ function getRetryDelay(attemptNumber: number, baseDelay: number): number {
  */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Generate cache key from URL and options
+ */
+function generateCacheKey(path: string, params?: Record<string, string | number | boolean | undefined>): string {
+  const url = buildUrl(path, params);
+  // Remove base URL to get relative path as cache key
+  return url.replace(API_CONFIG.baseURL, '').replace(/^\//, '');
+}
+
+/**
+ * Get default TTL for a given path
+ */
+function getDefaultTTL(path: string): number {
+  const normalizedPath = path.toLowerCase();
+  for (const [pattern, ttl] of Object.entries(DEFAULT_CACHE_TTLS)) {
+    if (normalizedPath.includes(pattern)) {
+      return ttl;
+    }
+  }
+  return 0; // Default to no caching for unknown endpoints
 }
 
 /**
@@ -300,16 +348,94 @@ async function parseResponse<T>(response: Response): Promise<ApiResponse<T>> {
 }
 
 /**
- * GET request with optional URL parameters
+ * Invalidate related cache entries after write operations
+ */
+function invalidateRelatedCache(path: string): void {
+  const normalizedPath = path.toLowerCase();
+
+  // Invalidate all caches for system operations
+  if (normalizedPath.includes('system')) {
+    apiCache.invalidate('system/*');
+  }
+
+  // Invalidate config caches
+  if (normalizedPath.includes('config')) {
+    apiCache.invalidate('*config*');
+  }
+
+  // Invalidate evolution caches
+  if (normalizedPath.includes('evolution')) {
+    apiCache.invalidate('evolution/*');
+  }
+
+  // Invalidate portfolio caches
+  if (normalizedPath.includes('portfolio') || normalizedPath.includes('trades')) {
+    apiCache.invalidate('portfolio/*');
+    apiCache.invalidate('trades/*');
+  }
+
+  // Invalidate markets caches
+  if (normalizedPath.includes('markets')) {
+    apiCache.invalidate('markets/*');
+  }
+}
+
+/**
+ * GET request with optional URL parameters and caching
  */
 export async function get<T>(
   path: string,
   params?: Record<string, string | number | boolean | undefined>,
-  options?: RequestInit
+  options?: RequestInit & { cache?: CacheOptions | boolean }
 ): Promise<ApiResponse<T>> {
+  // Parse cache options
+  const cacheEnabled = options?.cache === undefined || options?.cache === true
+    ? (typeof options?.cache === 'object' ? options.cache.enabled !== false : true)
+    : false;
+
+  const cacheOpts: CacheOptions | undefined = typeof options?.cache === 'object' ? options.cache : undefined;
+  const customTTL = cacheOpts?.ttl;
+  const customKey = cacheOpts?.key;
+
+  // Generate cache key
+  const cacheKey = customKey ?? generateCacheKey(path, params);
+
+  // Check cache if enabled
+  if (cacheEnabled) {
+    const cachedData = apiCache.get<T>(cacheKey);
+    if (cachedData !== null) {
+      if (process.env.NODE_ENV === 'development') {
+        console.debug(`[API Cache HIT] ${cacheKey}`);
+      }
+      return {
+        data: cachedData,
+        status: 200,
+        ok: true,
+      };
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      console.debug(`[API Cache MISS] ${cacheKey}`);
+    }
+  }
+
+  // Make the actual request
   const url = buildUrl(path, params);
   const response = await fetchWithTimeout(url, { ...options, method: 'GET' });
-  return parseResponse<T>(response);
+  const result = await parseResponse<T>(response);
+
+  // Cache successful responses if caching is enabled
+  if (cacheEnabled && result.ok) {
+    const ttl = customTTL ?? getDefaultTTL(path);
+    if (ttl > 0) {
+      apiCache.set(cacheKey, result.data, ttl);
+      if (process.env.NODE_ENV === 'development') {
+        console.debug(`[API Cache SET] ${cacheKey} (TTL: ${ttl}s)`);
+      }
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -326,7 +452,17 @@ export async function post<T>(
     body: body ? JSON.stringify(body) : undefined,
     ...options,
   });
-  return parseResponse<T>(response);
+  const result = await parseResponse<T>(response);
+
+  // Invalidate related cache entries after successful POST
+  if (result.ok) {
+    invalidateRelatedCache(path);
+    if (process.env.NODE_ENV === 'development') {
+      console.debug(`[API Cache] Invalidated related caches for POST ${path}`);
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -343,7 +479,17 @@ export async function put<T>(
     body: body ? JSON.stringify(body) : undefined,
     ...options,
   });
-  return parseResponse<T>(response);
+  const result = await parseResponse<T>(response);
+
+  // Invalidate related cache entries after successful PUT
+  if (result.ok) {
+    invalidateRelatedCache(path);
+    if (process.env.NODE_ENV === 'development') {
+      console.debug(`[API Cache] Invalidated related caches for PUT ${path}`);
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -352,7 +498,17 @@ export async function put<T>(
 export async function del<T>(path: string, options?: RequestInit): Promise<ApiResponse<T>> {
   const url = buildUrl(path);
   const response = await fetchWithTimeout(url, { method: 'DELETE', ...options });
-  return parseResponse<T>(response);
+  const result = await parseResponse<T>(response);
+
+  // Invalidate related cache entries after successful DELETE
+  if (result.ok) {
+    invalidateRelatedCache(path);
+    if (process.env.NODE_ENV === 'development') {
+      console.debug(`[API Cache] Invalidated related caches for DELETE ${path}`);
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -363,6 +519,28 @@ export const apiClient = {
   post,
   put,
   delete: del,
+} as const;
+
+/**
+ * Export cache utilities for external use
+ */
+export const cacheUtils = {
+  getStats: () => apiCache.getStats(),
+  getHitRate: () => apiCache.getHitRate(),
+  clear: () => apiCache.clear(),
+  invalidate: (pattern: string) => apiCache.invalidate(pattern),
+  logStats: () => {
+    if (process.env.NODE_ENV === 'development') {
+      const stats = apiCache.getStats();
+      console.group('[API Cache Stats]');
+      console.log(`Size: ${stats.size} entries`);
+      console.log(`Hits: ${stats.hits}`);
+      console.log(`Misses: ${stats.misses}`);
+      console.log(`Hit rate: ${apiCache.getHitRate()}%`);
+      console.log(`Keys:`, apiCache.keys());
+      console.groupEnd();
+    }
+  },
 } as const;
 
 /**

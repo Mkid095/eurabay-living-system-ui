@@ -331,8 +331,8 @@
       "mavenSteps": [1, 7],
       "mcpTools": {},
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented full caching integration in API client. Added CacheOptions interface with enabled/ttl/key properties. GET requests cache by default with configurable TTLs: system status (10s), config (60s), markets (5s), evolution metrics (10s), portfolio metrics (10s). Cache invalidation on POST/PUT/DELETE for related entries via invalidateRelatedCache(). Created cache-warming.ts with warmUpCache() for startup preloading. Development logging includes cache HIT/MISS/SET messages and cacheUtils.logStats() function. Typecheck passes."
     },
     {
       "id": "US-017",
