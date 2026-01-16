@@ -1,5 +1,5 @@
 import { db } from './index';
-import { users, trades, evolutionGenerations, features, mutations } from './schema';
+import { users, trades, evolutionGenerations, features, mutations, signals, systemLogs } from './schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 
@@ -398,12 +398,239 @@ export async function seedEvolutionData() {
   console.log('Evolution data seeded successfully!');
 }
 
+/**
+ * Seed script for sample signals
+ * Creates 30 sample signals with varied types, statuses, and confidence levels
+ */
+const SIGNAL_TYPES = ['STRONG_BUY', 'BUY', 'SELL', 'STRONG_SELL'] as const;
+const SIGNAL_STATUSES = ['pending', 'approved', 'rejected', 'executed'] as const;
+const HTF_CONTEXTS = ['Bullish Trend', 'Bearish Trend', 'Range Bound', 'Breakout', 'Reversal'] as const;
+
+function generateSignalFeaturesUsed(): string {
+  const numFeatures = getRandomInt(2, 4);
+  const featureIds: string[] = [];
+  for (let i = 0; i < numFeatures; i++) {
+    featureIds.push(`feature-${getRandomInt(1, 20).toString().padStart(3, '0')}`);
+  }
+  return JSON.stringify(featureIds);
+}
+
+function getSignalReason(signalType: typeof SIGNAL_TYPES[number], status: string): string {
+  const reasons = {
+    pending: [
+      'Awaiting trader approval',
+      'Confirmation needed',
+      'Risk assessment in progress'
+    ],
+    approved: [
+      'Strong technical indicators',
+      'High confidence alignment',
+      'Favorable risk-reward ratio'
+    ],
+    rejected: [
+      'Risk parameters exceeded',
+      'Market conditions unfavorable',
+      'Confidence below threshold'
+    ],
+    executed: [
+      'Trade successfully opened',
+      'Order filled at target price',
+      'Position established'
+    ]
+  };
+
+  const reasonList = reasons[status as keyof typeof reasons] || reasons.pending;
+  return getRandomItem(reasonList);
+}
+
+export async function seedSignals() {
+  console.log('Seeding signals...');
+
+  const signalCount = 30;
+  const now = new Date();
+
+  // Start from 60 days ago
+  const startDate = new Date(now);
+  startDate.setDate(startDate.getDate() - 60);
+
+  for (let i = 0; i < signalCount; i++) {
+    const signalId = `SIG-${getRandomInt(100000, 999999)}`;
+    const symbol = getRandomItem(SYMBOLS);
+    const signalType = getRandomItem(SIGNAL_TYPES);
+    const status = getRandomItem(SIGNAL_STATUSES);
+    const evolutionGeneration = getRandomInt(1, 10);
+
+    // Confidence between 0.5 and 0.95
+    const baseConfidence = signalType.includes('STRONG') ? 0.75 : 0.6;
+    const confidence = Number((baseConfidence + getRandomFloat(-0.1, 0.2, 2)).toFixed(2));
+    const clampedConfidence = Math.max(0.5, Math.min(0.95, confidence));
+
+    // HTF context based on signal type
+    let htfContext: string | null = null;
+    if (signalType === 'STRONG_BUY' || signalType === 'BUY') {
+      htfContext = getRandomItem(['Bullish Trend', 'Breakout', 'Reversal']);
+    } else {
+      htfContext = getRandomItem(['Bearish Trend', 'Breakout', 'Reversal']);
+    }
+
+    // Timestamp spread across the 60-day period
+    const timestamp = new Date(startDate);
+    timestamp.setDate(timestamp.getDate() + getRandomInt(0, 60));
+    timestamp.setHours(getRandomInt(0, 23), getRandomInt(0, 59), getRandomInt(0, 59));
+
+    await db.insert(signals).values({
+      signalId,
+      symbol,
+      signalType,
+      confidence: clampedConfidence,
+      htfContext,
+      featuresUsed: generateSignalFeaturesUsed(),
+      status,
+      timestamp,
+      evolutionGeneration,
+    }).onConflictDoNothing();
+  }
+
+  console.log(`Signals seeded successfully! (${signalCount} records)`);
+}
+
+/**
+ * Seed script for sample system logs
+ * Creates 50 system logs with varied levels, components, and messages
+ */
+const LOG_LEVELS = ['INFO', 'WARN', 'ERROR', 'DEBUG'] as const;
+const LOG_COMPONENTS = ['trading', 'evolution', 'mt5', 'api', 'system', 'database'] as const;
+
+function getLogMessage(component: string, level: string): string {
+  const messages: Record<string, string[]> = {
+    trading: [
+      'Trade execution initiated',
+      'Signal generated for V10',
+      'Position closed with profit',
+      'Risk parameters validated',
+      'Order submission successful',
+      'Trade execution failed',
+      'Position size calculated',
+      'Stop loss updated'
+    ],
+    evolution: [
+      'New generation started',
+      'Fitness calculation completed',
+      'Mutation applied to feature',
+      'Controller decision made',
+      'Feature performance updated',
+      'Evolution cycle completed',
+      'Generation threshold reached',
+      'Mutation optimization started'
+    ],
+    mt5: [
+      'Connection established',
+      'Price data received',
+      'Order confirmed by broker',
+      'Account balance updated',
+      'Connection lost, retrying',
+      'Ping response time: 45ms',
+      'Historical data fetched',
+      'Order modification failed'
+    ],
+    api: [
+      'Request received',
+      'Response sent successfully',
+      'Authentication verified',
+      'Rate limit approached',
+      'Invalid request payload',
+      'API endpoint called',
+      'Cache miss for request',
+      'Request timeout occurred'
+    ],
+    system: [
+      'System startup initiated',
+      'Health check passed',
+      'Memory usage: 45%',
+      'CPU load: 32%',
+      'Disk space adequate',
+      'Backup completed',
+      'Configuration loaded',
+      'Service restart required'
+    ],
+    database: [
+      'Query executed successfully',
+      'Connection pool active',
+      'Transaction committed',
+      'Index rebuild completed',
+      'Database backup started',
+      'Slow query detected',
+      'Connection timeout',
+      'Data migration completed'
+    ]
+  };
+
+  const componentMessages = messages[component] || messages.system;
+  return getRandomItem(componentMessages);
+}
+
+function getLogDetails(component: string, level: string, message: string): string | null {
+  // Only add details for WARN and ERROR levels
+  if (level !== 'WARN' && level !== 'ERROR') {
+    return null;
+  }
+
+  const details: Record<string, object> = {
+    trading: { tradeId: `SYS-${getRandomInt(100000, 999999)}`, symbol: getRandomItem(SYMBOLS) },
+    evolution: { generation: getRandomInt(1, 10), fitness: getRandomFloat(0.3, 0.9, 3) },
+    mt5: { errorCode: getRandomInt(1000, 9999), retryCount: getRandomInt(1, 5) },
+    api: { endpoint: '/api/trades/execute', statusCode: getRandomInt(400, 599) },
+    system: { memoryUsage: `${getRandomInt(70, 95)}%`, cpuLoad: `${getRandomInt(60, 95)}%` },
+    database: { queryTime: `${getRandomFloat(1.5, 5.0, 2)}s`, table: 'trades' }
+  };
+
+  return JSON.stringify(details[component] || { timestamp: new Date().toISOString() });
+}
+
+export async function seedSystemLogs() {
+  console.log('Seeding system logs...');
+
+  const logCount = 50;
+  const now = new Date();
+
+  // Start from 30 days ago
+  const startDate = new Date(now);
+  startDate.setDate(startDate.getDate() - 30);
+
+  // Weight log levels toward INFO (most common), then WARN, some DEBUG, fewer ERROR
+  const levelWeights = ['INFO', 'INFO', 'INFO', 'INFO', 'INFO', 'WARN', 'WARN', 'DEBUG', 'DEBUG', 'ERROR'];
+
+  for (let i = 0; i < logCount; i++) {
+    const component = getRandomItem(LOG_COMPONENTS);
+    const level = getRandomItem(levelWeights);
+    const message = getLogMessage(component, level);
+    const details = getLogDetails(component, level, message);
+
+    // Timestamp spread across the 30-day period
+    const timestamp = new Date(startDate);
+    timestamp.setDate(timestamp.getDate() + getRandomInt(0, 30));
+    timestamp.setHours(getRandomInt(0, 23), getRandomInt(0, 59), getRandomInt(0, 59));
+
+    await db.insert(systemLogs).values({
+      timestamp,
+      level,
+      component,
+      message,
+      details,
+    }).onConflictDoNothing();
+  }
+
+  console.log(`System logs seeded successfully! (${logCount} records)`);
+}
+
 // Main function to run all seeds
 export async function seed() {
   try {
     await seedUsers();
     await seedTrades();
     await seedEvolutionData();
+    await seedSignals();
+    await seedSystemLogs();
     console.log('\nDatabase seeded successfully!');
     process.exit(0);
   } catch (error) {
