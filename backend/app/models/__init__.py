@@ -11,6 +11,7 @@ from .models import (
     Configuration,
     MarketData,
     Signal,
+    SystemLog,
 )
 
 # Import database configuration
@@ -58,6 +59,7 @@ __all__ = [
     "Configuration",
     "MarketData",
     "Signal",
+    "SystemLog",
     # Database
     "Base",
     "engine",
