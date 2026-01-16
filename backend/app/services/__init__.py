@@ -11,6 +11,12 @@ from .query_optimizer import (
     log_query_time,
 )
 from .read_replica_service import ReadReplicaService, get_read_replica, close_read_replica
+from .data_ingestion_service import (
+    DataIngestionService,
+    DataQuality,
+    DataQualityReport,
+    IngestionStats,
+)
 
 __all__ = [
     "DatabaseService",
@@ -25,4 +31,8 @@ __all__ = [
     "ReadReplicaService",
     "get_read_replica",
     "close_read_replica",
+    "DataIngestionService",
+    "DataQuality",
+    "DataQualityReport",
+    "IngestionStats",
 ]
