@@ -135,6 +135,7 @@ class TestPriceBasedFeatures:
         assert "return_1" in df.columns
         assert "return_5" in df.columns
         assert "return_10" in df.columns
+        assert "return_20" in df.columns
 
     def test_log_returns_feature(self, feature_engine, sample_ohlcv_data):
         """Test log returns feature generation."""
@@ -142,6 +143,7 @@ class TestPriceBasedFeatures:
         assert "log_return_1" in df.columns
         assert "log_return_5" in df.columns
         assert "log_return_10" in df.columns
+        assert "log_return_20" in df.columns
 
     def test_price_change_feature(self, feature_engine, sample_ohlcv_data):
         """Test price change feature generation."""
@@ -149,6 +151,79 @@ class TestPriceBasedFeatures:
         assert "price_change_1" in df.columns
         assert "price_change_5" in df.columns
         assert "price_change_10" in df.columns
+        assert "price_change_20" in df.columns
+
+    def test_price_relative_ma_feature(self, feature_engine, sample_ohlcv_data):
+        """Test price relative to moving average feature generation."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["price_relative_ma"])
+        # Check SMA relative features
+        assert "price_rel_sma_5" in df.columns
+        assert "price_rel_sma_10" in df.columns
+        assert "price_rel_sma_20" in df.columns
+        assert "price_rel_sma_50" in df.columns
+        assert "price_rel_sma_200" in df.columns
+        # Check EMA relative features
+        assert "price_rel_ema_5" in df.columns
+        assert "price_rel_ema_10" in df.columns
+        assert "price_rel_ema_20" in df.columns
+
+    def test_price_momentum_feature(self, feature_engine, sample_ohlcv_data):
+        """Test price momentum (ROC) feature generation."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["price_momentum"])
+        # Check ROC features
+        assert "roc_1" in df.columns
+        assert "roc_3" in df.columns
+        assert "roc_5" in df.columns
+        assert "roc_10" in df.columns
+        assert "roc_20" in df.columns
+        # Check momentum features
+        assert "momentum_5" in df.columns
+        assert "momentum_10" in df.columns
+        assert "momentum_20" in df.columns
+
+    def test_returns_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that returns are calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["returns"])
+        # Manually calculate expected return for period 1
+        expected_return = (sample_ohlcv_data["close"].iloc[1] - sample_ohlcv_data["close"].iloc[0]) / sample_ohlcv_data["close"].iloc[0]
+        actual_return = df["return_1"].iloc[1]
+        assert np.isclose(expected_return, actual_return)
+
+    def test_log_returns_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that log returns are calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["log_returns"])
+        # Manually calculate expected log return for period 1
+        expected_log_return = np.log(sample_ohlcv_data["close"].iloc[1] / sample_ohlcv_data["close"].iloc[0])
+        actual_log_return = df["log_return_1"].iloc[1]
+        assert np.isclose(expected_log_return, actual_log_return)
+
+    def test_price_change_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that price changes are calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["price_change"])
+        # Manually calculate expected price change for period 1
+        expected_change = sample_ohlcv_data["close"].iloc[1] - sample_ohlcv_data["close"].iloc[0]
+        actual_change = df["price_change_1"].iloc[1]
+        assert np.isclose(expected_change, actual_change)
+
+    def test_roc_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that ROC is calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["price_momentum"])
+        # Manually calculate expected ROC for period 5
+        period = 5
+        if len(sample_ohlcv_data) > period:
+            expected_roc = ((sample_ohlcv_data["close"].iloc[period] - sample_ohlcv_data["close"].iloc[0]) /
+                          sample_ohlcv_data["close"].iloc[0]) * 100
+            actual_roc = df["roc_5"].iloc[period]
+            assert np.isclose(expected_roc, actual_roc)
+
+    def test_price_relative_ma_ranges(self, feature_engine, sample_ohlcv_data):
+        """Test that price relative to MA features are in expected ranges."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["price_relative_ma"])
+        # Price relative to MA should be a normalized ratio (can be negative or positive)
+        # Values near 0 indicate price is near the MA
+        # Positive values indicate price above MA, negative indicate below
+        assert df["price_rel_sma_20"].dropna().min() > -1  # Price not more than 100% below MA
+        assert df["price_rel_sma_20"].dropna().max() < 2  # Price not more than 200% above MA
 
 
 # ============================================================================

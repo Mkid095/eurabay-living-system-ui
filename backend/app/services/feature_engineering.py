@@ -98,7 +98,7 @@ class FeatureEngineering:
     Comprehensive feature engineering for trading systems.
 
     Features:
-    - Price-based: Returns, log returns, price changes
+    - Price-based: Returns, log returns, price changes, price relative to MA, price momentum (ROC)
     - Volatility: ATR, standard deviation, Parkinson estimator
     - Momentum: RSI, MACD, Stochastic oscillator
     - Trend: SMA, EMA, ADX
@@ -138,6 +138,8 @@ class FeatureEngineering:
             "returns": self._add_returns,
             "log_returns": self._add_log_returns,
             "price_change": self._add_price_change,
+            "price_relative_ma": self._add_price_relative_ma,
+            "price_momentum": self._add_price_momentum,
 
             # Volatility features
             "atr": self._add_atr,
@@ -295,24 +297,97 @@ class FeatureEngineering:
     # ========================================================================
 
     def _add_returns(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add simple returns."""
+        """
+        Add simple returns: (price_t - price_t-1) / price_t-1.
+
+        Simple returns represent the percentage change in price over a given period.
+        Formula: (price_t - price_t-1) / price_t-1
+        """
+        # Single period returns
         df["return_1"] = df["close"].pct_change()
-        df["return_5"] = df["close"].pct_change(5)
-        df["return_10"] = df["close"].pct_change(10)
+
+        # Multi-period returns for periods 1, 5, 10, 20 (per acceptance criteria)
+        for period in [1, 5, 10, 20]:
+            if period != 1:  # Avoid duplicate for period 1
+                df[f"return_{period}"] = df["close"].pct_change(period)
+
         return df
 
     def _add_log_returns(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add logarithmic returns."""
+        """
+        Add logarithmic returns: log(price_t / price_t-1).
+
+        Log returns are useful for time-series analysis as they are additive
+        over time and approximately normally distributed.
+        Formula: log(price_t / price_t-1)
+        """
+        # Single period log returns
         df["log_return_1"] = np.log(df["close"] / df["close"].shift(1))
-        df["log_return_5"] = np.log(df["close"] / df["close"].shift(5))
-        df["log_return_10"] = np.log(df["close"] / df["close"].shift(10))
+
+        # Multi-period log returns for periods 1, 5, 10, 20
+        for period in [1, 5, 10, 20]:
+            if period != 1:  # Avoid duplicate for period 1
+                df[f"log_return_{period}"] = np.log(df["close"] / df["close"].shift(period))
+
         return df
 
     def _add_price_change(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add absolute price changes."""
+        """
+        Add absolute price changes: price_t - price_t-1.
+
+        Absolute price changes represent the nominal difference in price.
+        Formula: price_t - price_t-1
+        """
+        # Single period price change
         df["price_change_1"] = df["close"].diff()
-        df["price_change_5"] = df["close"].diff(5)
-        df["price_change_10"] = df["close"].diff(10)
+
+        # Multi-period price changes for periods 5, 10, 20
+        for period in [5, 10, 20]:
+            df[f"price_change_{period}"] = df["close"].diff(period)
+
+        return df
+
+    def _add_price_relative_ma(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add price relative to moving average.
+
+        This feature indicates whether the current price is above or below
+        its moving average, useful for trend identification.
+        Formula: price_t / SMA(period) - 1
+        """
+        # Calculate SMAs for different periods
+        for window in [self.config.SHORT_WINDOW, self.config.MEDIUM_WINDOW,
+                       self.config.LONG_WINDOW, 50, 200]:
+            sma = df["close"].rolling(window=window).mean()
+            # Price relative to MA (normalized)
+            df[f"price_rel_sma_{window}"] = (df["close"] / sma) - 1
+
+        # Calculate EMAs for different periods
+        for window in [self.config.SHORT_WINDOW, self.config.MEDIUM_WINDOW,
+                       self.config.LONG_WINDOW]:
+            ema = df["close"].ewm(span=window, adjust=False).mean()
+            df[f"price_rel_ema_{window}"] = (df["close"] / ema) - 1
+
+        return df
+
+    def _add_price_momentum(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add price momentum (Rate of Change - ROC).
+
+        ROC measures the percentage change in price over n periods.
+        Formula: ((price_t - price_t-n) / price_t-n) * 100
+        """
+        # ROC for different periods
+        for period in [1, 3, 5, 10, 20]:
+            df[f"roc_{period}"] = (
+                (df["close"] - df["close"].shift(period)) /
+                df["close"].shift(period)
+            ) * 100
+
+        # Momentum indicators (absolute price difference)
+        for period in [5, 10, 20]:
+            df[f"momentum_{period}"] = df["close"] - df["close"].shift(period)
+
         return df
 
     # ========================================================================
