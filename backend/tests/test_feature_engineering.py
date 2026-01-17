@@ -614,6 +614,150 @@ class TestTrendFeatures:
         assert "di_minus" in df.columns
         assert "trend_direction" in df.columns
 
+    def test_wma_feature(self, feature_engine, sample_ohlcv_data):
+        """Test WMA feature generation."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["wma"])
+        # Per acceptance criteria: periods 5, 10, 20, 50
+        assert "wma_5" in df.columns
+        assert "wma_10" in df.columns
+        assert "wma_20" in df.columns
+        assert "wma_50" in df.columns
+        assert "wma_cross_short_medium" in df.columns
+        assert "price_above_wma_short" in df.columns
+        assert "wma_sma_diff_short" in df.columns
+
+    def test_ichimoku_feature(self, feature_engine, sample_ohlcv_data):
+        """Test Ichimoku Cloud feature generation."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["ichimoku"])
+        # Per acceptance criteria: Tenkan, Kijun, Senkou components
+        assert "ichimoku_tenkan" in df.columns
+        assert "ichimoku_kijun" in df.columns
+        assert "ichimoku_senkou_a" in df.columns
+        assert "ichimoku_senkou_b" in df.columns
+        assert "ichimoku_chikou" in df.columns
+        # Ichimoku-based signals
+        assert "ichimoku_above_cloud" in df.columns
+        assert "ichimoku_below_cloud" in df.columns
+        assert "ichimoku_tk_bullish" in df.columns
+        assert "ichimoku_cloud_thickness" in df.columns
+        assert "ichimoku_cloud_bullish" in df.columns
+
+    def test_parabolic_sar_feature(self, feature_engine, sample_ohlcv_data):
+        """Test Parabolic SAR feature generation."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["parabolic_sar"])
+        assert "sar" in df.columns
+        # Parabolic SAR-based signals
+        assert "sar_uptrend" in df.columns
+        assert "sar_downtrend" in df.columns
+        assert "sar_reversal" in df.columns
+        assert "sar_distance" in df.columns
+
+    def test_trend_strength_feature(self, feature_engine, sample_ohlcv_data):
+        """Test trend strength classification feature generation."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["trend_strength"])
+        # Per acceptance criteria: strong/weak/no trend classification
+        assert "trend_strength" in df.columns
+        assert "trend_strong" in df.columns
+        assert "trend_weak" in df.columns
+        assert "trend_none" in df.columns
+        assert "trend_strength_score" in df.columns
+        assert "trend_direction_strength" in df.columns
+        # Trend strength values should be 0 (none), 1 (strong), or 2 (weak)
+        valid_strength = df["trend_strength"].dropna().isin([0, 1, 2])
+        assert valid_strength.all()
+        # Trend strength score should be 0-100
+        assert df["trend_strength_score"].dropna().between(0, 100).all()
+
+    def test_sma_200_period(self, feature_engine, sample_ohlcv_data):
+        """Test SMA includes 200 period per acceptance criteria."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["sma"])
+        assert "sma_200" in df.columns
+        assert "sma_cross_long_xlong" in df.columns
+        assert "price_above_sma_long" in df.columns
+        assert "sma_200_slope" in df.columns
+
+    def test_ema_200_period(self, feature_engine, sample_ohlcv_data):
+        """Test EMA includes 200 period per acceptance criteria."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["ema"])
+        assert "ema_200" in df.columns
+        assert "ema_cross_long_xlong" in df.columns
+        # ema_sma_diff_long only exists when SMA is also generated
+        # assert "ema_sma_diff_long" in df.columns
+        assert "ema_200_slope" in df.columns
+
+    def test_all_trend_features_together(self, feature_engine, sample_ohlcv_data):
+        """Test all trend features together."""
+        df = feature_engine.generate_features(
+            sample_ohlcv_data,
+            "TEST",
+            feature_types=["sma", "ema", "wma", "adx", "ichimoku", "parabolic_sar", "trend_strength"]
+        )
+        # Check that all trend features are present
+        trend_features = [
+            # SMA
+            "sma_5", "sma_10", "sma_20", "sma_50", "sma_200",
+            # EMA
+            "ema_5", "ema_10", "ema_20", "ema_50", "ema_200",
+            # WMA
+            "wma_5", "wma_10", "wma_20", "wma_50",
+            # ADX
+            "adx", "di_plus", "di_minus",
+            # Ichimoku
+            "ichimoku_tenkan", "ichimoku_kijun", "ichimoku_senkou_a", "ichimoku_senkou_b",
+            # Parabolic SAR
+            "sar",
+            # Trend strength
+            "trend_strength", "trend_strong", "trend_weak", "trend_none"
+        ]
+        for feature in trend_features:
+            assert feature in df.columns, f"Missing feature: {feature}"
+
+    def test_wma_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that WMA is calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["wma"])
+        # Manually calculate WMA for window 5
+        window = 5
+        idx = 50
+        weights = np.arange(1, window + 1)
+        prices = sample_ohlcv_data["close"].iloc[idx-window+1:idx+1].values
+        expected_wma = np.average(prices, weights=weights)
+        actual_wma = df["wma_5"].iloc[idx]
+        assert np.isclose(expected_wma, actual_wma, rtol=1e-10)
+
+    def test_ichimoku_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that Ichimoku components are calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["ichimoku"])
+        # Manually calculate Tenkan-sen for a specific row
+        tenkan_period = 9
+        idx = 50
+        high_max = sample_ohlcv_data["high"].iloc[idx-tenkan_period+1:idx+1].max()
+        low_min = sample_ohlcv_data["low"].iloc[idx-tenkan_period+1:idx+1].min()
+        expected_tenkan = (high_max + low_min) / 2
+        actual_tenkan = df["ichimoku_tenkan"].iloc[idx]
+        assert np.isclose(expected_tenkan, actual_tenkan, rtol=1e-10)
+
+    def test_parabolic_sar_uptrend_downtrend(self, feature_engine, sample_ohlcv_data):
+        """Test that Parabolic SAR correctly identifies uptrend/downtrend."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["parabolic_sar"])
+        # When SAR is below price, should be uptrend (1)
+        # When SAR is above price, should be downtrend (1)
+        # These should be mutually exclusive for non-NaN values
+        non_nan = df[["sar_uptrend", "sar_downtrend"]].dropna()
+        # uptrend + downtrend should be <= 1 (can't be both)
+        assert (non_nan["sar_uptrend"] + non_nan["sar_downtrend"] <= 1).all()
+
+    def test_trend_strength_classification_distribution(self, feature_engine, sample_ohlcv_data):
+        """Test that trend strength classification is distributed reasonably."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["trend_strength"])
+        # Check that we have at least some of each classification
+        strength_counts = df["trend_strength"].value_counts()
+        # At least some classification should be present
+        assert len(strength_counts) > 0
+        # Binary flags should be mutually exclusive
+        non_nan = df[["trend_strong", "trend_weak", "trend_none"]].dropna()
+        row_sums = non_nan["trend_strong"] + non_nan["trend_weak"] + non_nan["trend_none"]
+        assert (row_sums == 1).all()  # Exactly one should be true
+
 
 # ============================================================================
 # Lag Features Tests

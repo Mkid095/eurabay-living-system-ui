@@ -102,7 +102,7 @@ class FeatureEngineering:
     - Volatility: ATR, standard deviation, Parkinson estimator, Garman-Klass estimator,
                   historical volatility, volatility z-score, volatility regime classification
     - Momentum: RSI, MACD, Stochastic oscillator, Williams %R, Money Flow Index (MFI)
-    - Trend: SMA, EMA, ADX
+    - Trend: SMA, EMA, WMA, ADX with +DI/-DI, Ichimoku Cloud, Parabolic SAR, trend strength classification
     - Lag features: Multiple period lags
     - Rolling statistics: Mean, std, min, max
     - Z-score features
@@ -162,7 +162,11 @@ class FeatureEngineering:
             # Trend features
             "sma": self._add_sma,
             "ema": self._add_ema,
+            "wma": self._add_wma,
             "adx": self._add_adx,
+            "ichimoku": self._add_ichimoku,
+            "parabolic_sar": self._add_parabolic_sar,
+            "trend_strength": self._add_trend_strength,
 
             # Lag features
             "lag": self._add_lag_features,
@@ -863,39 +867,79 @@ class FeatureEngineering:
     # ========================================================================
 
     def _add_sma(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add Simple Moving Averages (SMA)."""
-        for window in [self.config.SHORT_WINDOW, self.config.MEDIUM_WINDOW, self.config.LONG_WINDOW]:
+        """
+        Add Simple Moving Averages (SMA).
+
+        Per acceptance criteria: Implement SMA for periods: 5, 10, 20, 50, 200
+        """
+        for window in [5, 10, 20, 50, 200]:
             df[f"sma_{window}"] = df["close"].rolling(window=window).mean()
 
         # SMA crossover signals
         df["sma_cross_short_medium"] = (
-            (df[f"sma_{self.config.SHORT_WINDOW}"] > df[f"sma_{self.config.MEDIUM_WINDOW}"]).astype(int)
+            (df[f"sma_5"] > df[f"sma_10"]).astype(int)
         )
         df["sma_cross_medium_long"] = (
-            (df[f"sma_{self.config.MEDIUM_WINDOW}"] > df[f"sma_{self.config.LONG_WINDOW}"]).astype(int)
+            (df[f"sma_10"] > df[f"sma_20"]).astype(int)
+        )
+        df["sma_cross_long_xlong"] = (
+            (df[f"sma_50"] > df[f"sma_200"]).astype(int)
         )
 
         # Price vs SMA
         df["price_above_sma_short"] = (
-            (df["close"] > df[f"sma_{self.config.SHORT_WINDOW}"]).astype(int)
+            (df["close"] > df[f"sma_5"]).astype(int)
         )
+        df["price_above_sma_long"] = (
+            (df["close"] > df[f"sma_200"]).astype(int)
+        )
+
+        # SMA slopes (trend direction)
+        df["sma_5_slope"] = df["sma_5"].diff(5)
+        df["sma_20_slope"] = df["sma_20"].diff(5)
+        df["sma_200_slope"] = df["sma_200"].diff(10)
 
         return df
 
     def _add_ema(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add Exponential Moving Averages (EMA)."""
-        for window in [self.config.SHORT_WINDOW, self.config.MEDIUM_WINDOW, self.config.LONG_WINDOW]:
+        """
+        Add Exponential Moving Averages (EMA).
+
+        Per acceptance criteria: Implement EMA for periods: 5, 10, 20, 50, 200
+        """
+        for window in [5, 10, 20, 50, 200]:
             df[f"ema_{window}"] = df["close"].ewm(span=window, adjust=False).mean()
 
         # EMA crossover signals
         df["ema_cross_short_medium"] = (
-            (df[f"ema_{self.config.SHORT_WINDOW}"] > df[f"ema_{self.config.MEDIUM_WINDOW}"]).astype(int)
+            (df["ema_5"] > df["ema_10"]).astype(int)
+        )
+        df["ema_cross_medium_long"] = (
+            (df["ema_10"] > df["ema_20"]).astype(int)
+        )
+        df["ema_cross_long_xlong"] = (
+            (df["ema_50"] > df["ema_200"]).astype(int)
         )
 
-        # EMA vs SMA (trend strength)
-        df["ema_sma_diff_short"] = (
-            df[f"ema_{self.config.SHORT_WINDOW}"] - df[f"sma_{self.config.SHORT_WINDOW}"]
-        ) / df[f"sma_{self.config.SHORT_WINDOW}"]
+        # EMA vs SMA (trend strength) - only if SMA exists
+        if "sma_5" in df.columns:
+            df["ema_sma_diff_short"] = (
+                df["ema_5"] - df["sma_5"]
+            ) / df["sma_5"]
+        else:
+            df["ema_sma_diff_short"] = np.nan
+
+        if "sma_200" in df.columns:
+            df["ema_sma_diff_long"] = (
+                df["ema_200"] - df["sma_200"]
+            ) / df["sma_200"]
+        else:
+            df["ema_sma_diff_long"] = np.nan
+
+        # EMA slopes (trend direction)
+        df["ema_5_slope"] = df["ema_5"].diff(5)
+        df["ema_20_slope"] = df["ema_20"].diff(5)
+        df["ema_200_slope"] = df["ema_200"].diff(10)
 
         return df
 
@@ -950,6 +994,306 @@ class FeatureEngineering:
         df["adx_strong_trend"] = (df["adx"] > 25).astype(int)
         df["trend_direction"] = np.where(
             df["di_plus"] > df["di_minus"], 1, -1
+        )
+
+        return df
+
+    def _add_wma(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add Weighted Moving Average (WMA).
+
+        WMA assigns greater weight to more recent data points and less weight to older data points.
+        The weights decrease linearly from the most recent to the oldest data point.
+
+        Formula: sum(price_i * weight_i) / sum(weight_i)
+        Where weight_i = i (for i from 1 to n, with n being most recent)
+
+        Per acceptance criteria: Implement WMA for periods 5, 10, 20, 50
+        """
+        for window in [5, 10, 20, 50]:
+            # Calculate weights (linearly decreasing from recent to oldest)
+            weights = np.arange(1, window + 1)
+
+            def weighted_mean(x, w=weights):
+                """Calculate weighted mean for a window."""
+                if len(x) != window:
+                    return np.nan
+                valid = ~np.isnan(x)
+                if not valid.any():
+                    return np.nan
+                return np.average(x[valid], weights=w[-len(x[valid]):])
+
+            # Apply weighted moving average
+            df[f"wma_{window}"] = df["close"].rolling(window=window).apply(
+                weighted_mean, raw=True
+            )
+
+        # WMA crossover signals (after all WMAs are calculated)
+        df["wma_cross_short_medium"] = (
+            (df["wma_5"] > df["wma_10"]).astype(int)
+        )
+
+        # Price vs WMA
+        df["price_above_wma_short"] = (
+            (df["close"] > df["wma_5"]).astype(int)
+        )
+
+        # WMA vs SMA comparison (trend strength indicator) - only if SMA exists
+        if "sma_5" in df.columns:
+            df["wma_sma_diff_short"] = (
+                df["wma_5"] - df["sma_5"]
+            ) / df["sma_5"]
+        else:
+            df["wma_sma_diff_short"] = np.nan
+
+        return df
+
+    def _add_ichimoku(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add Ichimoku Cloud components.
+
+        The Ichimoku Cloud is a comprehensive indicator that defines support and resistance,
+        identifies trend direction, gauges momentum, and provides trading signals.
+
+        Components:
+        - Tenkan-sen (Conversion Line): (9-period high + 9-period low) / 2
+        - Kijun-sen (Base Line): (26-period high + 26-period low) / 2
+        - Senkou Span A (Leading Span A): (Tenkan-sen + Kijun-sen) / 2, shifted 26 periods ahead
+        - Senkou Span B (Leading Span B): (52-period high + 52-period low) / 2, shifted 26 periods ahead
+        - Chikou Span (Lagging Span): Close, shifted 26 periods behind
+
+        The cloud (Kumo) is formed by the area between Senkou Span A and Senkou Span B.
+
+        Per acceptance criteria: Implement Tenkan, Kijun, Senkou components
+        """
+        # Tenkan-sen (Conversion Line) - 9 periods
+        tenkan_period = 9
+        high_9 = df["high"].rolling(window=tenkan_period).max()
+        low_9 = df["low"].rolling(window=tenkan_period).min()
+        df["ichimoku_tenkan"] = (high_9 + low_9) / 2
+
+        # Kijun-sen (Base Line) - 26 periods
+        kijun_period = 26
+        high_26 = df["high"].rolling(window=kijun_period).max()
+        low_26 = df["low"].rolling(window=kijun_period).min()
+        df["ichimoku_kijun"] = (high_26 + low_26) / 2
+
+        # Senkou Span A (Leading Span A)
+        senkou_span_a = (df["ichimoku_tenkan"] + df["ichimoku_kijun"]) / 2
+        df["ichimoku_senkou_a"] = senkou_span_a.shift(kijun_period)  # Shift 26 periods ahead
+
+        # Senkou Span B (Leading Span B) - 52 periods
+        senkou_period = 52
+        high_52 = df["high"].rolling(window=senkou_period).max()
+        low_52 = df["low"].rolling(window=senkou_period).min()
+        senkou_span_b = (high_52 + low_52) / 2
+        df["ichimoku_senkou_b"] = senkou_span_b.shift(kijun_period)  # Shift 26 periods ahead
+
+        # Chikou Span (Lagging Span) - Close shifted 26 periods behind
+        df["ichimoku_chikou"] = df["close"].shift(-kijun_period)
+
+        # Ichimoku-based signals
+        # Price above cloud (bullish)
+        df["ichimoku_above_cloud"] = (
+            (df["close"] > df["ichimoku_senkou_a"]) &
+            (df["close"] > df["ichimoku_senkou_b"])
+        ).astype(int)
+
+        # Price below cloud (bearish)
+        df["ichimoku_below_cloud"] = (
+            (df["close"] < df["ichimoku_senkou_a"]) &
+            (df["close"] < df["ichimoku_senkou_b"])
+        ).astype(int)
+
+        # Tenkan-Kijun crossover (TK Cross)
+        df["ichimoku_tk_bullish"] = (
+            (df["ichimoku_tenkan"] > df["ichimoku_kijun"]).astype(int)
+        )
+
+        # Cloud thickness (volatility measure)
+        df["ichimoku_cloud_thickness"] = np.abs(
+            df["ichimoku_senkou_a"] - df["ichimoku_senkou_b"]
+        ) / df["close"]
+
+        # Cloud color (A > B = bullish, A < B = bearish)
+        df["ichimoku_cloud_bullish"] = (
+            (df["ichimoku_senkou_a"] > df["ichimoku_senkou_b"]).astype(int)
+        )
+
+        return df
+
+    def _add_parabolic_sar(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add Parabolic SAR (Stop and Reverse).
+
+        Parabolic SAR is a trend-following indicator that sets trailing price stops
+        for long or short positions. It helps identify potential trend reversals.
+
+        The SAR is calculated as:
+        - SAR_new = SAR_prev + AF * (EP - SAR_prev)
+        - Where AF (Acceleration Factor) starts at 0.02 and increases by 0.02 up to 0.2
+        - EP (Extreme Point) is the highest high (uptrend) or lowest low (downtrend)
+
+        Interpretation:
+        - When SAR is below price, trend is up (bullish)
+        - When SAR is above price, trend is down (bearish)
+        - Price crossing SAR signals potential reversal
+
+        Per acceptance criteria: Implement Parabolic SAR
+        """
+        if talib is not None:
+            # Use TA-Lib implementation if available
+            df["sar"] = talib.SAR(
+                df["high"].values,
+                df["low"].values,
+                acceleration=0.02,  # Starting AF
+                maximum=0.2         # Maximum AF
+            )
+        else:
+            # Fallback implementation
+            sar = np.zeros(len(df))
+            is_up_trend = True
+            af = 0.02
+            ep = df["high"].iloc[0]
+            sar[0] = df["low"].iloc[0]
+
+            for i in range(1, len(df)):
+                if is_up_trend:
+                    # Uptrend: SAR is below price
+                    sar[i] = sar[i-1] + af * (ep - sar[i-1])
+
+                    # Update EP if new high
+                    if df["high"].iloc[i] > ep:
+                        ep = df["high"].iloc[i]
+                        af = min(af + 0.02, 0.2)
+
+                    # Check for trend reversal
+                    if df["low"].iloc[i] < sar[i]:
+                        is_up_trend = False
+                        sar[i] = ep
+                        ep = df["low"].iloc[i]
+                        af = 0.02
+                else:
+                    # Downtrend: SAR is above price
+                    sar[i] = sar[i-1] + af * (ep - sar[i-1])
+
+                    # Update EP if new low
+                    if df["low"].iloc[i] < ep:
+                        ep = df["low"].iloc[i]
+                        af = min(af + 0.02, 0.2)
+
+                    # Check for trend reversal
+                    if df["high"].iloc[i] > sar[i]:
+                        is_up_trend = True
+                        sar[i] = ep
+                        ep = df["high"].iloc[i]
+                        af = 0.02
+
+            df["sar"] = sar
+
+        # Parabolic SAR-based signals
+        # Price above SAR = uptrend
+        df["sar_uptrend"] = (df["close"] > df["sar"]).astype(int)
+
+        # Price below SAR = downtrend
+        df["sar_downtrend"] = (df["close"] < df["sar"]).astype(int)
+
+        # SAR reversal signal (when price crosses SAR)
+        df["sar_reversal"] = (
+            ((df["close"].shift(1) > df["sar"].shift(1)) & (df["close"] < df["sar"])) |
+            ((df["close"].shift(1) < df["sar"].shift(1)) & (df["close"] > df["sar"]))
+        ).astype(int)
+
+        # Distance from SAR (trend strength indicator)
+        df["sar_distance"] = np.abs(df["close"] - df["sar"]) / df["close"]
+
+        return df
+
+    def _add_trend_strength(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add trend strength classification (strong/weak/no trend).
+
+        Trend strength is determined using multiple indicators:
+        - ADX: Measures trend strength (regardless of direction)
+        - MACD histogram: Shows momentum strength
+        - Price distance from moving averages
+        - Slope of moving averages
+
+        Classification:
+        - Strong trend: ADX > 25 AND price far from MA AND consistent slope
+        - Weak trend: ADX between 20 and 25 OR moderate distance from MA
+        - No trend: ADX < 20 AND price near MA
+
+        Per acceptance criteria: Implement trend strength classification (strong/weak/no trend)
+        """
+        # Ensure we have the required indicators
+        if "adx" not in df.columns:
+            self._add_adx(df)
+        if "macd_hist" not in df.columns:
+            self._add_macd(df)
+        if "sma_20" not in df.columns:
+            self._add_sma(df)
+
+        # Calculate price distance from SMA (normalized)
+        price_sma_distance = np.abs(df["close"] - df["sma_20"]) / df["sma_20"]
+
+        # Calculate slope of SMA (rate of change)
+        sma_slope = df["sma_20"].diff(5)  # 5-period slope
+
+        # Calculate MACD histogram strength
+        macd_strength = np.abs(df["macd_hist"])
+
+        # Classify trend strength
+        # Initialize with "no trend" (0)
+        df["trend_strength"] = 0
+
+        # Strong trend (1) conditions:
+        # - ADX > 25 (strong trend)
+        # - Price more than 1% from SMA
+        # - Consistent SMA slope (positive or negative)
+        strong_trend = (
+            (df["adx"] > 25) &
+            (price_sma_distance > 0.01) &
+            (np.abs(sma_slope) > 0)
+        )
+        df.loc[strong_trend, "trend_strength"] = 1
+
+        # Weak trend (2) conditions:
+        # - ADX between 20 and 25 (developing trend)
+        # - OR price 0.5-1% from SMA with moderate ADX
+        weak_trend = (
+            ((df["adx"] >= 20) & (df["adx"] <= 25)) |
+            ((price_sma_distance >= 0.005) & (price_sma_distance <= 0.01) & (df["adx"] > 15))
+        ) & (~strong_trend)
+        df.loc[weak_trend, "trend_strength"] = 2
+
+        # No trend remains 0 for:
+        # - ADX < 20 (sideways/ranging)
+        # - Price within 0.5% of SMA
+        # (already initialized as 0)
+
+        # Binary flags for each trend strength
+        df["trend_strong"] = (df["trend_strength"] == 1).astype(int)
+        df["trend_weak"] = (df["trend_strength"] == 2).astype(int)
+        df["trend_none"] = (df["trend_strength"] == 0).astype(int)
+
+        # Trend strength score (0-100)
+        # Combines ADX, price distance, and MACD strength
+        adx_normalized = np.clip(df["adx"] / 50, 0, 1)  # ADX 0-50 scaled to 0-1
+        distance_normalized = np.clip(price_sma_distance * 100, 0, 1)  # 0-1% distance scaled
+        macd_normalized = np.clip(macd_strength / (df["close"].std()), 0, 1)
+
+        df["trend_strength_score"] = (
+            adx_normalized * 0.5 +
+            distance_normalized * 0.3 +
+            macd_normalized * 0.2
+        ) * 100
+
+        # Trend direction combined with strength
+        # +1 = strong uptrend, -1 = strong downtrend, 0.5 = weak uptrend, -0.5 = weak downtrend, 0 = no trend
+        df["trend_direction_strength"] = df["trend_direction"] * (
+            df["trend_strong"] * 1.0 +
+            df["trend_weak"] * 0.5
         )
 
         return df
