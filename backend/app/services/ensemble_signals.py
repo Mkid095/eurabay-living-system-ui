@@ -141,6 +141,257 @@ class SignalSource:
 
 
 # ============================================================================
+# Majority Voting Class
+# ============================================================================
+
+@dataclass
+class VotingResult:
+    """
+    Result of majority voting process.
+
+    Attributes:
+        direction: The consensus direction (BUY/SELL/HOLD)
+        confidence: Percentage of agreeing sources (0.0 to 1.0)
+        threshold_met: Whether minimum agreement threshold was met
+        vote_details: Dictionary showing how each source voted
+        vote_count: Count of votes for each direction
+        num_voters: Total number of sources that voted
+        agreement_ratio: Ratio of agreeing sources to total sources
+    """
+    direction: SignalDirection
+    confidence: float
+    threshold_met: bool
+    vote_details: Dict[str, str]
+    vote_count: Dict[str, int]
+    num_voters: int
+    agreement_ratio: float
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert voting result to dictionary."""
+        return {
+            "direction": self.direction.value,
+            "confidence": self.confidence,
+            "threshold_met": self.threshold_met,
+            "vote_details": self.vote_details,
+            "vote_count": self.vote_count,
+            "num_voters": self.num_voters,
+            "agreement_ratio": self.agreement_ratio
+        }
+
+
+class MajorityVoting:
+    """
+    Implements majority voting mechanism for ensemble signals.
+
+    This class combines signals from multiple sources using majority voting
+    with a configurable minimum agreement threshold. Only returns a trading
+    signal if the threshold is met, otherwise returns HOLD.
+
+    Key Features:
+    - Majority voting (2/3 threshold by default)
+    - Agreement-based confidence calculation
+    - Detailed voting logs for transparency
+    - HOLD fallback when threshold not met
+
+    Example:
+        voting = MajorityVoting(min_agreement_threshold=2/3)
+
+        result = voting.vote(signals)
+        if result.threshold_met:
+            print(f"Ensemble says: {result.direction}")
+        else:
+            print("No consensus, holding")
+
+    Attributes:
+        min_agreement_threshold: Minimum ratio of sources that must agree
+                                 Default is 2/3 (0.67)
+        min_voters: Minimum number of sources required for voting
+                   Default is 2
+    """
+
+    def __init__(
+        self,
+        min_agreement_threshold: float = 2/3,
+        min_voters: int = 2
+    ):
+        """
+        Initialize the majority voting mechanism.
+
+        Args:
+            min_agreement_threshold: Minimum ratio of sources that must agree
+                                    Range: 0.0 to 1.0
+                                    Default: 2/3 (0.67) for 3-source ensemble
+            min_voters: Minimum number of sources required to vote
+                       Default: 2 (require at least 2 sources)
+
+        Raises:
+            ValueError: If threshold or min_voters are out of valid range
+        """
+        if not 0.0 < min_agreement_threshold <= 1.0:
+            raise ValueError(
+                f"min_agreement_threshold must be between 0 and 1, "
+                f"got {min_agreement_threshold}"
+            )
+
+        if min_voters < 1:
+            raise ValueError(
+                f"min_voters must be at least 1, got {min_voters}"
+            )
+
+        self.min_agreement_threshold = min_agreement_threshold
+        self.min_voters = min_voters
+        logger.info(
+            f"MajorityVoting initialized: threshold={min_agreement_threshold:.2f}, "
+            f"min_voters={min_voters}"
+        )
+
+    def vote(self, signals: List[TradingSignal]) -> VotingResult:
+        """
+        Perform majority voting on signals from multiple sources.
+
+        This method:
+        1. Counts votes for BUY, SELL, HOLD
+        2. Checks if minimum agreement threshold is met
+        3. Returns ensemble signal only if threshold met
+        4. Returns HOLD if no majority or threshold not met
+        5. Calculates confidence as percentage of agreeing sources
+
+        Args:
+            signals: List of signals from different sources
+
+        Returns:
+            VotingResult containing the ensemble decision
+
+        Example:
+            signals = [
+                TradingSignal(source="xgboost", direction=SignalDirection.BUY, ...),
+                TradingSignal(source="rf", direction=SignalDirection.BUY, ...),
+                TradingSignal(source="rules", direction=SignalDirection.SELL, ...)
+            ]
+
+            result = voting.vote(signals)
+            # result.direction == SignalDirection.BUY
+            # result.confidence == 0.67 (2/3 agreed)
+            # result.threshold_met == True (2/3 >= 2/3)
+        """
+        num_voters = len(signals)
+
+        # Check minimum voter requirement
+        if num_voters < self.min_voters:
+            logger.warning(
+                f"Insufficient voters: {num_voters} < {self.min_voters}. "
+                "Returning HOLD."
+            )
+            return self._create_hold_result(
+                signals=signals,
+                reason=f"Insufficient voters ({num_voters} < {self.min_voters})"
+            )
+
+        # Count votes for each direction
+        vote_count: Dict[str, int] = {
+            "BUY": 0,
+            "SELL": 0,
+            "HOLD": 0
+        }
+
+        # Track how each source voted
+        vote_details: Dict[str, str] = {}
+
+        for signal in signals:
+            direction = signal.direction.value
+            vote_count[direction] += 1
+            vote_details[signal.source] = direction
+
+        # Find the direction with most votes
+        consensus_direction = max(vote_count, key=vote_count.get)
+        consensus_votes = vote_count[consensus_direction]
+
+        # Calculate agreement ratio
+        agreement_ratio = consensus_votes / num_voters if num_voters > 0 else 0.0
+
+        # Check if threshold is met
+        threshold_met = agreement_ratio >= self.min_agreement_threshold
+
+        # Log voting details
+        logger.info(
+            f"Voting results: {vote_count} | "
+            f"Consensus: {consensus_direction} ({consensus_votes}/{num_voters}) | "
+            f"Agreement: {agreement_ratio:.2%} | "
+            f"Threshold: {self.min_agreement_threshold:.2%} | "
+            f"Met: {threshold_met}"
+        )
+
+        # Log detailed votes
+        for source, direction in vote_details.items():
+            logger.debug(f"  {source}: {direction}")
+
+        if threshold_met:
+            # Threshold met, return ensemble signal
+            confidence = agreement_ratio
+
+            logger.info(
+                f"Ensemble signal: {consensus_direction} "
+                f"(confidence={confidence:.2%}, agreement={consensus_votes}/{num_voters})"
+            )
+
+            return VotingResult(
+                direction=SignalDirection(consensus_direction),
+                confidence=confidence,
+                threshold_met=True,
+                vote_details=vote_details,
+                vote_count=vote_count,
+                num_voters=num_voters,
+                agreement_ratio=agreement_ratio
+            )
+        else:
+            # Threshold not met, return HOLD
+            logger.info(
+                f"Agreement threshold not met: {agreement_ratio:.2%} < "
+                f"{self.min_agreement_threshold:.2%}. Returning HOLD."
+            )
+
+            return VotingResult(
+                direction=SignalDirection.HOLD,
+                confidence=agreement_ratio,
+                threshold_met=False,
+                vote_details=vote_details,
+                vote_count=vote_count,
+                num_voters=num_voters,
+                agreement_ratio=agreement_ratio
+            )
+
+    def _create_hold_result(
+        self,
+        signals: List[TradingSignal],
+        reason: str
+    ) -> VotingResult:
+        """
+        Create a HOLD result with logging.
+
+        Args:
+            signals: List of signals (for vote details)
+            reason: Why HOLD is being returned
+
+        Returns:
+            VotingResult with HOLD direction
+        """
+        vote_details: Dict[str, str] = {
+            signal.source: signal.direction.value
+            for signal in signals
+        }
+
+        return VotingResult(
+            direction=SignalDirection.HOLD,
+            confidence=0.0,
+            threshold_met=False,
+            vote_details=vote_details,
+            vote_count={"BUY": 0, "SELL": 0, "HOLD": 0},
+            num_voters=len(signals),
+            agreement_ratio=0.0
+        )
+
+
+# ============================================================================
 # Ensemble Signal Manager
 # ============================================================================
 
@@ -168,11 +419,25 @@ class EnsembleSignalManager:
         is_valid = manager.validate_signal(signal)
     """
 
-    def __init__(self):
-        """Initialize the ensemble signal manager."""
+    def __init__(
+        self,
+        majority_voting_threshold: float = 2/3,
+        majority_voting_min_voters: int = 2
+    ):
+        """
+        Initialize the ensemble signal manager.
+
+        Args:
+            majority_voting_threshold: Minimum agreement ratio for majority voting
+            majority_voting_min_voters: Minimum number of sources required
+        """
         self._signal_sources: Dict[str, SignalSource] = {}
         self._signal_cache: Dict[str, List[TradingSignal]] = {}
         self._cache_ttl_seconds: int = 30  # Cache TTL for signals
+        self._majority_voting = MajorityVoting(
+            min_agreement_threshold=majority_voting_threshold,
+            min_voters=majority_voting_min_voters
+        )
         logger.info("EnsembleSignalManager initialized")
 
     # ========================================================================
@@ -533,6 +798,44 @@ class EnsembleSignalManager:
 
         return result
 
+    def majority_vote_with_threshold(
+        self,
+        signals: List[TradingSignal]
+    ) -> VotingResult:
+        """
+        Perform majority voting with minimum agreement threshold.
+
+        This is the US-005 implementation that uses the MajorityVoting class
+        to combine signals with strict threshold requirements.
+
+        Features:
+        - Requires 2/3 minimum agreement threshold (configurable)
+        - Returns HOLD if no majority or threshold not met
+        - Confidence calculated as percentage of agreeing sources
+        - Detailed logging of which sources voted how
+
+        Args:
+            signals: List of signals from different sources
+
+        Returns:
+            VotingResult containing ensemble decision
+
+        Example:
+            result = manager.majority_vote_with_threshold(signals)
+
+            if result.threshold_met:
+                # Trade the signal
+                execute_trade(result.direction)
+            else:
+                # No consensus, wait
+                logger.info("No ensemble consensus, holding")
+
+        Note:
+            This is the recommended method for US-005 compliance.
+            The aggregate_signals() method is kept for backward compatibility.
+        """
+        return self._majority_voting.vote(signals)
+
     # ========================================================================
     # Statistics and Monitoring
     # ========================================================================
@@ -588,6 +891,8 @@ __all__ = [
     "SignalType",
     "TradingSignal",
     "SignalSource",
+    "VotingResult",
+    "MajorityVoting",
     "EnsembleSignalManager",
     "create_ensemble_manager"
 ]
