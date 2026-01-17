@@ -18,6 +18,7 @@ from loguru import logger
 from app.core.config import settings
 from app.services.mt5_service import MT5Service, OHLCVData, TickData, MT5Error
 from app.services.database_service import DatabaseService
+from app.services.historical_backfill import HistoricalBackfillService
 from storage.time_series_storage import TimeSeriesStorage
 
 
@@ -103,6 +104,7 @@ class DataIngestionService:
         database_service: Optional[DatabaseService] = None,
         time_series_storage: Optional[TimeSeriesStorage] = None,
         symbols: Optional[List[str]] = None,
+        historical_backfill: Optional[HistoricalBackfillService] = None,
     ):
         """
         Initialize DataIngestionService.
@@ -112,10 +114,12 @@ class DataIngestionService:
             database_service: Database service instance (created if not provided)
             time_series_storage: TimeSeries storage instance (created if not provided)
             symbols: List of symbols to ingest (defaults to volatility indices)
+            historical_backfill: Historical backfill service instance (created if not provided)
         """
         self.mt5_service = mt5_service
         self.database_service = database_service
         self.time_series_storage = time_series_storage
+        self.historical_backfill = historical_backfill
 
         # Use provided symbols or default to volatility indices from config
         self.symbols = symbols or settings.parsed_trading_symbols
@@ -174,6 +178,15 @@ class DataIngestionService:
                     base_path=str(Path(settings.DATA_DIR) / "market")
                 )
                 logger.info("TimeSeriesStorage initialized")
+
+            # Create historical backfill service if not provided
+            if self.historical_backfill is None:
+                self.historical_backfill = HistoricalBackfillService(
+                    mt5_service=self.mt5_service,
+                    symbols=self.symbols,
+                )
+                await self.historical_backfill.initialize()
+                logger.info("HistoricalBackfillService initialized")
 
             # Validate MT5 connection
             if not self.mt5_service.is_connected:
@@ -739,6 +752,12 @@ class DataIngestionService:
         """
         Backfill missing historical data for a symbol and timeframe.
 
+        This method now uses the comprehensive HistoricalBackfillService which provides:
+        - Chunked backfill to avoid memory issues
+        - Progress tracking
+        - Rate limit handling
+        - Retry logic
+
         Args:
             symbol: Trading symbol
             timeframe: Timeframe (M1, M5, M15, M30, H1, H4, D1)
@@ -754,47 +773,128 @@ class DataIngestionService:
         if not self.is_initialized:
             raise RuntimeError("Service not initialized. Call initialize() first.")
 
-        if end_date is None:
-            end_date = datetime.now(timezone.utc)
+        if self.historical_backfill is None:
+            raise RuntimeError("HistoricalBackfillService not available")
 
-        logger.info(
-            f"Starting backfill for {symbol} {timeframe} "
-            f"from {start_date} to {end_date}"
+        # Use the comprehensive backfill service
+        progress = await self.historical_backfill.backfill_historical_data(
+            symbol=symbol,
+            timeframe=timeframe,
+            start_date=start_date,
+            end_date=end_date,
         )
 
-        try:
-            # Fetch historical data
-            ohlcv_data = await self._fetch_ohlcv_data(symbol, timeframe, bars=10000)
+        return progress.bars_backfilled
 
-            if not ohlcv_data:
-                logger.warning(f"No data available for backfill {symbol} {timeframe}")
-                return 0
+    async def detect_and_backfill_gaps(
+        self,
+        symbols: Optional[List[str]] = None,
+        timeframes: Optional[List[str]] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        """
+        Detect data gaps and backfill them automatically.
 
-            # Filter data by date range
-            filtered_data = [
-                d
-                for d in ohlcv_data
-                if start_date <= d.timestamp <= end_date
-            ]
+        This is a convenience method that combines gap detection and backfilling.
 
-            if not filtered_data:
-                logger.warning(
-                    f"No data in date range for backfill {symbol} {timeframe}"
-                )
-                return 0
+        Args:
+            symbols: List of symbols to check (defaults to all)
+            timeframes: List of timeframes to check (defaults to all)
+            start_date: Start date for gap detection (defaults to 1 year ago)
+            end_date: End date for gap detection (defaults to now)
 
-            # Store the data
-            await self._store_ohlcv_data(symbol, timeframe, filtered_data)
+        Returns:
+            Dictionary with detection and backfill results
+        """
+        if not self.is_initialized:
+            raise RuntimeError("Service not initialized. Call initialize() first.")
 
-            logger.info(
-                f"Backfilled {len(filtered_data)} records for {symbol} {timeframe}"
-            )
+        if self.historical_backfill is None:
+            raise RuntimeError("HistoricalBackfillService not available")
 
-            return len(filtered_data)
+        logger.info("Starting gap detection and backfill process")
 
-        except Exception as e:
-            logger.error(f"Error during backfill for {symbol} {timeframe}: {e}")
-            raise
+        # Detect gaps
+        gaps = await self.historical_backfill.detect_data_gaps(
+            symbols=symbols,
+            timeframes=timeframes,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        if not gaps:
+            logger.info("No data gaps detected")
+            return {
+                "gaps_detected": 0,
+                "gaps_backfilled": 0,
+                "total_bars_backfilled": 0,
+                "progress": {},
+            }
+
+        # Backfill gaps
+        progress_map = await self.historical_backfill.backfill_gaps(gaps)
+
+        # Calculate statistics
+        total_bars = sum(p.bars_backfilled for p in progress_map.values())
+        completed = sum(1 for p in progress_map.values() if p.status.name == "COMPLETED")
+
+        return {
+            "gaps_detected": len(gaps),
+            "gaps_backfilled": completed,
+            "total_bars_backfilled": total_bars,
+            "progress": progress_map,
+        }
+
+    async def backfill_all_historical_data(
+        self,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        symbols: Optional[List[str]] = None,
+        timeframes: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Comprehensive backfill for all symbols and timeframes.
+
+        Useful for fresh installation or complete historical data refresh.
+
+        Args:
+            start_date: Start date (defaults to 1 year ago)
+            end_date: End date (defaults to now)
+            symbols: List of symbols to backfill (defaults to all)
+            timeframes: List of timeframes to backfill (defaults to all)
+
+        Returns:
+            Dictionary with backfill results
+        """
+        if not self.is_initialized:
+            raise RuntimeError("Service not initialized. Call initialize() first.")
+
+        if self.historical_backfill is None:
+            raise RuntimeError("HistoricalBackfillService not available")
+
+        logger.info("Starting comprehensive historical backfill")
+
+        # Perform comprehensive backfill
+        progress_map = await self.historical_backfill.backfill_all_symbols(
+            start_date=start_date,
+            end_date=end_date,
+            symbols=symbols,
+            timeframes=timeframes,
+        )
+
+        # Calculate statistics
+        total_bars = sum(p.bars_backfilled for p in progress_map.values())
+        completed = sum(1 for p in progress_map.values() if p.status.name == "COMPLETED")
+        failed = sum(1 for p in progress_map.values() if p.status.name == "FAILED")
+
+        return {
+            "total_operations": len(progress_map),
+            "completed": completed,
+            "failed": failed,
+            "total_bars_backfilled": total_bars,
+            "progress": progress_map,
+        }
 
     def get_statistics(self) -> IngestionStats:
         """
