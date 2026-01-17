@@ -170,7 +170,7 @@
       "mavenSteps": [1, 5],
       "mcpTools": {},
       "priority": 2,
-      "passes": false
+      "passes": true
     },
     {
       "id": "US-009",

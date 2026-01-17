@@ -422,7 +422,9 @@ class EnsembleSignalManager:
     def __init__(
         self,
         majority_voting_threshold: float = 2/3,
-        majority_voting_min_voters: int = 2
+        majority_voting_min_voters: int = 2,
+        enable_decay_tracking: bool = True,
+        max_signal_age_minutes: int = 30
     ):
         """
         Initialize the ensemble signal manager.
@@ -430,6 +432,8 @@ class EnsembleSignalManager:
         Args:
             majority_voting_threshold: Minimum agreement ratio for majority voting
             majority_voting_min_voters: Minimum number of sources required
+            enable_decay_tracking: Whether to enable signal decay tracking (US-008)
+            max_signal_age_minutes: Maximum age for fresh signals (default: 30)
         """
         self._signal_sources: Dict[str, SignalSource] = {}
         self._signal_cache: Dict[str, List[TradingSignal]] = {}
@@ -438,7 +442,22 @@ class EnsembleSignalManager:
             min_agreement_threshold=majority_voting_threshold,
             min_voters=majority_voting_min_voters
         )
-        logger.info("EnsembleSignalManager initialized")
+        self._enable_decay_tracking = enable_decay_tracking
+        self._max_signal_age_minutes = max_signal_age_minutes
+
+        # Initialize decay tracker if enabled
+        self._decay_tracker = None
+        if enable_decay_tracking:
+            from app.services.signal_decay_tracker import create_decay_tracker
+            self._decay_tracker = create_decay_tracker(
+                max_signal_age_minutes=max_signal_age_minutes
+            )
+            logger.info(
+                f"EnsembleSignalManager initialized with decay tracking "
+                f"(max_age={max_signal_age_minutes}min)"
+            )
+        else:
+            logger.info("EnsembleSignalManager initialized (decay tracking disabled)")
 
     # ========================================================================
     # Signal Source Registration
@@ -598,6 +617,15 @@ class EnsembleSignalManager:
 
                 # Validate the signal
                 if signal is not None and self.validate_signal(signal):
+                    # Apply decay tracking if enabled (US-008)
+                    if self._enable_decay_tracking and self._decay_tracker:
+                        if self._decay_tracker.should_discard_signal(signal):
+                            logger.debug(
+                                f"Discarding stale signal from {signal.source} "
+                                f"(age > {self._max_signal_age_minutes}min)"
+                            )
+                            continue
+
                     signals.append(signal)
                     logger.debug(
                         f"Received {signal.direction} signal from {signal.source} "
@@ -854,6 +882,8 @@ class EnsembleSignalManager:
             "enabled_sources": len(enabled_sources),
             "disabled_sources": len(self._signal_sources) - len(enabled_sources),
             "cached_signals": len(self._signal_cache),
+            "decay_tracking_enabled": self._enable_decay_tracking,
+            "max_signal_age_minutes": self._max_signal_age_minutes,
             "sources": [
                 {
                     "name": s.name,
@@ -864,6 +894,20 @@ class EnsembleSignalManager:
                 for s in self._signal_sources.values()
             ]
         }
+
+    def get_decay_tracker(self):
+        """
+        Get the decay tracker instance.
+
+        Returns:
+            SignalDecayTracker instance if enabled, None otherwise
+
+        Example:
+            tracker = manager.get_decay_tracker()
+            if tracker:
+                is_fresh = tracker.is_signal_fresh(signal)
+        """
+        return self._decay_tracker
 
 
 # ============================================================================
