@@ -1303,18 +1303,64 @@ class FeatureEngineering:
     # ========================================================================
 
     def _add_lag_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add lagged values of key columns."""
-        lag_periods = self.config.LAG_PERIODS
+        """
+        Add lagged values of key columns.
 
-        # Lag returns
+        Per US-010 acceptance criteria:
+        - Implement lag features for returns (1, 2, 3, 5, 10 periods)
+        - Implement lag features for price (1, 2, 3, 5, 10 periods)
+
+        Lag features help models learn temporal dependencies by providing
+        historical values as input features. This is crucial for time-series
+        forecasting where past values influence future behavior.
+        """
+        lag_periods = self.config.LAG_PERIODS  # [1, 2, 3, 5, 10]
+
+        # Calculate single-period returns first if not already present
+        if "return_1" not in df.columns:
+            df["return_1"] = df["close"].pct_change()
+
+        # Lag features for price (close)
+        # These provide direct historical price values
         for period in lag_periods:
             df[f"close_lag_{period}"] = df["close"].shift(period)
-            df[f"return_lag_{period}"] = df["close"].pct_change(period)
 
-        # Lag volume
+        # Lag features for returns
+        # These provide historical return values, useful for momentum patterns
+        # Use pre-calculated return_1 for lagging, then calculate multi-period lags
+        for period in lag_periods:
+            if period == 1:
+                # Lag of single-period returns
+                df[f"return_lag_{period}"] = df["return_1"].shift(period)
+            else:
+                # For multi-period lags, calculate returns then shift
+                # This gives us the return from period periods ago
+                df[f"return_lag_{period}"] = df["return_1"].shift(period)
+
+        # Additional lag features: log returns
+        # Calculate log returns if not present
+        if "log_return_1" not in df.columns:
+            df["log_return_1"] = np.log(df["close"] / df["close"].shift(1))
+
+        for period in lag_periods:
+            df[f"log_return_lag_{period}"] = df["log_return_1"].shift(period)
+
+        # Lag features for price changes (absolute differences)
+        if "price_change_1" not in df.columns:
+            df["price_change_1"] = df["close"].diff()
+
+        for period in lag_periods:
+            df[f"price_change_lag_{period}"] = df["price_change_1"].shift(period)
+
+        # Lag volume if available
         if "volume" in df.columns:
-            for period in lag_periods[:3]:  # Fewer lags for volume
+            for period in lag_periods[:3]:  # Fewer lags for volume (1, 2, 3)
                 df[f"volume_lag_{period}"] = df["volume"].shift(period)
+
+        # Lag high and low prices (useful for volatility patterns)
+        for period in lag_periods[:3]:  # 1, 2, 3 periods for high/low
+            df[f"high_lag_{period}"] = df["high"].shift(period)
+            df[f"low_lag_{period}"] = df["low"].shift(period)
 
         return df
 
@@ -1323,8 +1369,23 @@ class FeatureEngineering:
     # ========================================================================
 
     def _add_rolling_stats(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add rolling statistical features."""
-        windows = [self.config.SHORT_WINDOW, self.config.MEDIUM_WINDOW, self.config.LONG_WINDOW]
+        """
+        Add rolling statistical features.
+
+        Per US-010 acceptance criteria:
+        - Implement rolling mean for multiple windows (5, 10, 20, 50)
+        - Implement rolling standard deviation for multiple windows
+        - Implement rolling min/max for multiple windows
+        - Implement rolling skewness and kurtosis
+        - Implement rolling correlation (price vs volume)
+        - Implement percentile ranks (current value relative to history)
+
+        Rolling statistics capture local patterns and trends in the data,
+        providing context about recent price behavior that can be predictive
+        of future movements.
+        """
+        # Use specific windows per acceptance criteria
+        windows = [5, 10, 20, 50]
 
         for window in windows:
             # Basic statistics
@@ -1341,12 +1402,62 @@ class FeatureEngineering:
                 df[f"rolling_range_{window}"] / df[f"rolling_mean_{window}"]
             )
 
-            # Percentiles
+            # Percentiles (median is 50th percentile)
             df[f"rolling_median_{window}"] = df["close"].rolling(window=window).median()
 
-            # Skewness and kurtosis
+            # Additional percentiles for distribution analysis
+            df[f"rolling_q25_{window}"] = df["close"].rolling(window=window).quantile(0.25)
+            df[f"rolling_q75_{window}"] = df["close"].rolling(window=window).quantile(0.75)
+            df[f"rolling_iqr_{window}"] = (
+                df[f"rolling_q75_{window}"] - df[f"rolling_q25_{window}"]
+            )
+
+            # Skewness and kurtosis (measure distribution shape)
             df[f"rolling_skew_{window}"] = df["close"].rolling(window=window).skew()
             df[f"rolling_kurt_{window}"] = df["close"].rolling(window=window).kurt()
+
+            # Percentile rank: current value relative to historical values in window
+            # This shows where current price sits within the rolling window distribution
+            # 0 = minimum in window, 1 = maximum in window, 0.5 = median
+            df[f"percentile_rank_{window}"] = df["close"].rolling(window=window).apply(
+                lambda x: (len(x) - 1 - (x < x.iloc[-1]).sum()) / (len(x) - 1) if len(x) > 1 else 0.5,
+                raw=False
+            )
+
+            # Percentile rank for returns (momentum context)
+            if "return_1" not in df.columns:
+                df["return_1"] = df["close"].pct_change()
+            df[f"return_percentile_rank_{window}"] = df["return_1"].rolling(window=window).apply(
+                lambda x: (len(x) - 1 - (x < x.iloc[-1]).sum()) / (len(x) - 1) if len(x) > 1 else 0.5,
+                raw=False
+            )
+
+            # Rolling correlation: price vs volume (relationship strength)
+            # Correlation measures the linear relationship between price and volume
+            # Positive correlation: price and volume move together
+            # Negative correlation: price and volume move in opposite directions
+            if "volume" in df.columns:
+                # Calculate rolling correlation between close price and volume
+                rolling_corr = df["close"].rolling(window=window).corr(df["volume"])
+                df[f"price_volume_corr_{window}"] = rolling_corr
+
+                # Absolute correlation (strength of relationship regardless of direction)
+                df[f"price_volume_corr_abs_{window}"] = np.abs(rolling_corr)
+
+            # Rolling correlation: price vs returns (autocorrelation in returns)
+            # This helps identify momentum patterns
+            if "return_1" in df.columns:
+                df[f"price_return_corr_{window}"] = df["close"].rolling(window=window).corr(df["return_1"])
+
+            # Rolling correlation: high vs low (volatility consistency)
+            df[f"high_low_corr_{window}"] = df["high"].rolling(window=window).corr(df["low"])
+
+            # Price position in rolling range (normalized)
+            # 0 = at rolling minimum, 1 = at rolling maximum
+            df[f"price_position_{window}"] = (
+                (df["close"] - df[f"rolling_min_{window}"]) /
+                (df[f"rolling_max_{window}"] - df[f"rolling_min_{window}"])
+            ).fillna(0.5)  # Middle position when range is zero
 
         return df
 

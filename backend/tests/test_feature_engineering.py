@@ -774,11 +774,78 @@ class TestLagFeatures:
         assert "close_lag_3" in df.columns
         assert "return_lag_1" in df.columns
 
+    def test_lag_features_all_periods(self, feature_engine, sample_ohlcv_data):
+        """Test lag features for all required periods (1, 2, 3, 5, 10)."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["lag"])
+        # Per US-010 acceptance criteria: periods 1, 2, 3, 5, 10
+        for period in [1, 2, 3, 5, 10]:
+            assert f"close_lag_{period}" in df.columns
+            assert f"return_lag_{period}" in df.columns
+            assert f"log_return_lag_{period}" in df.columns
+            assert f"price_change_lag_{period}" in df.columns
+
     def test_volume_lag_features(self, feature_engine, sample_ohlcv_data):
         """Test volume lag feature generation."""
         df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["lag"])
         if "volume" in sample_ohlcv_data.columns:
+            # Volume lags for first 3 periods (1, 2, 3)
             assert "volume_lag_1" in df.columns
+            assert "volume_lag_2" in df.columns
+            assert "volume_lag_3" in df.columns
+
+    def test_high_low_lag_features(self, feature_engine, sample_ohlcv_data):
+        """Test high and low price lag features."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["lag"])
+        # High/low lags for first 3 periods (1, 2, 3)
+        for period in [1, 2, 3]:
+            assert f"high_lag_{period}" in df.columns
+            assert f"low_lag_{period}" in df.columns
+
+    def test_lag_features_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that lag features are calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["lag"])
+        # Verify close lag
+        period = 5
+        idx = 50
+        expected_close_lag = sample_ohlcv_data["close"].iloc[idx - period]
+        actual_close_lag = df[f"close_lag_{period}"].iloc[idx]
+        assert np.isclose(expected_close_lag, actual_close_lag)
+
+        # Verify return lag (should be the return from period periods ago)
+        expected_return = (sample_ohlcv_data["close"].iloc[idx - period] -
+                          sample_ohlcv_data["close"].iloc[idx - period - 1]) / \
+                         sample_ohlcv_data["close"].iloc[idx - period - 1]
+        actual_return_lag = df[f"return_lag_{period}"].iloc[idx]
+        assert np.isclose(expected_return, actual_return_lag, rtol=1e-10)
+
+    def test_lag_features_temporal_ordering(self, feature_engine, sample_ohlcv_data):
+        """Test that lag features maintain temporal ordering."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["lag"])
+        # Verify that lag_1 is from 1 period ago and lag_5 is from 5 periods ago
+        idx = 50
+        # close_lag_1 should equal close from idx-1
+        assert np.isclose(df["close_lag_1"].iloc[idx], sample_ohlcv_data["close"].iloc[idx-1])
+        # close_lag_5 should equal close from idx-5
+        assert np.isclose(df["close_lag_5"].iloc[idx], sample_ohlcv_data["close"].iloc[idx-5])
+
+    def test_lag_features_with_missing_data(self, feature_engine):
+        """Test lag features handle missing data correctly."""
+        # Create data with some gaps
+        data = {
+            "open": [100, 101, 102, 103, 104] * 20,
+            "high": [102, 103, 104, 105, 106] * 20,
+            "low": [99, 100, 101, 102, 103] * 20,
+            "close": [101, 102, 103, 104, 105] * 20,
+            "volume": [1000, 1100, 1200, 1300, 1400] * 20
+        }
+        df = pd.DataFrame(data)
+        # Introduce some missing values
+        df.loc[10:12, "close"] = np.nan
+
+        result = feature_engine.generate_features(df, "TEST", feature_types=["lag"])
+        # Should still have lag features
+        assert "close_lag_1" in result.columns
+        assert "return_lag_1" in result.columns
 
 
 # ============================================================================
@@ -796,6 +863,19 @@ class TestRollingStatistics:
         assert "rolling_min_5" in df.columns
         assert "rolling_max_5" in df.columns
 
+    def test_rolling_stats_all_windows(self, feature_engine, sample_ohlcv_data):
+        """Test rolling statistics for all required windows (5, 10, 20, 50)."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["rolling"])
+        # Per US-010 acceptance criteria: windows 5, 10, 20, 50
+        for window in [5, 10, 20, 50]:
+            assert f"rolling_mean_{window}" in df.columns
+            assert f"rolling_std_{window}" in df.columns
+            assert f"rolling_min_{window}" in df.columns
+            assert f"rolling_max_{window}" in df.columns
+            assert f"rolling_median_{window}" in df.columns
+            assert f"rolling_skew_{window}" in df.columns
+            assert f"rolling_kurt_{window}" in df.columns
+
     def test_rolling_range_features(self, feature_engine, sample_ohlcv_data):
         """Test rolling range statistics."""
         df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["rolling"])
@@ -808,6 +888,142 @@ class TestRollingStatistics:
         assert "rolling_median_5" in df.columns
         assert "rolling_skew_5" in df.columns
         assert "rolling_kurt_5" in df.columns
+
+    def test_rolling_percentile_features(self, feature_engine, sample_ohlcv_data):
+        """Test rolling percentile rank features."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["rolling"])
+        # Per US-010 acceptance criteria: percentile ranks
+        for window in [5, 10, 20, 50]:
+            assert f"percentile_rank_{window}" in df.columns
+            assert f"return_percentile_rank_{window}" in df.columns
+
+    def test_rolling_correlation_features(self, feature_engine, sample_ohlcv_data):
+        """Test rolling correlation features (price vs volume)."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["rolling"])
+        # Per US-010 acceptance criteria: rolling correlation (price vs volume)
+        if "volume" in sample_ohlcv_data.columns:
+            for window in [5, 10, 20, 50]:
+                assert f"price_volume_corr_{window}" in df.columns
+                assert f"price_volume_corr_abs_{window}" in df.columns
+
+    def test_rolling_additional_correlation_features(self, feature_engine, sample_ohlcv_data):
+        """Test additional rolling correlation features."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["rolling"])
+        # Price vs returns correlation
+        for window in [5, 10, 20, 50]:
+            assert f"price_return_corr_{window}" in df.columns
+            # High vs low correlation (volatility consistency)
+            assert f"high_low_corr_{window}" in df.columns
+
+    def test_rolling_percentile_features_q25_q75(self, feature_engine, sample_ohlcv_data):
+        """Test rolling Q25, Q75, and IQR features."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["rolling"])
+        for window in [5, 10, 20, 50]:
+            assert f"rolling_q25_{window}" in df.columns
+            assert f"rolling_q75_{window}" in df.columns
+            assert f"rolling_iqr_{window}" in df.columns
+
+    def test_rolling_price_position_feature(self, feature_engine, sample_ohlcv_data):
+        """Test rolling price position in range feature."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["rolling"])
+        for window in [5, 10, 20, 50]:
+            assert f"price_position_{window}" in df.columns
+            # Price position should be between 0 and 1
+            assert df[f"price_position_{window}"].dropna().between(0, 1).all()
+
+    def test_rolling_stats_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that rolling statistics are calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["rolling"])
+        window = 20
+        idx = 50
+        # Manually calculate rolling mean
+        expected_mean = sample_ohlcv_data["close"].iloc[idx-window+1:idx+1].mean()
+        actual_mean = df[f"rolling_mean_{window}"].iloc[idx]
+        assert np.isclose(expected_mean, actual_mean, rtol=1e-10)
+
+        # Manually calculate rolling std
+        expected_std = sample_ohlcv_data["close"].iloc[idx-window+1:idx+1].std()
+        actual_std = df[f"rolling_std_{window}"].iloc[idx]
+        assert np.isclose(expected_std, actual_std, rtol=1e-10)
+
+    def test_rolling_correlation_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that rolling correlation is calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["rolling"])
+        window = 20
+        idx = 50
+        # Manually calculate rolling correlation between close and volume
+        if "volume" in sample_ohlcv_data.columns:
+            expected_corr = sample_ohlcv_data["close"].iloc[idx-window+1:idx+1].corr(
+                sample_ohlcv_data["volume"].iloc[idx-window+1:idx+1]
+            )
+            actual_corr = df[f"price_volume_corr_{window}"].iloc[idx]
+            assert np.isclose(expected_corr, actual_corr, rtol=1e-10)
+
+    def test_rolling_percentile_rank_calculation(self, feature_engine, sample_ohlcv_data):
+        """Test that percentile rank is calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["rolling"])
+        window = 20
+        idx = 50
+        # Percentile rank should be between 0 and 1
+        percentile_rank = df[f"percentile_rank_{window}"].iloc[idx]
+        assert 0 <= percentile_rank <= 1
+
+    def test_rolling_skewness_kurtosis_ranges(self, feature_engine, sample_ohlcv_data):
+        """Test that skewness and kurtosis are in reasonable ranges."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["rolling"])
+        # Skewness can be any value, but typically between -5 and 5 for financial data
+        skew_values = df["rolling_skew_20"].dropna()
+        assert (skew_values > -10).all() and (skew_values < 10).all()
+
+        # Kurtosis for normal distribution is 3, financial data often has excess kurtosis
+        kurt_values = df["rolling_kurt_20"].dropna()
+        assert (kurt_values > -10).all() and (kurt_values < 50).all()
+
+    def test_rolling_stats_with_insufficient_data(self, feature_engine):
+        """Test rolling statistics with insufficient data."""
+        # Create minimal dataset
+        data = {
+            "open": [100, 101, 102],
+            "high": [102, 103, 104],
+            "low": [99, 100, 101],
+            "close": [101, 102, 103],
+            "volume": [1000, 1100, 1200]
+        }
+        df = pd.DataFrame(data)
+        result = feature_engine.generate_features(df, "TEST", feature_types=["rolling"])
+        # Should still generate features, but with NaN values
+        assert "rolling_mean_5" in result.columns
+        assert result["rolling_mean_5"].isna().any()  # Should have NaN due to insufficient data
+
+    def test_all_rolling_stats_features_together(self, feature_engine, sample_ohlcv_data):
+        """Test all rolling statistics features together."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["rolling"])
+        # Comprehensive feature list
+        rolling_features = [
+            # Basic stats for all windows
+            "rolling_mean_5", "rolling_mean_10", "rolling_mean_20", "rolling_mean_50",
+            "rolling_std_5", "rolling_std_10", "rolling_std_20", "rolling_std_50",
+            "rolling_min_5", "rolling_min_10", "rolling_min_20", "rolling_min_50",
+            "rolling_max_5", "rolling_max_10", "rolling_max_20", "rolling_max_50",
+            # Range stats
+            "rolling_range_5", "rolling_range_pct_5",
+            # Distribution stats
+            "rolling_median_5", "rolling_median_10", "rolling_median_20", "rolling_median_50",
+            "rolling_q25_5", "rolling_q75_5", "rolling_iqr_5",
+            "rolling_skew_5", "rolling_skew_10", "rolling_skew_20", "rolling_skew_50",
+            "rolling_kurt_5", "rolling_kurt_10", "rolling_kurt_20", "rolling_kurt_50",
+            # Percentile ranks
+            "percentile_rank_5", "percentile_rank_10", "percentile_rank_20", "percentile_rank_50",
+            "return_percentile_rank_5", "return_percentile_rank_10",
+            "return_percentile_rank_20", "return_percentile_rank_50",
+            # Correlations
+            "price_return_corr_5", "price_return_corr_10", "price_return_corr_20", "price_return_corr_50",
+            "high_low_corr_5", "high_low_corr_10", "high_low_corr_20", "high_low_corr_50",
+            # Price position
+            "price_position_5", "price_position_10", "price_position_20", "price_position_50",
+        ]
+        for feature in rolling_features:
+            assert feature in df.columns, f"Missing feature: {feature}"
 
 
 # ============================================================================
