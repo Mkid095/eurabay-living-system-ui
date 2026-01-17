@@ -35,7 +35,7 @@ pandas-ta==0.3.14b0
 deap==1.4.1
 
 # MT5 Integration
-MetaTrader5==5.0.45
+MetaTrader5==5.0.5488
 
 # Logging
 loguru==0.7.2

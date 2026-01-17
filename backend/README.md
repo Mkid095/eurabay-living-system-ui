@@ -7,6 +7,60 @@ FastAPI-based backend server for the EURABAY Living autonomous trading system.
 - Python 3.11 or higher
 - pip (Python package installer)
 - Git
+- MetaTrader 5 Terminal (installed and running for live trading)
+
+## MetaTrader 5 Setup
+
+### MT5 Terminal Installation
+
+The EURABAY Living System requires MetaTrader 5 to be installed for live trading operations.
+
+1. Download MT5 from: https://www.metatrader5.com/en/download
+2. Install MT5 Terminal
+3. Open MT5 and login to your trading account
+4. Enable "Algo Trading" in MT5:
+   - Go to Tools -> Options -> Expert Advisors
+   - Check "Allow automated trading"
+   - Check "Allow DLL imports"
+   - Click OK
+
+### MT5 Connection Configuration
+
+The system connects to MT5 through the MetaTrader5 Python library. The terminal must be:
+- **Running**: The MT5 terminal application must be open
+- **Logged In**: You must be logged into your trading account
+- **Algo Trading Enabled**: Automated trading must be allowed
+
+Common MT5 installation paths:
+- Windows: `C:\Program Files\MetaTrader 5 Terminal\terminal64.exe`
+- Windows (x86): `C:\Program Files (x86)\MetaTrader 5\terminal64.exe`
+
+### MT5 Account Configuration
+
+Configure your MT5 credentials in the `.env` file:
+
+```env
+# MetaTrader 5 Configuration
+MT5_LOGIN=your_account_number
+MT5_PASSWORD=your_account_password
+MT5_SERVER=your_broker_server
+```
+
+**Note**: The MT5 terminal must be running for the system to connect. The system cannot start MT5 automatically.
+
+### Verifying MT5 Installation
+
+Run the MT5 installation verification script:
+
+```bash
+cd backend
+python tests/test_mt5_installation.py
+```
+
+This script checks:
+- MetaTrader5 Python library is installed
+- MT5 terminal is installed in a known location
+- MT5.initialize() can connect to the terminal
 
 ## Installation
 
