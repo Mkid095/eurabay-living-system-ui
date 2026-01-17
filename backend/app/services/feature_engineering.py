@@ -101,7 +101,7 @@ class FeatureEngineering:
     - Price-based: Returns, log returns, price changes, price relative to MA, price momentum (ROC)
     - Volatility: ATR, standard deviation, Parkinson estimator, Garman-Klass estimator,
                   historical volatility, volatility z-score, volatility regime classification
-    - Momentum: RSI, MACD, Stochastic oscillator
+    - Momentum: RSI, MACD, Stochastic oscillator, Williams %R, Money Flow Index (MFI)
     - Trend: SMA, EMA, ADX
     - Lag features: Multiple period lags
     - Rolling statistics: Mean, std, min, max
@@ -155,6 +155,9 @@ class FeatureEngineering:
             "rsi": self._add_rsi,
             "macd": self._add_macd,
             "stochastic": self._add_stochastic,
+            "williams_r": self._add_williams_r,
+            "mfi": self._add_mfi,
+            "divergence": self._add_divergence_detection,
 
             # Trend features
             "sma": self._add_sma,
@@ -698,6 +701,160 @@ class FeatureEngineering:
         # Stochastic-based features
         df["stoch_overbought"] = (df["stoch_k"] > 80).astype(int)
         df["stoch_oversold"] = (df["stoch_k"] < 20).astype(int)
+
+        return df
+
+    def _add_williams_r(self, df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
+        """
+        Add Williams %R indicator.
+
+        Williams %R is a momentum indicator that measures overbought/oversold levels.
+        It is similar to Stochastic oscillator but uses a different scale.
+        Formula: -100 * (high_max - close) / (high_max - low_min)
+
+        Range: -100 to 0 (some implementations invert to 0-100)
+        Interpretation:
+        - Above -20: Overbought
+        - Below -80: Oversold
+        """
+        # Calculate highest high and lowest low over the period
+        high_max = df["high"].rolling(window=period).max()
+        low_min = df["low"].rolling(window=period).min()
+
+        # Williams %R formula (returns -100 to 0)
+        df["williams_r"] = -100 * (high_max - df["close"]) / (high_max - low_min)
+
+        # Williams %R for multiple periods
+        for p in [7, 14, 21]:
+            if p != period:
+                high_max_p = df["high"].rolling(window=p).max()
+                low_min_p = df["low"].rolling(window=p).min()
+                df[f"williams_r_{p}"] = -100 * (high_max_p - df["close"]) / (high_max_p - low_min_p)
+
+        # Williams %R-based features
+        df["williams_r_overbought"] = (df["williams_r"] > -20).astype(int)
+        df["williams_r_oversold"] = (df["williams_r"] < -80).astype(int)
+
+        return df
+
+    def _add_mfi(self, df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
+        """
+        Add Money Flow Index (MFI).
+
+        MFI is a momentum indicator that incorporates both price and volume data.
+        It is similar to RSI but uses money flow instead of just price.
+        Formula: 100 - (100 / (1 + money_ratio))
+
+        Range: 0 to 100
+        Interpretation:
+        - Above 80: Overbought
+        - Below 20: Oversold
+
+        Money Flow = Typical Price * Volume
+        Typical Price = (High + Low + Close) / 3
+        """
+        if "volume" not in df.columns:
+            logger.warning("Volume column not found, skipping MFI calculation")
+            return df
+
+        # Calculate typical price
+        typical_price = (df["high"] + df["low"] + df["close"]) / 3
+
+        # Calculate money flow
+        money_flow = typical_price * df["volume"]
+
+        # Calculate positive and negative money flow
+        positive_flow = money_flow.where(typical_price > typical_price.shift(1), 0)
+        negative_flow = money_flow.where(typical_price < typical_price.shift(1), 0)
+
+        # Calculate rolling sums
+        positive_mf = positive_flow.rolling(window=period).sum()
+        negative_mf = negative_flow.rolling(window=period).sum()
+
+        # Calculate money ratio and MFI
+        money_ratio = positive_mf / negative_mf
+        df["mfi"] = 100 - (100 / (1 + money_ratio))
+
+        # MFI for multiple periods
+        for p in [7, 14, 21]:
+            if p != period:
+                positive_mf_p = positive_flow.rolling(window=p).sum()
+                negative_mf_p = negative_flow.rolling(window=p).sum()
+                money_ratio_p = positive_mf_p / negative_mf_p
+                df[f"mfi_{p}"] = 100 - (100 / (1 + money_ratio_p))
+
+        # MFI-based features
+        df["mfi_overbought"] = (df["mfi"] > 80).astype(int)
+        df["mfi_oversold"] = (df["mfi"] < 20).astype(int)
+
+        return df
+
+    def _add_divergence_detection(self, df: pd.DataFrame, indicator: str = "rsi", period: int = 14) -> pd.DataFrame:
+        """
+        Add indicator divergence detection (price vs indicator).
+
+        Divergence occurs when the price of an asset is moving in the opposite direction
+        of a technical indicator, such as an oscillator. This can signal potential trend reversals.
+
+        Types of divergence:
+        - Bullish divergence: Price makes lower low, indicator makes higher low
+        - Bearish divergence: Price makes higher high, indicator makes lower high
+
+        This implementation uses a simplified approach based on trend direction comparison.
+
+        Args:
+            df: Input DataFrame
+            indicator: Name of the indicator column to check for divergence
+            period: Lookback period for detecting divergence
+
+        Returns:
+            DataFrame with divergence flags added
+        """
+        # Ensure indicator exists
+        if indicator not in df.columns:
+            logger.warning(f"Indicator {indicator} not found in DataFrame, skipping divergence detection")
+            return df
+
+        # Initialize divergence columns
+        df[f"{indicator}_bullish_divergence"] = 0
+        df[f"{indicator}_bearish_divergence"] = 0
+
+        # Calculate price momentum (direction) over the period
+        price_change = df["close"].diff(period)
+
+        # Calculate indicator momentum (direction) over the period
+        indicator_change = df[indicator].diff(period)
+
+        # Detect divergence based on opposite trends
+        # Bullish divergence: price down, indicator up
+        bullish_div = (price_change < 0) & (indicator_change > 0)
+        df.loc[bullish_div, f"{indicator}_bullish_divergence"] = 1
+
+        # Bearish divergence: price up, indicator down
+        bearish_div = (price_change > 0) & (indicator_change < 0)
+        df.loc[bearish_div, f"{indicator}_bearish_divergence"] = 1
+
+        # Additional: Compare recent highs/lows for more robust divergence detection
+        # Using a shorter window for recent pivots
+        short_window = period // 2
+
+        # Recent price highs/lows
+        recent_price_high = df["high"].rolling(window=short_window).max()
+        recent_price_low = df["low"].rolling(window=short_window).min()
+
+        # Recent indicator highs/lows
+        recent_indicator_high = df[indicator].rolling(window=short_window).max()
+        recent_indicator_low = df[indicator].rolling(window=short_window).min()
+
+        # Price making higher high but indicator not (bearish)
+        price_higher_high = (df["high"] == recent_price_high) & (df["high"].shift(period) < recent_price_high.shift(period))
+        indicator_not_higher_high = df[indicator] < recent_indicator_high.shift(period)
+        df.loc[price_higher_high & indicator_not_higher_high, f"{indicator}_bearish_divergence"] = 1
+
+        # Price making lower low but indicator not (bullish)
+        price_lower_low = (df["low"] == recent_price_low) & (df["low"].shift(period) > recent_price_low.shift(period))
+        indicator_not_lower_low = df[indicator] > recent_indicator_low.shift(period)
+        df.loc[price_lower_low & indicator_not_lower_low, f"{indicator}_bullish_divergence"] = 1
 
         return df
 

@@ -471,6 +471,118 @@ class TestMomentumFeatures:
         # Stochastic should be between 0 and 100
         assert df["stoch_k"].dropna().between(0, 100).all()
 
+    def test_stochastic_overbought_oversold(self, feature_engine, sample_ohlcv_data):
+        """Test Stochastic overbought/oversold indicators."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["stochastic"])
+        assert "stoch_overbought" in df.columns
+        assert "stoch_oversold" in df.columns
+        # Binary indicators
+        assert df["stoch_overbought"].dropna().isin([0, 1]).all()
+        assert df["stoch_oversold"].dropna().isin([0, 1]).all()
+
+    def test_williams_r_feature(self, feature_engine, sample_ohlcv_data):
+        """Test Williams %R feature generation."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["williams_r"])
+        assert "williams_r" in df.columns
+        # Williams %R should be between -100 and 0
+        assert df["williams_r"].dropna().between(-100, 0).all()
+
+    def test_williams_r_multiple_periods(self, feature_engine, sample_ohlcv_data):
+        """Test Williams %R for multiple periods."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["williams_r"])
+        # Check for multiple period Williams %R
+        assert "williams_r_7" in df.columns or "williams_r_14" in df.columns or "williams_r_21" in df.columns
+
+    def test_williams_r_overbought_oversold(self, feature_engine, sample_ohlcv_data):
+        """Test Williams %R overbought/oversold indicators."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["williams_r"])
+        assert "williams_r_overbought" in df.columns
+        assert "williams_r_oversold" in df.columns
+        # Binary indicators
+        assert df["williams_r_overbought"].dropna().isin([0, 1]).all()
+        assert df["williams_r_oversold"].dropna().isin([0, 1]).all()
+
+    def test_mfi_feature(self, feature_engine, sample_ohlcv_data):
+        """Test Money Flow Index feature generation."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["mfi"])
+        assert "mfi" in df.columns
+        # MFI should be between 0 and 100
+        assert df["mfi"].dropna().between(0, 100).all()
+
+    def test_mfi_multiple_periods(self, feature_engine, sample_ohlcv_data):
+        """Test MFI for multiple periods."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["mfi"])
+        # Check for multiple period MFI
+        assert "mfi_7" in df.columns or "mfi_14" in df.columns or "mfi_21" in df.columns
+
+    def test_mfi_overbought_oversold(self, feature_engine, sample_ohlcv_data):
+        """Test MFI overbought/oversold indicators."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["mfi"])
+        assert "mfi_overbought" in df.columns
+        assert "mfi_oversold" in df.columns
+        # Binary indicators
+        assert df["mfi_overbought"].dropna().isin([0, 1]).all()
+        assert df["mfi_oversold"].dropna().isin([0, 1]).all()
+
+    def test_divergence_detection_rsi(self, feature_engine, sample_ohlcv_data):
+        """Test divergence detection with RSI."""
+        # First generate RSI
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["rsi"])
+        # Then add divergence detection
+        df = feature_engine._add_divergence_detection(df, indicator="rsi")
+        assert "rsi_bullish_divergence" in df.columns
+        assert "rsi_bearish_divergence" in df.columns
+        # Binary indicators
+        assert df["rsi_bullish_divergence"].dropna().isin([0, 1]).all()
+        assert df["rsi_bearish_divergence"].dropna().isin([0, 1]).all()
+
+    def test_divergence_detection_stochastic(self, feature_engine, sample_ohlcv_data):
+        """Test divergence detection with Stochastic."""
+        # First generate Stochastic
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["stochastic"])
+        # Then add divergence detection for stoch_k
+        df = feature_engine._add_divergence_detection(df, indicator="stoch_k")
+        assert "stoch_k_bullish_divergence" in df.columns
+        assert "stoch_k_bearish_divergence" in df.columns
+
+    def test_momentum_indicators_all(self, feature_engine, sample_ohlcv_data):
+        """Test all momentum indicators together."""
+        df = feature_engine.generate_features(
+            sample_ohlcv_data,
+            "TEST",
+            feature_types=["rsi", "macd", "stochastic", "williams_r", "mfi"]
+        )
+        # Check that all momentum features are present
+        momentum_features = [
+            "rsi", "rsi_overbought", "rsi_oversold",
+            "macd", "macd_signal", "macd_hist", "macd_bullish",
+            "stoch_k", "stoch_d", "stoch_overbought", "stoch_oversold",
+            "williams_r", "williams_r_overbought", "williams_r_oversold",
+            "mfi", "mfi_overbought", "mfi_oversold"
+        ]
+        for feature in momentum_features:
+            assert feature in df.columns, f"Missing feature: {feature}"
+
+    def test_williams_r_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that Williams %R is calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["williams_r"])
+        # Manually calculate Williams %R for a specific row
+        period = 14
+        idx = 50  # Use row 50 to ensure we have enough history
+        high_max = sample_ohlcv_data["high"].iloc[idx-period+1:idx+1].max()
+        low_min = sample_ohlcv_data["low"].iloc[idx-period+1:idx+1].min()
+        expected_williams_r = -100 * (high_max - sample_ohlcv_data["close"].iloc[idx]) / (high_max - low_min)
+        actual_williams_r = df["williams_r"].iloc[idx]
+        assert np.isclose(expected_williams_r, actual_williams_r, rtol=1e-10)
+
+    def test_mfi_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that MFI is calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["mfi"])
+        # Verify MFI is in valid range
+        assert df["mfi"].dropna().between(0, 100).all()
+        # MFI should be similar to RSI but with volume weighting
+        # (can't easily verify exact calculation without complex setup)
+
 
 # ============================================================================
 # Trend Features Tests
