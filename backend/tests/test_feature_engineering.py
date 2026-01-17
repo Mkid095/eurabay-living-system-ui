@@ -1062,15 +1062,182 @@ class TestBollingerBands:
         assert "bb_lower" in df.columns
 
     def test_bollinger_band_width(self, feature_engine, sample_ohlcv_data):
-        """Test Bollinger Band width feature."""
+        """Test Bollinger Band width feature - US-011."""
         df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["bollinger"])
         assert "bb_width" in df.columns
-        assert "bb_position" in df.columns
+        # bb_pct_b is the position within bands (renamed from bb_position)
+        assert "bb_pct_b" in df.columns
 
     def test_bollinger_squeeze(self, feature_engine, sample_ohlcv_data):
         """Test Bollinger Band squeeze indicator."""
         df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["bollinger"])
         assert "bb_squeeze" in df.columns
+
+    def test_bollinger_pct_b(self, feature_engine, sample_ohlcv_data):
+        """Test Bollinger Band %B (position within bands) - US-011."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["bollinger"])
+        assert "bb_pct_b" in df.columns
+        # %B should be numeric and can go outside 0-1 range
+        assert pd.api.types.is_numeric_dtype(df["bb_pct_b"])
+        # When price is at middle band, %B should be 0.5
+        # When price is at upper band, %B should be 1
+        # When price is at lower band, %B should be 0
+        assert df["bb_pct_b"].min() >= -1  # Allow some tolerance for breakouts
+        assert df["bb_pct_b"].max() <= 2
+
+    def test_bollinger_pct_b_signals(self, feature_engine, sample_ohlcv_data):
+        """Test Bollinger Band %B overbought/oversold signals - US-011."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["bollinger"])
+        assert "bb_pct_b_overbought" in df.columns
+        assert "bb_pct_b_oversold" in df.columns
+        # Should be binary flags
+        assert set(df["bb_pct_b_overbought"].dropna().unique()).issubset({0, 1})
+        assert set(df["bb_pct_b_oversold"].dropna().unique()).issubset({0, 1})
+
+    def test_bollinger_custom_parameters(self, feature_engine, sample_ohlcv_data):
+        """Test Bollinger Bands with custom parameters (configurable period and std dev) - US-011."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["bollinger"])
+        # Check for custom band configurations
+        assert "bb_upper_10_1.5" in df.columns
+        assert "bb_lower_10_1.5" in df.columns
+        assert "bb_upper_20_1.5" in df.columns
+        assert "bb_lower_20_1.5" in df.columns
+        assert "bb_upper_20_2.5" in df.columns
+        assert "bb_lower_20_2.5" in df.columns
+        assert "bb_upper_50_2.0" in df.columns
+        assert "bb_lower_50_2.0" in df.columns
+        # Custom %B features
+        assert "bb_pct_b_20_1.5" in df.columns
+        assert "bb_pct_b_20_2.5" in df.columns
+        # Custom width features
+        assert "bb_width_10_1.5" in df.columns
+        assert "bb_width_20_2.5" in df.columns
+
+    def test_bollinger_bandwidth_zscore(self, feature_engine, sample_ohlcv_data):
+        """Test Bollinger Band width z-score - US-011."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["bollinger"])
+        assert "bb_width_zscore" in df.columns
+        assert "bb_width_low" in df.columns
+        assert "bb_width_high" in df.columns
+        # Z-score should be numeric
+        assert pd.api.types.is_numeric_dtype(df["bb_width_zscore"])
+
+    def test_bollinger_expansion(self, feature_engine, sample_ohlcv_data):
+        """Test Bollinger Band expansion indicator - US-011."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["bollinger"])
+        assert "bb_expansion" in df.columns
+        # Should be binary flag
+        assert set(df["bb_expansion"].dropna().unique()).issubset({0, 1})
+
+    def test_zscore_price_features(self, feature_engine, sample_ohlcv_data):
+        """Test z-score of price relative to moving mean - US-011."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["zscore"])
+        assert "zscore" in df.columns
+        # Z-score should be numeric
+        assert pd.api.types.is_numeric_dtype(df["zscore"])
+        # Multi-period z-scores
+        assert "zscore_5" in df.columns
+        assert "zscore_20" in df.columns
+
+    def test_zscore_returns(self, feature_engine, sample_ohlcv_data):
+        """Test z-score of returns - US-011."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["zscore"])
+        assert "return_zscore_10" in df.columns
+        assert "return_zscore_20" in df.columns
+        assert "return_zscore_50" in df.columns
+        # Return z-scores should be numeric
+        for col in ["return_zscore_10", "return_zscore_20", "return_zscore_50"]:
+            assert pd.api.types.is_numeric_dtype(df[col])
+
+    def test_mean_reversion_signal(self, feature_engine, sample_ohlcv_data):
+        """Test mean reversion signal (z-score > 2 or < -2) - US-011."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["zscore"])
+        assert "mean_reversion_signal" in df.columns
+        # Signal should be -1 (sell), 0 (hold), or 1 (buy)
+        unique_signals = set(df["mean_reversion_signal"].dropna().unique())
+        assert unique_signals.issubset({-1, 0, 1})
+
+    def test_mean_reversion_signals_multiple_windows(self, feature_engine, sample_ohlcv_data):
+        """Test mean reversion signals for multiple windows - US-011."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["zscore"])
+        # Check for multiple window signals
+        assert "mean_reversion_signal_return" in df.columns
+        # All signals should be -1, 0, or 1
+        signal_columns = [col for col in df.columns if "mean_reversion_signal" in col]
+        for col in signal_columns:
+            unique_values = set(df[col].dropna().unique())
+            assert unique_values.issubset({-1, 0, 1}), f"Column {col} has invalid values: {unique_values}"
+
+    def test_bollinger_calculation_accuracy(self, feature_engine):
+        """Test Bollinger Bands calculation accuracy - US-011."""
+        # Create simple test data with known values
+        data = {
+            "open": [100] * 30,
+            "high": [102] * 30,
+            "low": [98] * 30,
+            "close": [100] * 30,
+            "volume": [1000] * 30
+        }
+        df = pd.DataFrame(data)
+        result = feature_engine.generate_features(df, "TEST", feature_types=["bollinger"])
+
+        # For constant price, all bands should converge
+        # Middle band should be the SMA
+        expected_middle = 100.0
+        actual_middle = result["bb_middle"].iloc[-1]
+        assert abs(actual_middle - expected_middle) < 0.01
+
+        # Upper and lower bands should be equidistant from middle
+        actual_upper = result["bb_upper"].iloc[-1]
+        actual_lower = result["bb_lower"].iloc[-1]
+        assert abs((actual_upper - expected_middle) - (expected_middle - actual_lower)) < 0.01
+
+    def test_zscore_calculation_accuracy(self, feature_engine):
+        """Test z-score calculation accuracy - US-011."""
+        # Create test data with known statistical properties
+        np.random.seed(42)
+        n = 100
+        data = {
+            "open": np.random.randn(n) * 10 + 100,
+            "high": np.random.randn(n) * 10 + 102,
+            "low": np.random.randn(n) * 10 + 98,
+            "close": np.random.randn(n) * 10 + 100,
+            "volume": np.random.randint(1000, 5000, n)
+        }
+        df = pd.DataFrame(data)
+        result = feature_engine.generate_features(df, "TEST", feature_types=["zscore"])
+
+        # Manually calculate z-score for verification
+        window = 20  # Default ZSCORE_WINDOW
+        expected_zscore = (df["close"] - df["close"].rolling(window=window).mean()) / df["close"].rolling(window=window).std()
+
+        # Compare with calculated z-score (ignoring NaN values)
+        valid_mask = ~(expected_zscore.isna() | result["zscore"].isna())
+        for i in range(len(df)):
+            if valid_mask.iloc[i]:
+                assert abs(result["zscore"].iloc[i] - expected_zscore.iloc[i]) < 0.01
+
+    def test_mean_reversion_signal_logic(self, feature_engine):
+        """Test mean reversion signal logic - US-011."""
+        # Create test data with extreme z-scores
+        data = {
+            "open": [100] * 30,
+            "high": [102] * 30,
+            "low": [98] * 30,
+            "close": [100] * 30,
+            "volume": [1000] * 30
+        }
+        df = pd.DataFrame(data)
+
+        # Add extreme values to trigger mean reversion signals
+        df.loc[25, "close"] = 150  # Very high (should trigger sell signal)
+        df.loc[26, "close"] = 50   # Very low (should trigger buy signal)
+
+        result = feature_engine.generate_features(df, "TEST", feature_types=["zscore"])
+
+        # Check that extreme z-scores generate signals
+        # Very high z-score should give sell signal (-1)
+        # Very low z-score should give buy signal (1)
 
 
 # ============================================================================

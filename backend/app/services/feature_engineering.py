@@ -1466,9 +1466,19 @@ class FeatureEngineering:
     # ========================================================================
 
     def _add_zscore(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add Z-score (standardization) features."""
-        window = self.config.ZSCORE_WINDOW
+        """
+        Add Z-score (standardization) features.
 
+        Z-score measures how many standard deviations a value is from the mean.
+        Formula: (value - mean) / std
+
+        Per US-011 acceptance criteria:
+        - z-score of price relative to moving mean
+        - z-score of returns
+        - mean reversion signal (z-score > 2 or < -2)
+        """
+        # Z-score of price relative to moving mean
+        window = self.config.ZSCORE_WINDOW
         rolling_mean = df["close"].rolling(window=window).mean()
         rolling_std = df["close"].rolling(window=window).std()
 
@@ -1478,11 +1488,46 @@ class FeatureEngineering:
         df["zscore_extreme_high"] = (df["zscore"] > 2).astype(int)
         df["zscore_extreme_low"] = (df["zscore"] < -2).astype(int)
 
-        # Multi-period Z-scores
+        # Multi-period Z-scores for price
         for w in [self.config.SHORT_WINDOW, self.config.LONG_WINDOW]:
             mean_w = df["close"].rolling(window=w).mean()
             std_w = df["close"].rolling(window=w).std()
             df[f"zscore_{w}"] = (df["close"] - mean_w) / std_w
+
+        # Z-score of returns (US-011)
+        # Calculate returns if not already present
+        if "return_1" not in df.columns:
+            df["return_1"] = df["close"].pct_change()
+
+        for w in [10, 20, 50]:
+            return_mean = df["return_1"].rolling(window=w).mean()
+            return_std = df["return_1"].rolling(window=w).std()
+            df[f"return_zscore_{w}"] = (df["return_1"] - return_mean) / return_std
+
+        # Mean reversion signal (US-011)
+        # z-score > 2 or < -2 indicates potential mean reversion opportunity
+        df["mean_reversion_signal"] = np.where(
+            df["zscore"] > 2,
+            -1,  # Price is too high, expect to revert down (sell signal)
+            np.where(df["zscore"] < -2, 1, 0)  # Price is too low, expect to revert up (buy signal)
+        )
+
+        # Additional mean reversion signals based on different windows
+        for w in [10, 20, 50]:
+            if f"zscore_{w}" in df.columns:
+                df[f"mean_reversion_signal_{w}"] = np.where(
+                    df[f"zscore_{w}"] > 2,
+                    -1,
+                    np.where(df[f"zscore_{w}"] < -2, 1, 0)
+                )
+
+        # Mean reversion signal based on return z-scores
+        if "return_zscore_20" in df.columns:
+            df["mean_reversion_signal_return"] = np.where(
+                df["return_zscore_20"] > 2,
+                -1,  # Returns are too high, expect to revert
+                np.where(df["return_zscore_20"] < -2, 1, 0)
+            )
 
         return df
 
@@ -1491,7 +1536,21 @@ class FeatureEngineering:
     # ========================================================================
 
     def _add_bollinger_bands(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add Bollinger Bands features."""
+        """
+        Add Bollinger Bands features.
+
+        Bollinger Bands are a volatility indicator that creates a dynamic
+        trading band around price. They consist of:
+        - Middle band: Simple Moving Average (SMA)
+        - Upper band: SMA + (N * standard deviation)
+        - Lower band: SMA - (N * standard deviation)
+
+        Per US-011 acceptance criteria:
+        - Bollinger Bands (20-period, 2 standard deviations)
+        - Bollinger Band width (volatility measure)
+        - Bollinger Band %B (position within bands)
+        - Custom band parameters (configurable period and std dev)
+        """
         period = self.config.BB_PERIOD
         num_std = self.config.BB_STD
 
@@ -1503,16 +1562,81 @@ class FeatureEngineering:
         df["bb_middle"] = sma
         df["bb_lower"] = sma - (num_std * std)
 
-        # Bollinger Band features
+        # Bollinger Band width (volatility measure) - US-011
+        # Width represents the distance between upper and lower bands
+        # Normalized by the middle band for comparability across price levels
         df["bb_width"] = (df["bb_upper"] - df["bb_lower"]) / df["bb_middle"]
-        df["bb_position"] = (df["close"] - df["bb_lower"]) / (df["bb_upper"] - df["bb_lower"])
+
+        # Bollinger Band %B (position within bands) - US-011
+        # %B shows where price is relative to the bands
+        # Formula: (price - lower) / (upper - lower)
+        # Range: 0-1 (0 at lower band, 0.5 at middle, 1 at upper band)
+        # Can go outside 0-1 when price breaks through bands
+        df["bb_pct_b"] = (df["close"] - df["bb_lower"]) / (df["bb_upper"] - df["bb_lower"])
+
+        # Interpret %B values:
+        # > 1: Price above upper band (overbought)
+        # < 0: Price below lower band (oversold)
+        # 0.5: Price at middle band
+        df["bb_pct_b_overbought"] = (df["bb_pct_b"] > 1).astype(int)
+        df["bb_pct_b_oversold"] = (df["bb_pct_b"] < 0).astype(int)
 
         # Bollinger Band squeeze/narrow bands (potential breakout indicator)
         df["bb_squeeze"] = (df["bb_width"] < df["bb_width"].rolling(window=50).mean()).astype(int)
 
+        # Bollinger Band expansion (volatility is increasing)
+        df["bb_expansion"] = (df["bb_width"] > df["bb_width"].rolling(window=50).mean()).astype(int)
+
         # Price relative to bands
         df["price_above_bb_upper"] = (df["close"] > df["bb_upper"]).astype(int)
         df["price_below_bb_lower"] = (df["close"] < df["bb_lower"]).astype(int)
+
+        # Custom band parameters (US-011)
+        # Add Bollinger Bands with multiple period and std dev combinations
+        custom_configs = [
+            {"period": 10, "std": 1.5, "suffix": "_10_1.5"},
+            {"period": 20, "std": 2.0, "suffix": ""},  # Default
+            {"period": 20, "std": 1.5, "suffix": "_20_1.5"},
+            {"period": 20, "std": 2.5, "suffix": "_20_2.5"},
+            {"period": 50, "std": 2.0, "suffix": "_50_2.0"},
+        ]
+
+        for config in custom_configs:
+            p = config["period"]
+            s = config["std"]
+            suffix = config["suffix"]
+
+            if suffix == "":  # Skip default as it's already calculated
+                continue
+
+            # Calculate custom bands
+            sma_custom = df["close"].rolling(window=p).mean()
+            std_custom = df["close"].rolling(window=p).std()
+
+            df[f"bb_upper{suffix}"] = sma_custom + (s * std_custom)
+            df[f"bb_middle{suffix}"] = sma_custom
+            df[f"bb_lower{suffix}"] = sma_custom - (s * std_custom)
+
+            # Custom band width
+            df[f"bb_width{suffix}"] = (
+                (df[f"bb_upper{suffix}"] - df[f"bb_lower{suffix}"]) /
+                df[f"bb_middle{suffix}"]
+            )
+
+            # Custom %B
+            df[f"bb_pct_b{suffix}"] = (
+                (df["close"] - df[f"bb_lower{suffix}"]) /
+                (df[f"bb_upper{suffix}"] - df[f"bb_lower{suffix}"])
+            )
+
+        # Bandwidth z-score (is current bandwidth unusual?)
+        bb_width_mean = df["bb_width"].rolling(window=50).mean()
+        bb_width_std = df["bb_width"].rolling(window=50).std()
+        df["bb_width_zscore"] = (df["bb_width"] - bb_width_mean) / bb_width_std
+
+        # Detect extreme bandwidth conditions
+        df["bb_width_low"] = (df["bb_width_zscore"] < -1).astype(int)  # Very narrow (squeeze)
+        df["bb_width_high"] = (df["bb_width_zscore"] > 1).astype(int)  # Very wide (high volatility)
 
         return df
 

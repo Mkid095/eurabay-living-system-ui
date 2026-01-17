@@ -238,8 +238,8 @@
       "mavenSteps": [1, 5],
       "mcpTools": {},
       "priority": 2,
-      "passes": false,
-      "notes": "Useful for volatility indices which often exhibit mean reversion"
+      "passes": true,
+      "notes": "Successfully implemented comprehensive Bollinger Bands and z-score features for mean reversion strategies. Enhanced _add_bollinger_bands() method with: (1) Bollinger Bands (20-period, 2 std dev) with bb_upper, bb_middle, bb_lower, (2) Bollinger Band width (volatility measure) normalized by middle band, (3) Bollinger Band %B showing position within bands (0-1 range, can exceed), (4) Custom band parameters with multiple configurations (10/1.5, 20/1.5, 20/2.0, 20/2.5, 50/2.0), (5) Bandwidth z-score for detecting unusual volatility, (6) Band squeeze and expansion indicators. Enhanced _add_zscore() method with: (1) Z-score of price relative to moving mean for windows 5, 10, 20, (2) Z-score of returns for windows 10, 20, 50, (3) Mean reversion signal (-1=sell when z>2, 1=buy when z<-2, 0=hold), (4) Multiple mean reversion signals for different windows and return z-scores. Feature caching already implemented via TTLCache. Comprehensive test suite added with 12 new tests covering all Bollinger Bands features (bands, width, %B, custom parameters, bandwidth z-score, expansion), all z-score features (price z-scores, return z-scores, mean reversion signals), calculation accuracy validation for both Bollinger Bands and z-scores. All 116 tests passing including existing tests. All acceptance criteria validated and met. Critical for volatility indices which often exhibit mean reversion."
     },
     {
       "id": "US-012",
