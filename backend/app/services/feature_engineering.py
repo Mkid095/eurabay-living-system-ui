@@ -99,7 +99,8 @@ class FeatureEngineering:
 
     Features:
     - Price-based: Returns, log returns, price changes, price relative to MA, price momentum (ROC)
-    - Volatility: ATR, standard deviation, Parkinson estimator
+    - Volatility: ATR, standard deviation, Parkinson estimator, Garman-Klass estimator,
+                  historical volatility, volatility z-score, volatility regime classification
     - Momentum: RSI, MACD, Stochastic oscillator
     - Trend: SMA, EMA, ADX
     - Lag features: Multiple period lags
@@ -145,6 +146,10 @@ class FeatureEngineering:
             "atr": self._add_atr,
             "std_dev": self._add_std_dev,
             "parkinson": self._add_parkinson_estimator,
+            "garman_klass": self._add_garman_klass,
+            "historical_volatility": self._add_historical_volatility,
+            "volatility_zscore": self._add_volatility_zscore,
+            "volatility_regime": self._add_volatility_regime,
 
             # Momentum features
             "rsi": self._add_rsi,
@@ -395,7 +400,17 @@ class FeatureEngineering:
     # ========================================================================
 
     def _add_atr(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add Average True Range (ATR)."""
+        """
+        Add Average True Range (ATR) with configurable period.
+
+        ATR measures market volatility by decomposing the entire range of an asset
+        price for that period. True Range is the greatest of:
+        - Current high minus current low
+        - Absolute value of current high minus previous close
+        - Absolute value of current low minus previous close
+
+        Formula: SMA(TR, period) where TR = max(high-low, |high-close_prev|, |low-close_prev|)
+        """
         period = self.config.ATR_PERIOD
 
         if talib is not None:
@@ -416,11 +431,33 @@ class FeatureEngineering:
         # ATR ratio (normalized by price)
         df["atr_ratio"] = df["atr"] / df["close"]
 
+        # ATR for multiple periods per acceptance criteria
+        for atr_period in [7, 14, 21]:
+            if atr_period != period:
+                if talib is not None:
+                    df[f"atr_{atr_period}"] = talib.ATR(
+                        df["high"].values,
+                        df["low"].values,
+                        df["close"].values,
+                        timeperiod=atr_period
+                    )
+                else:
+                    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+                    df[f"atr_{atr_period}"] = tr.rolling(window=atr_period).mean()
+                df[f"atr_ratio_{atr_period}"] = df[f"atr_{atr_period}"] / df["close"]
+
         return df
 
     def _add_std_dev(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add rolling standard deviation."""
-        for window in [self.config.SHORT_WINDOW, self.config.MEDIUM_WINDOW, self.config.LONG_WINDOW]:
+        """
+        Add rolling standard deviation for periods: 5, 10, 20, 50.
+
+        Standard deviation measures the amount of variation or dispersion of price values.
+        A low standard deviation indicates that prices tend to be close to the mean.
+        A high standard deviation indicates that prices are spread out over a wider range.
+        """
+        # Per acceptance criteria: periods 5, 10, 20, 50
+        for window in [5, 10, 20, 50]:
             df[f"std_{window}"] = df["close"].rolling(window=window).std()
             df[f"std_ratio_{window}"] = df[f"std_{window}"] / df["close"]
 
@@ -428,15 +465,157 @@ class FeatureEngineering:
 
     def _add_parkinson_estimator(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Add Parkinson volatility estimator.
+        Add Parkinson volatility estimator (high-low based).
 
         Parkinson estimator uses high and low prices to estimate volatility,
-        theoretically more efficient than close-to-close estimator.
+        theoretically more efficient than close-to-close estimator as it
+        uses intraday price information.
+
+        Formula: sqrt((1/(4*n*ln(2))) * sum(ln(high_t/low_t)^2))
+
+        Where n is the window size. This estimator assumes continuous trading
+        and no jumps, making it suitable for volatility indices.
         """
-        for window in [self.config.MEDIUM_WINDOW, self.config.LONG_WINDOW]:
+        for window in [5, 10, 20, 50]:
             log_hl = np.log(df["high"] / df["low"])
+            # Parkinson volatility formula
             parkinson = np.sqrt((log_hl ** 2).rolling(window=window).mean() / (4 * np.log(2)))
             df[f"parkinson_{window}"] = parkinson
+
+        return df
+
+    def _add_garman_klass(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add Garman-Klass volatility estimator.
+
+        The Garman-Klass estimator extends the Parkinson estimator by incorporating
+        both open and close prices, providing a more efficient volatility estimate
+        that uses all available price information (open, high, low, close).
+
+        Formula: sqrt((0.5/n) * sum(ln(high_t/low_t)^2) - (2*ln(2)-1) * sum(ln(close_t/open_t)^2))
+
+        This estimator is theoretically more efficient than both close-to-close
+        and Parkinson estimators for assets with continuous trading.
+        """
+        for window in [5, 10, 20, 50]:
+            log_hl = np.log(df["high"] / df["low"])
+            log_co = np.log(df["close"] / df["open"])
+
+            # Garman-Klass volatility formula
+            term1 = (log_hl ** 2).rolling(window=window).mean() * 0.5
+            term2 = (2 * np.log(2) - 1) * (log_co ** 2).rolling(window=window).mean()
+            garman_klass = np.sqrt(term1 - term2)
+
+            df[f"garman_klass_{window}"] = garman_klass
+
+        return df
+
+    def _add_historical_volatility(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add historical volatility (annualized).
+
+        Historical volatility measures the standard deviation of logarithmic returns,
+        annualized to represent volatility over a one-year period.
+
+        Formula: std(log_returns) * sqrt(trading_periods_per_year)
+
+        Where trading_periods_per_year is typically:
+        - 252 for daily data
+        - 52 for weekly data
+        - 12 for monthly data
+
+        For intraday data (minute-by-minute), we assume 252 trading days * 1440 minutes.
+        """
+        # Calculate log returns
+        log_returns = np.log(df["close"] / df["close"].shift(1))
+
+        # Trading periods per year (assuming daily data - 252 trading days)
+        trading_periods_per_year = 252
+
+        for window in [5, 10, 20, 50]:
+            # Calculate standard deviation of log returns
+            std_log_returns = log_returns.rolling(window=window).std()
+
+            # Annualize the volatility
+            hist_vol = std_log_returns * np.sqrt(trading_periods_per_year)
+
+            df[f"hist_vol_{window}"] = hist_vol
+
+            # Historical volatility ratio (normalized by price)
+            df[f"hist_vol_ratio_{window}"] = hist_vol / df["close"]
+
+        return df
+
+    def _add_volatility_zscore(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add volatility z-score (current volatility relative to historical mean).
+
+        The volatility z-score measures how many standard deviations the current
+        volatility is from its historical mean. This helps identify periods of
+        unusually high or low volatility.
+
+        Formula: (current_volatility - mean_volatility) / std_volatility
+
+        Values interpretation:
+        - z-score > 2: Abnormally high volatility
+        - z-score < -2: Abnormally low volatility
+        - z-score around 0: Normal volatility
+        """
+        # Use historical volatility as the base
+        log_returns = np.log(df["close"] / df["close"].shift(1))
+
+        for window in [10, 20, 50]:
+            # Calculate rolling volatility
+            rolling_vol = log_returns.rolling(window=window).std()
+
+            # Calculate mean and std of volatility over a longer period
+            long_window = window * 3
+            vol_mean = rolling_vol.rolling(window=long_window).mean()
+            vol_std = rolling_vol.rolling(window=long_window).std()
+
+            # Calculate z-score
+            vol_zscore = (rolling_vol - vol_mean) / vol_std
+            df[f"vol_zscore_{window}"] = vol_zscore
+
+        return df
+
+    def _add_volatility_regime(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add volatility regime classification (low/medium/high).
+
+        Volatility regime classification categorizes market conditions into
+        three states based on historical volatility levels:
+        - Low volatility: Calm market conditions
+        - Medium volatility: Normal market conditions
+        - High volatility: Turbulent market conditions
+
+        Classification is based on percentiles of historical volatility:
+        - Low: below 33rd percentile
+        - Medium: 33rd to 67th percentile
+        - High: above 67th percentile
+        """
+        # Use historical volatility as the base
+        log_returns = np.log(df["close"] / df["close"].shift(1))
+
+        for window in [10, 20, 50]:
+            # Calculate rolling volatility
+            rolling_vol = log_returns.rolling(window=window).std()
+
+            # Calculate percentiles for classification
+            vol_33 = rolling_vol.rolling(window=window * 5).quantile(0.33)
+            vol_67 = rolling_vol.rolling(window=window * 5).quantile(0.67)
+
+            # Classify regime (1=low, 2=medium, 3=high)
+            regime = pd.Series(2, index=df.index)  # Default to medium
+            regime = regime.where(rolling_vol >= vol_33, 1)  # Low volatility
+            regime = regime.where(rolling_vol <= vol_67, 3)  # High volatility
+
+            df[f"vol_regime_{window}"] = regime
+
+            # Binary flags for each regime
+            df[f"vol_regime_low_{window}"] = (regime == 1).astype(int)
+            df[f"vol_regime_medium_{window}"] = (regime == 2).astype(int)
+            df[f"vol_regime_high_{window}"] = (regime == 3).astype(int)
 
         return df
 

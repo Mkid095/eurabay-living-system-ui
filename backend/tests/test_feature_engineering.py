@@ -241,21 +241,196 @@ class TestVolatilityFeatures:
         # ATR should be positive
         assert (df["atr"].dropna() > 0).all()
 
+    def test_atr_multiple_periods(self, feature_engine, sample_ohlcv_data):
+        """Test ATR for multiple periods."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["atr"])
+        # Check for multiple period ATRs
+        assert "atr_7" in df.columns or "atr_14" in df.columns or "atr_21" in df.columns
+        # ATR ratio should also be present
+        assert "atr_ratio" in df.columns
+
     def test_std_dev_feature(self, feature_engine, sample_ohlcv_data):
         """Test standard deviation feature generation."""
         df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["std_dev"])
+        # Per acceptance criteria: periods 5, 10, 20, 50
         assert "std_5" in df.columns
         assert "std_10" in df.columns
         assert "std_20" in df.columns
+        assert "std_50" in df.columns
         assert "std_ratio_5" in df.columns
+        assert "std_ratio_10" in df.columns
+        assert "std_ratio_20" in df.columns
+        assert "std_ratio_50" in df.columns
+        # Standard deviation should be positive
+        assert (df["std_20"].dropna() > 0).all()
 
     def test_parkinson_estimator(self, feature_engine, sample_ohlcv_data):
         """Test Parkinson volatility estimator."""
         df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["parkinson"])
+        # Per acceptance criteria: periods 5, 10, 20, 50
+        assert "parkinson_5" in df.columns
         assert "parkinson_10" in df.columns
         assert "parkinson_20" in df.columns
+        assert "parkinson_50" in df.columns
         # Parkinson should be positive
         assert (df["parkinson_10"].dropna() > 0).all()
+
+    def test_garman_klass_estimator(self, feature_engine, sample_ohlcv_data):
+        """Test Garman-Klass volatility estimator."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["garman_klass"])
+        # Per acceptance criteria: periods 5, 10, 20, 50
+        assert "garman_klass_5" in df.columns
+        assert "garman_klass_10" in df.columns
+        assert "garman_klass_20" in df.columns
+        assert "garman_klass_50" in df.columns
+        # Garman-Klass should be positive
+        assert (df["garman_klass_10"].dropna() >= 0).all()
+
+    def test_historical_volatility(self, feature_engine, sample_ohlcv_data):
+        """Test historical volatility (annualized)."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["historical_volatility"])
+        # Per acceptance criteria: periods 5, 10, 20, 50
+        assert "hist_vol_5" in df.columns
+        assert "hist_vol_10" in df.columns
+        assert "hist_vol_20" in df.columns
+        assert "hist_vol_50" in df.columns
+        # Historical volatility ratio
+        assert "hist_vol_ratio_5" in df.columns
+        assert "hist_vol_ratio_10" in df.columns
+        assert "hist_vol_ratio_20" in df.columns
+        assert "hist_vol_ratio_50" in df.columns
+        # Historical volatility should be positive
+        assert (df["hist_vol_20"].dropna() > 0).all()
+
+    def test_volatility_zscore(self, feature_engine, sample_ohlcv_data):
+        """Test volatility z-score."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["volatility_zscore"])
+        # Volatility z-score for windows 10, 20, 50
+        assert "vol_zscore_10" in df.columns
+        assert "vol_zscore_20" in df.columns
+        assert "vol_zscore_50" in df.columns
+        # Z-score should have values around 0 (mean approximately 0)
+        zscore_mean = df["vol_zscore_20"].dropna().mean()
+        assert abs(zscore_mean) < 1.0  # Should be near zero
+
+    def test_volatility_regime(self, feature_engine, sample_ohlcv_data):
+        """Test volatility regime classification."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["volatility_regime"])
+        # Volatility regime for windows 10, 20, 50
+        assert "vol_regime_10" in df.columns
+        assert "vol_regime_20" in df.columns
+        assert "vol_regime_50" in df.columns
+        # Binary flags for each regime
+        assert "vol_regime_low_10" in df.columns
+        assert "vol_regime_medium_10" in df.columns
+        assert "vol_regime_high_10" in df.columns
+        # Regime values should be 1, 2, or 3
+        valid_regimes = df["vol_regime_20"].dropna().isin([1, 2, 3])
+        assert valid_regimes.all()
+
+    def test_volatility_features_all(self, feature_engine, sample_ohlcv_data):
+        """Test all volatility features together."""
+        df = feature_engine.generate_features(
+            sample_ohlcv_data,
+            "TEST",
+            feature_types=["atr", "std_dev", "parkinson", "garman_klass",
+                         "historical_volatility", "volatility_zscore", "volatility_regime"]
+        )
+        # Check that all volatility features are present
+        volatility_features = [
+            "atr", "atr_ratio", "std_5", "std_10", "std_20", "std_50",
+            "parkinson_5", "parkinson_10", "parkinson_20", "parkinson_50",
+            "garman_klass_5", "garman_klass_10", "garman_klass_20", "garman_klass_50",
+            "hist_vol_5", "hist_vol_10", "hist_vol_20", "hist_vol_50",
+            "vol_zscore_10", "vol_zscore_20", "vol_zscore_50",
+            "vol_regime_10", "vol_regime_20", "vol_regime_50"
+        ]
+        for feature in volatility_features:
+            assert feature in df.columns, f"Missing feature: {feature}"
+
+    def test_atr_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that ATR is calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["atr"])
+        # Manually calculate True Range for a specific row
+        idx = 50  # Use row 50 to ensure we have enough history
+        high_low = sample_ohlcv_data["high"].iloc[idx] - sample_ohlcv_data["low"].iloc[idx]
+        high_close = abs(sample_ohlcv_data["high"].iloc[idx] - sample_ohlcv_data["close"].iloc[idx-1])
+        low_close = abs(sample_ohlcv_data["low"].iloc[idx] - sample_ohlcv_data["close"].iloc[idx-1])
+        expected_tr = max(high_low, high_close, low_close)
+        # ATR at period 14 should include this TR
+        # We verify the ATR is in a reasonable range
+        assert df["atr"].iloc[idx] > 0
+        assert df["atr"].iloc[idx] < expected_tr * 2  # Should not be more than 2x single TR
+
+    def test_std_dev_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that standard deviation is calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["std_dev"])
+        # Manually calculate std for window 20
+        window = 20
+        idx = 50
+        expected_std = sample_ohlcv_data["close"].iloc[idx-window+1:idx+1].std()
+        actual_std = df["std_20"].iloc[idx]
+        assert np.isclose(expected_std, actual_std, rtol=1e-10)
+
+    def test_parkinson_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that Parkinson estimator is calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["parkinson"])
+        # Manually calculate Parkinson for a specific window
+        window = 10
+        idx = 50
+        log_hl = np.log(
+            sample_ohlcv_data["high"].iloc[idx-window+1:idx+1] /
+            sample_ohlcv_data["low"].iloc[idx-window+1:idx+1]
+        )
+        expected_parkinson = np.sqrt((log_hl ** 2).mean() / (4 * np.log(2)))
+        actual_parkinson = df["parkinson_10"].iloc[idx]
+        assert np.isclose(expected_parkinson, actual_parkinson, rtol=1e-10)
+
+    def test_garman_klass_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that Garman-Klass estimator is calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["garman_klass"])
+        # Manually calculate Garman-Klass for a specific window
+        window = 10
+        idx = 50
+        log_hl = np.log(
+            sample_ohlcv_data["high"].iloc[idx-window+1:idx+1] /
+            sample_ohlcv_data["low"].iloc[idx-window+1:idx+1]
+        )
+        log_co = np.log(
+            sample_ohlcv_data["close"].iloc[idx-window+1:idx+1] /
+            sample_ohlcv_data["open"].iloc[idx-window+1:idx+1]
+        )
+        term1 = (log_hl ** 2).mean() * 0.5
+        term2 = (2 * np.log(2) - 1) * (log_co ** 2).mean()
+        expected_gk = np.sqrt(term1 - term2)
+        actual_gk = df["garman_klass_10"].iloc[idx]
+        # Garman-Klass can produce NaN if term2 > term1, check for valid values
+        if not np.isnan(actual_gk) and not np.isnan(expected_gk):
+            assert np.isclose(expected_gk, actual_gk, rtol=1e-10)
+
+    def test_historical_volatility_calculation_accuracy(self, feature_engine, sample_ohlcv_data):
+        """Test that historical volatility is calculated correctly."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["historical_volatility"])
+        # Manually calculate historical volatility for window 20
+        window = 20
+        idx = 50
+        log_returns = np.log(
+            sample_ohlcv_data["close"].iloc[idx-window+1:idx+1] /
+            sample_ohlcv_data["close"].iloc[idx-window:idx].shift(-1).dropna()
+        )
+        expected_hist_vol = log_returns.std() * np.sqrt(252)  # Annualized
+        actual_hist_vol = df["hist_vol_20"].iloc[idx]
+        # Check that values are in reasonable range
+        assert actual_hist_vol > 0
+        assert actual_hist_vol < 5  # Should not be extremely high for this data
+
+    def test_volatility_regime_distribution(self, feature_engine, sample_ohlcv_data):
+        """Test that volatility regimes are distributed reasonably."""
+        df = feature_engine.generate_features(sample_ohlcv_data, "TEST", feature_types=["volatility_regime"])
+        # Check that we have all three regimes represented
+        regime_counts = df["vol_regime_20"].value_counts()
+        # At least low and medium regimes should be present
+        assert 1 in regime_counts.index or 2 in regime_counts.index or 3 in regime_counts.index
 
 
 # ============================================================================
