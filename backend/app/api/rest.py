@@ -19,12 +19,7 @@ config_router = APIRouter(prefix="/config", tags=["Configuration"])
 # Main API router - all routes will be prefixed with /api/v1/
 api_router = APIRouter(prefix="/v1", tags=["REST API"])
 
-# Include domain-specific routers
-api_router.include_router(auth_router)
-api_router.include_router(trading_router)
-api_router.include_router(account_router)
-api_router.include_router(performance_router)
-api_router.include_router(config_router)
+# NOTE: include_router calls moved to end of file to ensure routes are defined first
 
 
 # Pydantic models for request/response
@@ -276,3 +271,11 @@ async def update_config(config: Config) -> dict:
         "message": "Configuration updated",
         "config": config.dict()
     }
+
+
+# Include domain-specific routers into main API router (MUST be after route definitions)
+api_router.include_router(auth_router)
+api_router.include_router(trading_router)
+api_router.include_router(account_router)
+api_router.include_router(performance_router)
+api_router.include_router(config_router)
